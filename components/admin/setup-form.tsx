@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { ExerciseConfig, SimulationMode } from "@/lib/types"
+import type { ExerciseConfig, SimulationMode, AiIntensity } from "@/lib/types"
 
 const sectors = [
   "Financial Services", "Healthcare", "Energy & Utilities", "Manufacturing",
@@ -43,6 +43,7 @@ export function SetupForm() {
   const router = useRouter()
   const [config, setConfig] = useState<ExerciseConfig>(defaults)
   const [mode, setMode] = useState<SimulationMode>("training")
+  const [aiIntensity, setAiIntensity] = useState<AiIntensity>("lean")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [irFileName, setIrFileName] = useState<string | null>(null)
@@ -68,7 +69,7 @@ export function SetupForm() {
       const res = await fetch("/api/session/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...config, mode }),
+        body: JSON.stringify({ ...config, mode, aiIntensity }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Failed to create session")
@@ -161,52 +162,76 @@ export function SetupForm() {
         </FieldRow>
       </div>
 
-      {/* IR Template Upload */}
-      <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 p-5">
+      {/* AI Generation */}
+      <div className="flex flex-col gap-4 rounded-lg border border-primary/20 bg-primary/5 p-5">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-primary" />
-          <span className="font-mono text-xs uppercase tracking-wider text-primary">AI scenario tailoring (optional)</span>
+          <span className="font-mono text-xs uppercase tracking-wider text-primary">AI scenario generation</span>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Upload the client's existing IR plan or template to generate a scenario tailored to their specific gaps, procedures, and named contacts.
-          Accepted: .txt, .md, .docx text export
-        </p>
-        <div className="flex items-center gap-3">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".txt,.md,.csv"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => fileRef.current?.click()}
-            className="gap-2 font-mono uppercase tracking-wider"
-          >
-            <Upload className="size-3.5" />
-            Upload IR template
-          </Button>
-          {irFileName && (
-            <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm">
-              <FileText className="size-3.5 text-primary" />
-              <span className="font-mono text-xs">{irFileName}</span>
-              <button
+
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            { id: "off",  label: "Template",  cost: "Free",    model: "",               desc: "Pre-built scenario, no API call." },
+            { id: "lean", label: "Smart",     cost: "~€0.002", model: "Haiku",          desc: "AI tailors titles & narrative. Injects from template." },
+            { id: "full", label: "Full",      cost: "~€0.05",  model: "Sonnet",         desc: "AI writes everything from scratch." },
+          ] as { id: AiIntensity; label: string; cost: string; model: string; desc: string }[]).map(opt => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setAiIntensity(opt.id)}
+              className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-all ${
+                aiIntensity === opt.id
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-card hover:border-primary/40"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className={`font-mono text-sm font-medium ${aiIntensity === opt.id ? "text-primary" : "text-foreground"}`}>
+                  {opt.label}
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground">{opt.cost}</span>
+              </div>
+              {opt.model && (
+                <span className="font-mono text-[10px] text-primary/70">{opt.model}</span>
+              )}
+              <span className="text-[11px] text-muted-foreground leading-tight">{opt.desc}</span>
+            </button>
+          ))}
+        </div>
+
+        {aiIntensity !== "off" && (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-muted-foreground">
+              Optionally upload the client's IR plan to tailor the scenario to their specific gaps and procedures.
+            </p>
+            <div className="flex items-center gap-3">
+              <input ref={fileRef} type="file" accept=".txt,.md,.csv" onChange={handleFileUpload} className="hidden" />
+              <Button
                 type="button"
-                onClick={() => {
-                  setIrFileName(null)
-                  update("irTemplateText", undefined)
-                  if (fileRef.current) fileRef.current.value = ""
-                }}
-                className="text-muted-foreground hover:text-foreground"
+                variant="outline"
+                size="sm"
+                onClick={() => fileRef.current?.click()}
+                className="gap-2 font-mono uppercase tracking-wider"
               >
-                <X className="size-3.5" />
-              </button>
+                <Upload className="size-3.5" />
+                Upload IR plan
+              </Button>
+              {irFileName && (
+                <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm">
+                  <FileText className="size-3.5 text-primary" />
+                  <span className="font-mono text-xs">{irFileName}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setIrFileName(null); update("irTemplateText", undefined); if (fileRef.current) fileRef.current.value = "" }}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -217,7 +242,7 @@ export function SetupForm() {
 
       <div className="flex flex-col items-start justify-between gap-3 border-t border-border pt-6 sm:flex-row sm:items-center">
         <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-          {config.irTemplateText ? "AI will tailor scenario to your IR template." : "Generates a structured scenario and starts a single live session."}
+          {aiIntensity === "off" ? "Template mode — no AI, no API cost." : aiIntensity === "lean" ? `Smart mode (Haiku) — ~€0.002/session${config.irTemplateText ? " · IR plan loaded" : ""}` : `Full mode (Sonnet) — ~€0.05/session${config.irTemplateText ? " · IR plan loaded" : ""}`}
         </p>
         <Button type="submit" size="lg" disabled={submitting} className="gap-2 font-mono uppercase tracking-wider">
           {submitting ? (

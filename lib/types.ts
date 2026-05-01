@@ -133,6 +133,8 @@ export interface Scenario {
   rounds: Round[]
 }
 
+export type AiIntensity = 'off' | 'lean' | 'full'
+
 export interface ExerciseConfig {
   sector: string
   companySize: string
@@ -143,6 +145,7 @@ export interface ExerciseConfig {
   duration: string
   teams: string
   irTemplateText?: string
+  aiIntensity?: AiIntensity
 }
 
 export interface Participant {
