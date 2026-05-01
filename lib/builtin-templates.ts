@@ -1,0 +1,601 @@
+import type { ScenarioTemplate } from "./template-types"
+
+export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
+  id: "builtin-ransomware-v1",
+  name: "Ransomware — Full Crisis",
+  operationName: "OPERATION BLACK TIDE",
+  description: "A full-scale ransomware attack escalating from initial detection to payment decision, regulatory notification, and recovery. Four rounds, decision-gated at round 3.",
+  tags: ["ransomware", "tabletop", "nis2", "gdpr", "intermediate"],
+  difficulty: "intermediate",
+  contentMode: "hybrid",
+  version: "1.0",
+  createdAt: 1700000000000,
+  updatedAt: 1700000000000,
+  author: "Eye Security CS&C",
+  estimatedDurationMinutes: 90,
+  organizationContext: {
+    name: "{company}",
+    sector: "{sector}",
+    size: "{size}",
+    criticalSystems: "{systems}",
+    crownJewels: "{crown}",
+  },
+  rounds: [
+    {
+      id: "r1",
+      title: "Initial Detection",
+      situationUpdateTemplate: "It is 09:00 Monday morning. Your SOC analyst pages you. A cluster of anomalous alerts fired overnight in {company}'s environment. Nothing critical yet — but the pattern is unusual.",
+      timerMinutes: 10,
+      requireAllFeedback: true,
+      injects: [
+        {
+          id: "r1-i1",
+          type: "alert",
+          channel: "siem_alert",
+          urgency: "medium",
+          title: "SIEM: Anomalous outbound beaconing",
+          content: "14 endpoints in the corporate VLAN show low-volume beaconing to an unfamiliar ASN (AS60781, registered Netherlands, no known business). Pattern consistent with C2 implant. {systems} appear unaffected.",
+          senderName: "SOC Analyst L1",
+          aiPromptHint: "Generate a realistic SIEM alert about C2 beaconing tailored to {sector}",
+          context: "First signal of compromise. Intentionally low-severity to test alert triage culture.",
+          expectedActions: ["Open formal investigation ticket", "Assign incident commander", "Begin log collection"],
+          showNotes: "Watch whether team escalates or dismisses. The 14 endpoints are a meaningful cluster — dismissal is a red flag.",
+        },
+        {
+          id: "r1-i2",
+          type: "internal",
+          channel: "slack",
+          urgency: "low",
+          title: "Helpdesk: 8 account lockouts in Finance",
+          content: "Eight Finance and Procurement users report account lockouts within a 12-minute window this morning. IT helpdesk is resetting passwords without escalation.",
+          senderName: "Tim van den Berg",
+          senderHandle: "tim.helpdesk",
+          aiPromptHint: "Slack message from helpdesk about account lockouts at {company}",
+          context: "Low-priority signal being handled incorrectly. Tests whether team recognizes the pattern.",
+          expectedActions: ["Place hold on password resets", "Correlate with SIEM alert"],
+          showNotes: "The lockouts + beaconing = credential stuffing or lateral movement. If team doesn't connect these, inject the hint that the lockouts map to the same subnet.",
+        },
+        {
+          id: "r1-i3",
+          type: "intel",
+          channel: "email",
+          urgency: "medium",
+          title: "ISAC: Active campaign against {sector}",
+          htmlType: "internal_memo",
+          htmlContent: `<div style="font-family: monospace; background: #0d1117; color: #c9d1d9; padding: 16px; border-radius: 4px; border: 1px solid #30363d; font-size: 12px; line-height: 1.6;">
+<div style="color: #58a6ff; margin-bottom: 8px;">FROM: intel@sector-isac.org</div>
+<div style="color: #8b949e; margin-bottom: 16px;">SUBJECT: [TLP:AMBER] Active campaign — {sector} targeting confirmed</div>
+<hr style="border-color: #30363d; margin: 12px 0;">
+<p>A financially motivated threat actor (tracked as SCATTERED SPIDER variant) is conducting targeted intrusions against {sector} organizations in the Benelux region.</p>
+<p>TTPs observed:</p>
+<ul style="margin: 8px 0; padding-left: 20px;">
+  <li>Initial access via stolen contractor VPN credentials</li>
+  <li>Cobalt Strike deployed within 4 hours of access</li>
+  <li>Targeting: ERP systems, identity providers, backup infrastructure</li>
+</ul>
+<p style="color: #f85149; margin-top: 12px;">⚠ Do not reimage affected hosts before forensics. Contact your MDR immediately.</p>
+</div>`,
+          senderName: "ISAC Threat Intel",
+          senderHandle: "intel@sector-isac.org",
+          context: "External validation that this is a real campaign.",
+          expectedActions: ["Check contractor VPN access logs", "Contact MDR/IR retainer"],
+          showNotes: "If team hasn't contacted their IR retainer yet, this is the moment to ask why not.",
+        },
+        {
+          id: "r1-i4",
+          type: "technical",
+          channel: "system_alert",
+          urgency: "high",
+          title: "DLP: 2.4 GB archive uploaded at 02:14",
+          content: "A 2.4 GB encrypted .7z archive was uploaded from workstation WRK-FIN-047 to a personal cloud storage domain (gofile.io) at 02:14 this morning. The workstation belongs to a Finance analyst.",
+          senderName: "DLP Engine",
+          aiPromptHint: "DLP alert about large data upload from finance workstation at {company}",
+          context: "This alert is 7 hours old. Why wasn't it caught overnight?",
+          expectedActions: ["Isolate WRK-FIN-047", "Preserve forensic image", "Check what was uploaded"],
+          showNotes: "The 7-hour gap is intentional. Ask: what does your overnight monitoring process look like?",
+        },
+      ],
+      facilitatorNotes: {
+        discussionGoal: "Assess whether the team recognizes a coordinated intrusion from disconnected low-severity signals — and whether they escalate correctly.",
+        keyQuestions: [
+          "Who owns the first escalation — SOC, IT, or IC?",
+          "At what point do you open a formal incident ticket?",
+          "Do you notify legal/compliance yet? Why or why not?",
+          "What is your initial scoping hypothesis?",
+        ],
+        hints: [
+          "The DLP alert is 7 hours old. Why wasn't it escalated overnight?",
+          "The lockouts and beaconing may be the same actor — or not. How do you determine this?",
+        ],
+        expectedDecisions: [
+          "Formal incident declaration (or deferred)",
+          "Assign incident commander",
+          "Begin log collection / forensic preservation",
+          "Contact IR retainer / MDR",
+        ],
+        redFlags: [
+          "Team dismisses alerts as false positives without investigation",
+          "Helpdesk continues resetting passwords without a hold",
+          "No one connects the SIEM alert to the lockouts",
+          "IR retainer not contacted despite ISAC bulletin",
+        ],
+        debriefPoints: [
+          "How long did it take to recognize the pattern across three separate alerts?",
+          "Who had authority to declare an incident — and was that clear?",
+          "What would your alert triage process have looked like in a real scenario at 02:14?",
+        ],
+      },
+    },
+    {
+      id: "r2",
+      title: "Containment & Escalation",
+      situationUpdateTemplate: "It is 10:30. The picture sharpens. Active encryption has been detected on file servers. A Domain Admin session is still live. The CEO has heard from a board member.",
+      timerMinutes: 10,
+      requireAllFeedback: true,
+      injects: [
+        {
+          id: "r2-i1",
+          type: "technical",
+          channel: "siem_alert",
+          urgency: "critical",
+          title: "Domain Admin active from unknown host",
+          content: "An account in the Domain Admins group has authenticated to DC-CORP-01 from WRK-FIN-047 — a workstation that account has never touched before. Session is still active. Lateral movement to domain controller confirmed.",
+          senderName: "Identity Protection",
+          context: "Active attacker in highest-privilege tier. Session is live right now.",
+          expectedActions: ["Kill the DA session", "Rotate all privileged credentials", "Isolate DC-CORP-01"],
+          showNotes: "Team faces a dilemma: kill the session (tips off attacker, may trigger destruction) vs. observe (attacker has full DA). Push them to articulate their choice.",
+        },
+        {
+          id: "r2-i2",
+          type: "alert",
+          channel: "system_alert",
+          urgency: "critical",
+          title: "CRITICAL: Encryption in progress on 3 file servers",
+          content: "EDR reports a scheduled task spawning ransomware process on FS-CORP-01, FS-CORP-02, FS-CORP-03. Files renamed with .lockd extension. ~12% of shares encrypted. Rate: ~800MB/min. {crown} shares affected.",
+          senderName: "EDR Platform",
+          htmlType: "siem_log",
+          htmlContent: `<div style="background: #0a0a0a; color: #ff3333; font-family: 'Courier New', monospace; padding: 16px; border: 2px solid #ff0000; font-size: 11px; line-height: 1.5;">
+<div style="color: #ff6666; margin-bottom: 8px; font-size: 13px; font-weight: bold;">⚠ CRITICAL ALERT — RANSOMWARE ACTIVITY DETECTED</div>
+<div>Time: 10:34:17 | Host: FS-CORP-01 | User: SYSTEM | PID: 4812</div>
+<div>Process: svchost.exe (spawned by: taskeng.exe)</div>
+<div>Activity: Mass file rename detected</div>
+<div style="margin-top: 8px; color: #ffaa00;">Affected path: \\FS-CORP-01\Finance$\ (12.4% encrypted)</div>
+<div>Affected path: \\FS-CORP-02\Operations$\ (8.1% encrypted)</div>
+<div>Affected path: \\FS-CORP-03\HR$\ (3.2% encrypted)</div>
+<div style="margin-top: 8px; color: #ff6666;">Extension: .lockd | Rate: ~800MB/min | Backups: UNREACHABLE</div>
+<div style="margin-top: 8px; color: #888;">Recommended action: IMMEDIATELY isolate affected hosts</div>
+</div>`,
+          context: "Active ransomware. Every minute of discussion costs more data.",
+          expectedActions: ["Isolate file servers immediately", "Verify backup integrity", "Declare major incident"],
+          showNotes: "12% and climbing. Let the team sit with this number for 60 seconds before discussing. The clock is real.",
+        },
+        {
+          id: "r2-i3",
+          type: "executive",
+          channel: "whatsapp",
+          urgency: "high",
+          title: "CEO requests briefing — now",
+          content: "Hey, I just got a call from Marc on the board. He heard 'IT is completely down'. I need a 5-minute update in 10 minutes. What do I tell him? And is this the ransomware thing everyone's been worried about? — Sarah",
+          senderName: "Sarah de Vries (CEO)",
+          senderHandle: "+31 6 12 34 56 78",
+          context: "Executive is getting information from the board before from you. Classic communications failure pattern.",
+          expectedActions: ["Prepare CEO talking points", "Agree who delivers the briefing", "Control the information flow"],
+          showNotes: "Ask: who wrote the CEO talking points? Were Legal and Comms in the room? If not — why?",
+        },
+      ],
+      facilitatorNotes: {
+        discussionGoal: "Force the team into active containment decisions under time pressure — with incomplete information and executive interference.",
+        keyQuestions: [
+          "Do you isolate the file servers immediately? What's the operational impact?",
+          "Do you kill the DA session? What's the risk of tipping off the attacker?",
+          "What do you tell the CEO — and who delivers that?",
+          "Is this the moment to call your IR retainer?",
+        ],
+        hints: [
+          "12% encrypted and climbing — every minute of discussion costs more files.",
+          "Isolating before verifying backup integrity may not help if backups are also encrypted.",
+        ],
+        expectedDecisions: [
+          "Isolate or not isolate file servers",
+          "Handle DA session",
+          "Formal crisis declaration",
+          "CEO briefing talking points",
+        ],
+        redFlags: [
+          "Team paralysis — no clear decision owner",
+          "File servers not isolated after 5+ minutes of discussion",
+          "CEO briefing not assigned to a specific person",
+          "No one verifies backup integrity",
+        ],
+        debriefPoints: [
+          "How long did the isolation decision take? Who made it?",
+          "What did your CEO briefing look like? What did you choose to say (and not say)?",
+          "At this point — did you know if your backups were clean?",
+        ],
+      },
+    },
+    {
+      id: "r3",
+      title: "Ransomware Demand & Public Exposure",
+      situationUpdateTemplate: "It is 14:00. The ransom note has appeared. Media has screenshots. Regulators are asking. The team lead must make a decision before the next round can begin.",
+      timerMinutes: 10,
+      requireAllFeedback: true,
+      decisionPoint: {
+        id: "dp-ransom",
+        title: "DECISION: Ransomware Payment",
+        description: "The threat actor demands €2.4M in Bitcoin within 72 hours. They claim to have exfiltrated 850 GB of data and have posted a sample. Your IR retainer confirms the decryptor has a ~65% success rate based on known samples from this group. Backups are partially encrypted. Recovery without payment is estimated at 10-14 days.",
+        teamLeadOnly: true,
+        options: [
+          {
+            id: "pay",
+            label: "Pay the ransom",
+            description: "Initiate cryptocurrency payment of €2.4M through legal intermediary.",
+            consequence: "Decryptor delivered within 4 hours. 65% chance of full recovery. Attacker may remain in network. Insurer may dispute payout.",
+            isRecommended: false,
+          },
+          {
+            id: "negotiate",
+            label: "Negotiate — delay & gather intel",
+            description: "Engage threat actor through intermediary to buy time while recovery proceeds.",
+            consequence: "Deadline extended 48 hours. Recovery from backup begins in parallel. Attacker may publish first data batch.",
+            isRecommended: true,
+          },
+          {
+            id: "refuse",
+            label: "Refuse — full recovery from backup",
+            description: "Do not engage with threat actor. Begin clean rebuild from backup.",
+            consequence: "10-14 day recovery. Threat actor publishes data. Regulatory clock running. Significant business impact.",
+            isRecommended: false,
+          },
+        ],
+      },
+      injects: [
+        {
+          id: "r3-i1",
+          type: "alert",
+          channel: "system_alert",
+          urgency: "critical",
+          title: "Ransom note deployed",
+          htmlType: "ransom_note",
+          htmlContent: `<div style="background: #000; color: #ff0000; font-family: 'Courier New', monospace; padding: 24px; border: 1px solid #ff0000; font-size: 13px; line-height: 1.8;">
+<div style="font-size: 18px; font-weight: bold; margin-bottom: 16px; text-align: center;">YOUR NETWORK HAS BEEN ENCRYPTED</div>
+<hr style="border-color: #ff0000; margin: 12px 0;">
+<p>All your important files have been encrypted and exfiltrated.</p>
+<p>We have downloaded <strong>850 GB</strong> of your confidential data including:</p>
+<ul style="margin: 8px 0 16px 20px;">
+  <li>Customer contracts and PII</li>
+  <li>Financial records (2020–2024)</li>
+  <li>Employee personal data</li>
+  <li>Internal communications</li>
+</ul>
+<p><strong>DEMAND: €2,400,000 in Bitcoin within 72 HOURS</strong></p>
+<p>Contact: darknet_chat_link_[REDACTED]</p>
+<p style="color: #ffaa00; margin-top: 16px;">Do NOT contact law enforcement. Do NOT attempt recovery. Proof of payment = decryptor key.</p>
+<div style="margin-top: 16px; font-size: 10px; color: #666;">BlackLock Ransomware Group — README.txt</div>
+</div>`,
+          content: "Ransom note deployed to all encrypted endpoints. €2.4M demand, 72-hour countdown begins.",
+          context: "Decision trigger. The clock is now officially running.",
+          expectedActions: ["Do not respond to attackers without legal/leadership approval", "Document discovery timestamp for regulatory purposes"],
+          showNotes: "Note the timestamp — this is when the regulatory notification clock arguably starts (or arguably started 4 hours ago). Ask the team which timestamp they're using.",
+        },
+        {
+          id: "r3-i2",
+          type: "media",
+          channel: "email",
+          urgency: "high",
+          title: "Journalist requests comment by 16:00",
+          htmlType: "phishing_email",
+          htmlContent: `<div style="background: #f5f5f5; color: #333; font-family: Arial, sans-serif; padding: 16px; border: 1px solid #ddd; font-size: 13px; line-height: 1.6;">
+<div style="background: white; border-bottom: 2px solid #c00; padding: 8px 12px; margin: -16px -16px 16px; font-family: monospace; font-size: 11px; color: #555;">
+  FROM: j.vermeer@fd.nl &nbsp;&nbsp; TO: press@{company}.nl &nbsp;&nbsp; 14:03
+</div>
+<p><strong>Geachte afdeling Communicatie,</strong></p>
+<p>Wij zijn er van op de hoogte dat {company} getroffen is door een ransomware-aanval. Bronnen bevestigen dat systemen op dit moment niet beschikbaar zijn en dat er losgeld is geëist.</p>
+<p>Kunt u bevestigen of ontkennen: (1) Is er sprake van een ransomware-aanval? (2) Zijn klantgegevens buitgemaakt? (3) Overweegt u losgeld te betalen?</p>
+<p><strong>Deadline voor reactie: 16:00 vandaag.</strong> Bij geen reactie publiceren wij om 16:00 met vermelding "geen commentaar beschikbaar".</p>
+<p>Met vriendelijke groet,<br>Joris Vermeer<br>Redacteur Financieel Dagblad</p>
+</div>`,
+          senderName: "Joris Vermeer — FD",
+          senderHandle: "j.vermeer@fd.nl",
+          context: "Media pressure simultaneous with regulatory inquiry. Tests communications governance.",
+          expectedActions: ["Agree holding statement", "Decide who responds", "Do not confirm data exfiltration details"],
+          showNotes: "Saying 'no comment' is still a story. What story do you want to tell vs. what story gets written without you?",
+        },
+        {
+          id: "r3-i3",
+          type: "regulatory",
+          channel: "email",
+          urgency: "high",
+          title: "Regulator: is this a material cyber incident?",
+          content: "The sector regulator has formally inquired whether {company} has suffered a 'material cyber incident' in the last 24 hours. Legal informs you that the Cbw (NIS2) 24-hour early warning obligation runs from 'first knowledge of a significant incident'. When did you first know?",
+          senderName: "Merel Hoekstra — Legal",
+          senderHandle: "m.hoekstra@legal.internal",
+          context: "Regulatory clock. Exactly when did 'first knowledge' occur?",
+          expectedActions: ["File NIS2 early warning within 24h of first knowledge", "Document timeline precisely", "Assign regulatory liaison"],
+          showNotes: "The team will dispute when 'first knowledge' was. That's the point. Push them to reconstruct their timeline.",
+        },
+      ],
+      facilitatorNotes: {
+        discussionGoal: "Test crisis communication, regulatory decision-making, and payment governance under maximum pressure.",
+        keyQuestions: [
+          "What is your holding statement for the journalist?",
+          "When does your NIS2 24-hour clock start — exactly?",
+          "Who has authority to approve ransomware payment?",
+          "What is your pre-approved position on ransom negotiation?",
+        ],
+        hints: [
+          "The regulator question about 'first knowledge' matters — your timeline may already have you in violation.",
+          "'No comment' to a journalist is still an answer.",
+          "Pay/don't pay — do you have a board-approved policy?",
+        ],
+        expectedDecisions: [
+          "Media holding statement approved",
+          "NIS2 early warning filed (or decision documented)",
+          "Ransomware payment position (TEAM LEAD DECISION)",
+          "Regulatory liaison assigned",
+        ],
+        redFlags: [
+          "No one owns the communications channel",
+          "Team wants to pay without legal/board sign-off",
+          "Missing the regulatory notification window",
+          "Team lead delegates the payment decision without engaging",
+        ],
+        debriefPoints: [
+          "Who made the payment decision — and what was their mandate?",
+          "Did your communications go out before or after media published?",
+          "Did you know exactly when your NIS2 clock started?",
+        ],
+      },
+    },
+    {
+      id: "r4",
+      title: "Recovery & Lessons Learned",
+      situationUpdateTemplate: "It is 18:30. The acute phase is passing. Recovery, customer notification, and post-incident learning now define how {company} comes out of this.",
+      timerMinutes: 10,
+      requireAllFeedback: true,
+      injects: [
+        {
+          id: "r4-i1",
+          type: "technical",
+          channel: "slack",
+          urgency: "high",
+          title: "Clean backups confirmed — 36h gap",
+          content: "Infrastructure team confirms clean immutable backups from 36 hours ago for {crown}. Full restore estimated 18–24 hours with ~36h data loss. The backup server was NOT encrypted (air-gapped). Recovery can begin immediately.",
+          senderName: "Recovery Team",
+          senderHandle: "#infra-recovery",
+          context: "Good news — but with a catch. 36 hours of data loss.",
+          expectedActions: ["Prioritize recovery sequence", "Communicate data loss to affected teams", "Confirm attacker eviction before restore"],
+          showNotes: "Ask: do you start the restore before you've confirmed the attacker is evicted? If yes — you may be restoring into a still-compromised environment.",
+        },
+        {
+          id: "r4-i2",
+          type: "regulatory",
+          channel: "email",
+          urgency: "high",
+          title: "Customer notification draft — three stakeholders disagree",
+          content: "Legal wants it sent now (regulatory obligation). Marketing wants the language softened ('incident' → 'temporary disruption'). CEO wants one more review. You have 2 hours before the legal deadline. Who signs off?",
+          senderName: "Merel Hoekstra — Legal",
+          senderHandle: "m.hoekstra@legal.internal",
+          context: "Internal governance failure under time pressure.",
+          expectedActions: ["Legal wins — send factual notification", "Document the disagreement and the final decision"],
+          showNotes: "This is the most common failure mode in real incidents. Marketing softening language creates legal exposure. Push the team to articulate who has final authority.",
+        },
+        {
+          id: "r4-i3",
+          type: "intel",
+          channel: "raw",
+          urgency: "medium",
+          title: "Lessons learned — CISO asks for team input",
+          content: "The CISO asks each team lead: (1) What worked? (2) What failed? (3) What changes in the runbook by next Monday? This is not optional — your IR plan requires a post-incident review within 5 business days.",
+          senderName: "CISO",
+          context: "Closing inject — triggers the debrief discussion.",
+          expectedActions: ["Complete post-incident review", "Update runbook", "Schedule follow-up tabletop"],
+          showNotes: "Listen for the quality of the 'what failed' answers. Surface-level ('communication was unclear') vs. systemic ('we have no pre-approved payment authority policy'). Push for the latter.",
+        },
+      ],
+      facilitatorNotes: {
+        discussionGoal: "Drive toward concrete recovery sequencing and honest lessons-learned.",
+        keyQuestions: [
+          "Do you restore before evicting the attacker?",
+          "Who had final authority on customer notification?",
+          "What is the one thing that changes in your runbook by Monday?",
+          "How do you handle the 36-hour data loss with affected customers?",
+        ],
+        hints: [
+          "Restoring into a compromised environment means re-infection within days.",
+          "Customer notification timing may be legally mandated.",
+        ],
+        expectedDecisions: [
+          "Recovery sequence approved",
+          "Customer notification sent",
+          "Post-incident review scheduled",
+          "Runbook changes assigned to owners",
+        ],
+        redFlags: [
+          "Restore started before attacker eviction confirmed",
+          "Customer notification blocked by internal politics past legal deadline",
+          "Lessons-learned treated as formality — no actionable outputs",
+        ],
+        debriefPoints: [
+          "If you had to do one thing differently from the first 30 minutes — what would it be?",
+          "What gaps in your runbook did this exercise reveal?",
+          "Who owns the post-incident report?",
+        ],
+      },
+    },
+  ],
+  outcomes: {
+    good: [
+      "Crisis team formed within 15 minutes with clear mandate",
+      "File servers isolated before >25% encryption",
+      "IR retainer contacted within first round",
+      "NIS2 early warning filed within 24h of first knowledge",
+      "Customer notification sent before media published",
+      "Ransom payment decision made with legal/board approval",
+      "Forensics preserved — no premature reimaging",
+      "Recovery sequenced after confirmed attacker eviction",
+    ],
+    bad: [
+      "Crisis team never formally constituted — ad hoc decisions",
+      "Systems reimaged before forensics — evidence destroyed",
+      "NIS2 notification missed or delayed",
+      "Media published before customers were informed",
+      "Ransom paid without legal/board sign-off",
+      "Recovery started in still-compromised environment",
+      "No post-incident review assigned",
+    ],
+    debriefQuestions: [
+      "How long did it take to recognize the pattern across disconnected alerts?",
+      "Who had authority to declare an incident — and was that clear before today?",
+      "What does your overnight alert monitoring look like — would the DLP alert have been caught?",
+      "When did your NIS2 clock start — exactly?",
+      "What is your pre-approved policy on ransomware payment?",
+      "Did your customer notification go out before media published?",
+      "If you could change one thing starting tomorrow — what is it?",
+    ],
+  },
+}
+
+export const BEC_TEMPLATE: ScenarioTemplate = {
+  id: "builtin-bec-v1",
+  name: "Business Email Compromise — CFO Fraud",
+  operationName: "OPERATION SILENT WIRE",
+  description: "A sophisticated BEC attack targeting finance via CFO impersonation. Three rounds. Tests financial controls, verification procedures, and incident response for non-technical leadership teams.",
+  tags: ["bec", "tabletop", "executive", "beginner"],
+  difficulty: "beginner",
+  contentMode: "hybrid",
+  version: "1.0",
+  createdAt: 1700000000000,
+  updatedAt: 1700000000000,
+  author: "Eye Security CS&C",
+  estimatedDurationMinutes: 60,
+  organizationContext: {
+    name: "{company}",
+    sector: "{sector}",
+    size: "{size}",
+    criticalSystems: "Finance ERP, banking portal, email",
+    crownJewels: "Financial accounts, payment authorizations",
+  },
+  rounds: [
+    {
+      id: "r1",
+      title: "The Request",
+      situationUpdateTemplate: "It is Friday afternoon at {company}. The CFO is at a conference. An urgent email arrives in the finance department.",
+      timerMinutes: 10,
+      requireAllFeedback: true,
+      injects: [
+        {
+          id: "bec-r1-i1",
+          type: "executive",
+          channel: "email",
+          urgency: "high",
+          title: "CFO: Urgent wire transfer required",
+          htmlType: "phishing_email",
+          htmlContent: `<div style="background: #f5f5f5; font-family: Arial, sans-serif; padding: 16px; border: 1px solid #ddd; font-size: 13px; line-height: 1.6; color: #333;">
+<div style="background: white; border-bottom: 1px solid #eee; padding: 8px 12px; margin: -16px -16px 16px; font-size: 11px; color: #555; font-family: monospace;">
+  FROM: k.janssen@{company}-group.nl &nbsp;[NOTE: domain is {company}-GROUP not {company}]
+  TO: finance@{company}.nl &nbsp;&nbsp; Fri 14:47
+</div>
+<p>Hi,</p>
+<p>I need you to process an urgent wire transfer today. I'm currently in a client meeting and can't speak — please handle this via email only.</p>
+<p><strong>Amount: €127,500<br>Beneficiary: Meridian Consulting BV<br>IBAN: NL91 ABNA 0417 1643 00<br>Reference: Q4-Strategic-Retainer</strong></p>
+<p>This needs to clear before end of business today. The vendor has been extremely patient. Please confirm once sent.</p>
+<p>Best,<br>Kees Janssen<br>CFO | {company}</p>
+<p style="font-size: 10px; color: #999;">Sent from my iPhone</p>
+</div>`,
+          content: "Urgent wire transfer request appearing to come from CFO while at conference.",
+          senderName: "Kees Janssen (CFO)",
+          context: "Classic BEC setup. Note the lookalike domain. Finance is under pressure.",
+          expectedActions: ["Verify sender domain carefully", "Call CFO on known number (not from email)", "Do NOT transfer without verbal confirmation"],
+          showNotes: "The lookalike domain ({company}-group vs {company}) is subtle. See if anyone catches it before you point it out.",
+        },
+      ],
+      facilitatorNotes: {
+        discussionGoal: "Test whether the team has and follows wire transfer verification procedures.",
+        keyQuestions: ["What is your verification procedure for urgent wire transfers?", "Do you call back on a known number or reply to the email?", "Who has authority to approve a €127,500 transfer?"],
+        hints: ["Look at the sender domain carefully.", "The CFO is 'unreachable' — this is a classic BEC pressure tactic."],
+        expectedDecisions: ["Do not transfer", "Verify via out-of-band call", "Escalate to security team"],
+        redFlags: ["Team transfers money without voice verification", "Team replies to the spoofed email to 'verify'"],
+        debriefPoints: ["Did your finance team know the verification procedure?", "How close did you get to actually sending?"],
+      },
+    },
+    {
+      id: "r2",
+      title: "Escalation",
+      situationUpdateTemplate: "The finance team hesitates. A follow-up arrives — this time more aggressive.",
+      timerMinutes: 10,
+      requireAllFeedback: true,
+      injects: [
+        {
+          id: "bec-r2-i1",
+          type: "executive",
+          channel: "email",
+          urgency: "critical",
+          title: "CFO follow-up: 'Why hasn't this been done?'",
+          htmlType: "phishing_email",
+          htmlContent: `<div style="background: #f5f5f5; font-family: Arial, sans-serif; padding: 16px; border: 1px solid #ddd; font-size: 13px; line-height: 1.6; color: #333;">
+<div style="background: white; border-bottom: 1px solid #eee; padding: 8px 12px; margin: -16px -16px 16px; font-size: 11px; color: #555; font-family: monospace;">
+  FROM: k.janssen@{company}-group.nl &nbsp;&nbsp; TO: finance@{company}.nl &nbsp;&nbsp; 15:22
+</div>
+<p>I see the payment hasn't gone through yet. This is a priority. The CEO is aware of this deal and expects it done today.</p>
+<p>I understand you may have concerns but this has been approved at the highest level. Please process immediately and confirm.</p>
+<p>This delay is causing serious issues on my end.</p>
+<p>Kees</p>
+</div>`,
+          content: "Pressure escalates. CEO invoked. Urgency increased.",
+          senderName: "Kees Janssen (CFO)",
+          context: "Social engineering pressure. 'CEO is aware' is a classic authority escalation.",
+          expectedActions: ["Still do not transfer", "Report to security team", "Document everything"],
+          showNotes: "The 'CEO is aware' claim is unverifiable via email. Ask: did anyone try to verify this with the actual CEO?",
+        },
+      ],
+      facilitatorNotes: {
+        discussionGoal: "Test resistance to authority-based social engineering under time pressure.",
+        keyQuestions: ["Does invoking the CEO change your decision?", "What would make you transfer the money?", "Have you reported this to security yet?"],
+        hints: ["Legitimate executives do not pressure staff to skip verification procedures.", "Every minute of delay is pressure the attacker wants you to feel."],
+        expectedDecisions: ["Report to security team", "Attempt CEO verification via known number", "Document the email chain"],
+        redFlags: ["Finance team transfers under CEO pressure without verification", "No escalation to security"],
+        debriefPoints: ["At what point did you recognize this was social engineering?", "What would your finance team do without today's training?"],
+      },
+    },
+    {
+      id: "r3",
+      title: "Incident & Recovery",
+      situationUpdateTemplate: "The attack is confirmed. Now the real work begins — scoping, notification, and preventing recurrence.",
+      timerMinutes: 10,
+      requireAllFeedback: true,
+      injects: [
+        {
+          id: "bec-r3-i1",
+          type: "technical",
+          channel: "siem_alert",
+          urgency: "high",
+          title: "Mailbox compromise confirmed",
+          content: "Security team confirms the CFO's actual mailbox was compromised 6 days ago via a phishing link. The attacker has been reading emails — including the conference schedule — for 6 days. All sent items should be assumed read.",
+          senderName: "Security Team",
+          context: "The attacker had insider knowledge. This was not a blind attack.",
+          expectedActions: ["Reset CFO credentials", "Audit mailbox access logs", "Scope what was read"],
+          showNotes: "6 days of mailbox access means the attacker knew the CFO's schedule, writing style, and pending deals. How does this change the scope?",
+        },
+      ],
+      facilitatorNotes: {
+        discussionGoal: "Scope the full impact of 6 days of mailbox compromise and identify systemic gaps.",
+        keyQuestions: ["What data was accessible in the CFO mailbox?", "Do you notify customers whose data may have been read?", "What controls would have caught the initial phishing?"],
+        hints: ["6 days is a long dwell time. What else did the attacker see?"],
+        expectedDecisions: ["Credential reset and MFA enforcement", "Scope notification obligations", "Review phishing controls"],
+        redFlags: ["Team focuses only on the wire transfer, not the mailbox compromise", "No notification assessment performed"],
+        debriefPoints: ["How did the attacker get into the mailbox in the first place?", "What is your process for detecting mailbox compromise?"],
+      },
+    },
+  ],
+  outcomes: {
+    good: ["No wire transfer executed", "Attack recognized before financial loss", "Security team engaged immediately", "CFO mailbox scope identified quickly"],
+    bad: ["Wire transfer executed — funds likely unrecoverable", "Verification procedure not followed under pressure", "Mailbox compromise scope not assessed"],
+    debriefQuestions: ["Do all finance staff know your wire transfer verification procedure?", "How would you have detected the mailbox compromise without this exercise?", "What MFA and phishing controls do you have — and are they enough?"],
+  },
+}
+
+export const BUILTIN_TEMPLATES: ScenarioTemplate[] = [
+  RANSOMWARE_TEMPLATE,
+  BEC_TEMPLATE,
+]
