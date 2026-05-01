@@ -107,7 +107,6 @@ export const t = {
 
     // Roles
     role_it_manager: "IT Manager",
-    role_soc_analyst: "SOC Analyst",
     role_ciso: "CISO",
     role_head_of_comms: "Head of Communications",
     role_legal: "Legal",
@@ -276,7 +275,6 @@ export const t = {
 
     // Roles
     role_it_manager: "IT Manager",
-    role_soc_analyst: "SOC Analyst",
     role_ciso: "CISO",
     role_head_of_comms: "Hoofd Communicatie",
     role_legal: "Juridisch",

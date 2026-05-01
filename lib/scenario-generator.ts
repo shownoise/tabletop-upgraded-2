@@ -106,8 +106,8 @@ function round1(sector: string, systems: string): Round {
   }
 
   const roleActions: RoleAction[] = [
-    { id: "gen-r1-a1", label: "Isolate affected endpoint", description: "Isolate the affected endpoint from the network.", allowedRoles: ["it_manager", "soc_analyst"], isRecommended: true, irPlanAligned: true },
-    { id: "gen-r1-a2", label: "Escalate to CISO", description: "Formally escalate the incident to the CISO.", allowedRoles: ["soc_analyst", "it_manager"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r1-a1", label: "Isolate affected endpoint", description: "Isolate the affected endpoint from the network.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r1-a2", label: "Escalate to CISO", description: "Formally escalate the incident to the CISO.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true },
     { id: "gen-r1-a3", label: "Open crisis bridge call", description: "Initiate a crisis bridge call with key stakeholders.", allowedRoles: ["ciso", "head_of_comms"], isRecommended: true, irPlanAligned: true },
     { id: "gen-r1-a4", label: "Notify board immediately", description: "Send immediate notification to the board.", allowedRoles: ["ceo", "ciso"], irPlanAligned: false, consequence: "Premature escalation before facts are established" },
     { id: "gen-r1-a5", label: "No action taken", description: "Do not take any immediate action.", allowedRoles: [], irPlanAligned: true },
@@ -200,7 +200,7 @@ function round2(crown: string, systems: string): Round {
   }
 
   const roleActions: RoleAction[] = [
-    { id: "gen-r2-a1", label: "Disable compromised admin account", description: "Immediately disable the compromised admin account.", allowedRoles: ["it_manager", "soc_analyst"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r2-a1", label: "Disable compromised admin account", description: "Immediately disable the compromised admin account.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true },
     { id: "gen-r2-a2", label: "Engage external IR firm", description: "Contact and engage the external incident response retainer.", allowedRoles: ["ciso", "it_manager"], isRecommended: true, irPlanAligned: true },
     { id: "gen-r2-a3", label: "Brief CEO on incident status", description: "Provide a structured briefing to the CEO.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true },
     { id: "gen-r2-a4", label: "Shut down crown jewel systems", description: "Immediately shut down all crown jewel systems.", allowedRoles: ["it_manager"], irPlanAligned: false, consequence: "Causes business disruption and logging gaps" },

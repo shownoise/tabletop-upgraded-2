@@ -1,6 +1,5 @@
 export type Role =
   | 'it_manager'
-  | 'soc_analyst'
   | 'ciso'
   | 'head_of_comms'
   | 'legal'
@@ -9,7 +8,6 @@ export type Role =
 
 export const ROLE_META: Record<Role, { label: string; team: 'crisis_management' | 'technical_it'; description: string }> = {
   it_manager:    { label: 'IT Manager',             team: 'technical_it',      description: 'IT infrastructure, systems isolation' },
-  soc_analyst:   { label: 'SOC Analyst',            team: 'technical_it',      description: 'Security monitoring, threat analysis' },
   ciso:          { label: 'CISO',                   team: 'crisis_management', description: 'Security strategy, incident coordination' },
   head_of_comms: { label: 'Head of Communications', team: 'crisis_management', description: 'Internal and external communications' },
   legal:         { label: 'Legal',                  team: 'crisis_management', description: 'Compliance, regulatory notifications' },

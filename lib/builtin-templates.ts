@@ -126,8 +126,8 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
         ],
       },
       roleActions: [
-        { id: "r1-a1", label: "Isolate affected endpoint", description: "Isolate the affected workstation from the network to prevent lateral movement.", allowedRoles: ["it_manager", "soc_analyst"], isRecommended: true, irPlanAligned: true },
-        { id: "r1-a2", label: "Escalate to CISO", description: "Formally escalate the incident to the CISO for strategic oversight.", allowedRoles: ["soc_analyst", "it_manager"], isRecommended: true, irPlanAligned: true },
+        { id: "r1-a1", label: "Isolate affected endpoint", description: "Isolate the affected workstation from the network to prevent lateral movement.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true },
+        { id: "r1-a2", label: "Escalate to CISO", description: "Formally escalate the incident to the CISO for strategic oversight.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true },
         { id: "r1-a3", label: "Open crisis bridge call", description: "Initiate a crisis bridge call to convene key stakeholders.", allowedRoles: ["ciso", "head_of_comms"], isRecommended: true, irPlanAligned: true },
         { id: "r1-a4", label: "Request legal briefing", description: "Brief legal team on initial findings and potential regulatory implications.", allowedRoles: ["ciso", "legal"], irPlanAligned: true },
         { id: "r1-a5", label: "Notify board immediately", description: "Send immediate notification to the board of directors.", allowedRoles: ["ceo", "ciso"], irPlanAligned: false, consequence: "Premature escalation before facts are established" },
@@ -222,7 +222,7 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
         ],
       },
       roleActions: [
-        { id: "r2-a1", label: "Disable compromised domain admin account", description: "Immediately disable the compromised domain admin account to prevent further access.", allowedRoles: ["it_manager", "soc_analyst"], isRecommended: true, irPlanAligned: true },
+        { id: "r2-a1", label: "Disable compromised domain admin account", description: "Immediately disable the compromised domain admin account to prevent further access.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true },
         { id: "r2-a2", label: "Engage external IR firm", description: "Contact and engage the external incident response retainer for forensic support.", allowedRoles: ["ciso", "it_manager"], isRecommended: true, irPlanAligned: true },
         { id: "r2-a3", label: "Shut down crown jewel systems", description: "Immediately shut down all crown jewel systems to prevent further encryption.", allowedRoles: ["it_manager"], irPlanAligned: false, consequence: "Causes business disruption and logging gaps" },
         { id: "r2-a4", label: "Draft internal staff communication", description: "Prepare and send internal communication to all staff about the incident.", allowedRoles: ["head_of_comms", "ciso"], irPlanAligned: true },

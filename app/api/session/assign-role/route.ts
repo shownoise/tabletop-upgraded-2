@@ -3,7 +3,7 @@ import type { Role } from "@/lib/types"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-const VALID_ROLES: Role[] = ["it_manager", "soc_analyst", "ciso", "head_of_comms", "legal", "ceo", "cfo"]
+const VALID_ROLES: Role[] = ["it_manager", "ciso", "head_of_comms", "legal", "ceo", "cfo"]
 
 export async function POST(req: Request) {
   const body = (await req.json()) as { participantId?: string; role?: string }
