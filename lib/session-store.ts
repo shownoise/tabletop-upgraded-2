@@ -7,8 +7,9 @@ import { randomBytes } from "crypto"
 import { generateScenario } from "./scenario-generator"
 import { dbGetSession, dbSetSession } from "./db"
 import type {
-  ExerciseConfig, Inject, InjectType, LiveEvent, LiveEventName,
-  Participant, PublicState, Scenario, SessionState, StreamMessage,
+  ExerciseConfig, GovernanceFlag, Inject, InjectType, LiveEvent, LiveEventName,
+  Participant, PublicState, Role, RoleAction, RoundPhase, Scenario, SessionState,
+  SimulationMode, StreamMessage, SubmittedDecision,
   TimelineEvent, TimelineEventType, Urgency,
 } from "./types"
 
@@ -61,7 +62,7 @@ export async function getSession(): Promise<SessionState | null> {
   return dbGetSession()
 }
 
-export async function createSession(config: ExerciseConfig, scenario?: Scenario): Promise<SessionState> {
+export async function createSession(config: ExerciseConfig, scenario?: Scenario, mode?: SimulationMode): Promise<SessionState> {
   const resolvedScenario = scenario ?? generateScenario(config)
   const session: SessionState = {
     id: genId("ses"),
@@ -79,6 +80,10 @@ export async function createSession(config: ExerciseConfig, scenario?: Scenario)
       data: { title: resolvedScenario.scenario_title },
     }],
     createdAt: Date.now(),
+    mode: mode ?? "training",
+    roundPhase: "inject",
+    submittedDecisions: [],
+    governanceFlags: [],
   }
   await dbSetSession(session)
   broadcastState(session)
@@ -111,7 +116,7 @@ function pushTimeline(session: SessionState, type: TimelineEventType, data: Reco
 export interface JoinResult { ok: true; participantId: string; sessionId: string }
 export interface JoinError { ok: false; error: string }
 
-export async function joinSession(input: { name: string; joinCode: string }): Promise<JoinResult | JoinError> {
+export async function joinSession(input: { name: string; joinCode: string; role?: Role }): Promise<JoinResult | JoinError> {
   const name = input.name.trim()
   const code = input.joinCode.trim().toUpperCase()
   if (!name) return { ok: false, error: "Name is required." }
@@ -120,7 +125,7 @@ export async function joinSession(input: { name: string; joinCode: string }): Pr
   if (!session) return { ok: false, error: "No active session. Ask the facilitator to create one." }
   if (session.joinCode.toUpperCase() !== code) return { ok: false, error: "Invalid join code." }
 
-  const participant: Participant = { id: genId("p"), name, joinedAt: Date.now() }
+  const participant: Participant = { id: genId("p"), name, joinedAt: Date.now(), role: input.role }
   let updated = { ...session, participants: [...session.participants, participant] }
   updated = pushTimeline(updated, "participant_joined", { name: participant.name, participantId: participant.id })
 
@@ -133,7 +138,7 @@ export async function joinSession(input: { name: string; joinCode: string }): Pr
 export async function startSession(): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(s => {
     if (s.scenario.rounds.length === 0) return null
-    let updated = { ...s, status: "active" as const, currentRound: 0, roundStartedAt: Date.now() }
+    let updated: SessionState = { ...s, status: "active" as const, currentRound: 0, roundStartedAt: Date.now() }
     updated = pushTimeline(updated, "session_started", { roundIndex: 0 })
     return updated
   })
@@ -147,7 +152,7 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
 
   if (session.currentRound < session.scenario.rounds.length - 1) {
     const nextIdx = session.currentRound + 1
-    let updated = { ...session, currentRound: nextIdx, roundStartedAt: Date.now() }
+    let updated: SessionState = { ...session, currentRound: nextIdx, roundStartedAt: Date.now(), roundPhase: "inject" as RoundPhase }
     updated = pushTimeline(updated, "round_changed", { roundIndex: nextIdx })
     await dbSetSession(updated)
     broadcastState(updated)
@@ -156,7 +161,7 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
   }
 
   // End of session
-  let updated = { ...session, status: "ended" as const }
+  let updated: SessionState = { ...session, status: "ended" as const }
   updated = pushTimeline(updated, "session_ended", {})
   await dbSetSession(updated)
   broadcastState(updated)
@@ -169,7 +174,7 @@ export async function goToPrevRound(): Promise<{ ok: boolean; error?: string }> 
   if (!session || session.currentRound <= 0) return { ok: false, error: "Cannot go back." }
 
   const prevIdx = session.currentRound - 1
-  let updated = { ...session, currentRound: prevIdx, roundStartedAt: Date.now() }
+  let updated: SessionState = { ...session, currentRound: prevIdx, roundStartedAt: Date.now() }
   updated = pushTimeline(updated, "round_changed", { roundIndex: prevIdx })
   await dbSetSession(updated)
   broadcastState(updated)
@@ -222,4 +227,113 @@ export async function pushSurpriseInject(input: {
   broadcastState(updated)
   emit("surprise_inject", { inject })
   return { ok: true, inject }
+}
+
+// ─── Phase management ─────────────────────────────────────────
+
+export async function setPhase(phase: RoundPhase): Promise<{ ok: boolean; error?: string }> {
+  const result = await mutate(s => {
+    return { ...s, roundPhase: phase }
+  })
+  if (result.ok) emit("phase_changed", { phase })
+  return result
+}
+
+// ─── Role assignment ──────────────────────────────────────────
+
+export async function assignRole(input: { participantId: string; role: Role }): Promise<{ ok: boolean; error?: string }> {
+  const result = await mutate(s => {
+    const participants = s.participants.map(p =>
+      p.id === input.participantId ? { ...p, role: input.role } : p
+    )
+    return { ...s, participants }
+  })
+  if (result.ok) emit("role_assigned", { participantId: input.participantId, role: input.role })
+  return result
+}
+
+// ─── Decision submission ──────────────────────────────────────
+
+export interface SubmitDecisionInput {
+  participantId: string
+  participantName: string
+  roundIndex: number
+  actionId: string
+  reasoning: string
+}
+
+export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+
+  const participant = session.participants.find(p => p.id === input.participantId)
+  if (!participant) return { ok: false, error: "Participant not found." }
+  if (!participant.role) return { ok: false, error: "No role assigned. Please assign a role before submitting decisions." }
+
+  const round = session.scenario.rounds[input.roundIndex]
+  if (!round) return { ok: false, error: "Invalid round." }
+
+  const action: RoleAction | undefined = round.roleActions?.find(a => a.id === input.actionId)
+  if (!action) return { ok: false, error: "Invalid action." }
+
+  const role = participant.role
+  const isWrongRole = action.allowedRoles.length > 0 && !action.allowedRoles.includes(role)
+  const isIrDeviation = !action.irPlanAligned
+
+  const decision: SubmittedDecision = {
+    participantId: input.participantId,
+    participantName: participant.name,
+    role,
+    roundIndex: input.roundIndex,
+    actionId: input.actionId,
+    actionLabel: action.label,
+    reasoning: input.reasoning,
+    submittedAt: new Date().toISOString(),
+    isWrongRole,
+    isIrDeviation,
+  }
+
+  // Remove any existing decision for this participant+round then add new one
+  const existingDecisions = (session.submittedDecisions ?? []).filter(
+    d => !(d.participantId === input.participantId && d.roundIndex === input.roundIndex)
+  )
+  const existingFlags = (session.governanceFlags ?? []).filter(
+    f => !(f.participantId === input.participantId && f.roundIndex === input.roundIndex)
+  )
+
+  const newFlags: GovernanceFlag[] = []
+  if (isWrongRole) {
+    newFlags.push({
+      id: genId("flag"),
+      participantId: input.participantId,
+      participantName: participant.name,
+      role,
+      roundIndex: input.roundIndex,
+      type: "wrong_role",
+      description: `${participant.name} (${role}) took action "${action.label}" which is outside their authorized role.`,
+      flaggedAt: new Date().toISOString(),
+    })
+  }
+  if (isIrDeviation) {
+    newFlags.push({
+      id: genId("flag"),
+      participantId: input.participantId,
+      participantName: participant.name,
+      role,
+      roundIndex: input.roundIndex,
+      type: "ir_plan_deviation",
+      description: `${participant.name} took action "${action.label}" which deviates from the IR plan.${action.consequence ? ` Consequence: ${action.consequence}` : ""}`,
+      flaggedAt: new Date().toISOString(),
+    })
+  }
+
+  const updated = {
+    ...session,
+    submittedDecisions: [...existingDecisions, decision],
+    governanceFlags: [...existingFlags, ...newFlags],
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  emit("decision_submitted", { participantId: input.participantId, roundIndex: input.roundIndex })
+  return { ok: true }
 }

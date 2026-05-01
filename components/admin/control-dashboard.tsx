@@ -5,16 +5,29 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import {
   ArrowLeft, ChevronLeft, ChevronRight, Copy, Play, Power,
-  ShieldAlert, Square, Users, Clock, Wifi, WifiOff, CheckCircle
+  ShieldAlert, Square, Users, Clock, Wifi, WifiOff, CheckCircle,
+  FileText, Monitor, ChevronRight as PhaseArrow, Flag
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useSessionStream } from "@/lib/use-session-stream"
 import { api } from "@/lib/api-client"
 import { InjectControls } from "./inject-controls"
+import { DecisionsView } from "./decisions-view"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
+import type { RoundPhase } from "@/lib/types"
+import { ROLE_META } from "@/lib/types"
+
+const PHASE_ORDER: RoundPhase[] = ["inject", "discussion", "decision", "review"]
+const ESCALATION_LABELS = ["Normal", "Elevated", "High", "Critical"]
+const ESCALATION_CLASSES = [
+  "border-border text-muted-foreground",
+  "border-amber-500/40 text-amber-600",
+  "border-orange-500/40 text-orange-600",
+  "border-destructive/40 text-destructive",
+]
 
 function SessionClock({ startedAt }: { startedAt: number }) {
   const [elapsed, setElapsed] = useState(0)
@@ -60,11 +73,21 @@ export function ControlDashboard() {
   const [working, setWorking] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [decisionsOpen, setDecisionsOpen] = useState(false)
 
   const session = state.session
   const totalRounds = session?.scenario.rounds.length ?? 0
   const currentIndex = session?.currentRound ?? -1
   const currentRound = session && currentIndex >= 0 ? session.scenario.rounds[currentIndex] : null
+  const currentPhase: RoundPhase = session?.roundPhase ?? "inject"
+  const escalationIndex = Math.min(Math.max(currentIndex, 0), 3)
+
+  async function advancePhase() {
+    const idx = PHASE_ORDER.indexOf(currentPhase)
+    if (idx < PHASE_ORDER.length - 1) {
+      await run("phase", () => api.setPhase(PHASE_ORDER[idx + 1]))
+    }
+  }
 
   async function run(label: string, fn: () => Promise<unknown>) {
     setWorking(label)
@@ -123,6 +146,16 @@ export function ControlDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* Mode badge */}
+            <div className="hidden items-center rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-primary md:flex">
+              {session.mode === "event" ? tr(lang, "mode_event") : tr(lang, "mode_training")}
+            </div>
+            {/* Escalation badge */}
+            {isActive && (
+              <div className={`hidden items-center rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider md:flex ${ESCALATION_CLASSES[escalationIndex]}`}>
+                {ESCALATION_LABELS[escalationIndex]}
+              </div>
+            )}
             <div className={`flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-xs uppercase tracking-wider ${
               isActive ? "border-primary/40 bg-primary/10" :
               isEnded ? "border-destructive/40 bg-destructive/10" :
@@ -135,6 +168,15 @@ export function ControlDashboard() {
               {connected ? <Wifi className="size-3 text-primary" /> : <WifiOff className="size-3 text-destructive" />}
             </div>
             <LangToggle lang={lang} setLang={setLang} />
+            {/* Extra nav buttons */}
+            <Link href="/admin/present" className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors" title="Presentation mode">
+              <Monitor className="size-3.5" />
+            </Link>
+            {isEnded && (
+              <Link href="/admin/report" className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors">
+                <FileText className="size-3.5" /> Report
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -219,6 +261,79 @@ export function ControlDashboard() {
           </div>
         </div>
 
+        {/* Phase controls — shown when session is active */}
+        {isActive && (
+          <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "currentPhase")}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={advancePhase}
+                disabled={working !== null || currentPhase === "review"}
+                className="gap-1.5 font-mono uppercase tracking-wider text-[10px]"
+              >
+                {tr(lang, "advancePhase")} <PhaseArrow className="size-3" />
+              </Button>
+            </div>
+            {/* Phase progress indicator */}
+            <div className="flex items-center gap-2">
+              {PHASE_ORDER.map((p, i) => {
+                const phaseIdx = PHASE_ORDER.indexOf(currentPhase)
+                const isPast = i < phaseIdx
+                const isCurrent = i === phaseIdx
+                const isFuture = i > phaseIdx
+                return (
+                  <div key={p} className="flex flex-1 flex-col items-center gap-1">
+                    <div className={`h-1 w-full rounded-full transition-all ${
+                      isPast ? "bg-primary" : isCurrent ? "bg-primary/60" : "bg-border"
+                    }`} />
+                    <span className={`font-mono text-[8px] uppercase tracking-wider ${
+                      isCurrent ? "text-primary font-bold" : isFuture ? "text-muted-foreground/50" : "text-muted-foreground"
+                    }`}>
+                      {tr(lang, `phase_${p}` as Parameters<typeof tr>[1])}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Decisions toggle — show in review or decision phase */}
+            {(currentPhase === "decision" || currentPhase === "review") && currentRound && (
+              <button
+                onClick={() => setDecisionsOpen(v => !v)}
+                className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-2.5 hover:bg-card transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Flag className="size-3.5 text-primary" />
+                  <span className="font-mono text-xs text-foreground">{tr(lang, "decisionsView")}</span>
+                  {(session.submittedDecisions ?? []).filter(d => d.roundIndex === currentIndex).length > 0 && (
+                    <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px font-mono text-[9px] text-primary">
+                      {(session.submittedDecisions ?? []).filter(d => d.roundIndex === currentIndex).length}
+                    </span>
+                  )}
+                  {(session.governanceFlags ?? []).filter(f => f.roundIndex === currentIndex).length > 0 && (
+                    <span className="rounded-full border border-destructive/40 bg-destructive/10 px-1.5 py-px font-mono text-[9px] text-destructive">
+                      {(session.governanceFlags ?? []).filter(f => f.roundIndex === currentIndex).length} flags
+                    </span>
+                  )}
+                </div>
+                <ChevronRight className={`size-4 text-muted-foreground transition-transform ${decisionsOpen ? "rotate-90" : ""}`} />
+              </button>
+            )}
+            {decisionsOpen && currentRound && (
+              <div className="rounded-xl border border-border bg-card p-4">
+                <DecisionsView
+                  decisions={(session.submittedDecisions ?? []).filter(d => d.roundIndex === currentIndex)}
+                  flags={(session.governanceFlags ?? []).filter(f => f.roundIndex === currentIndex)}
+                  participants={session.participants}
+                  roundActions={currentRound.roleActions ?? []}
+                  lang={lang}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {error && (
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">{error}</div>
         )}
@@ -260,11 +375,16 @@ export function ControlDashboard() {
                   </li>
                 ) : session.participants.map((p) => (
                   <li key={p.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <div className="size-6 rounded-full border border-border bg-background font-mono text-[9px] uppercase text-muted-foreground flex items-center justify-center">
+                    <div className="size-6 rounded-full border border-border bg-background font-mono text-[9px] uppercase text-muted-foreground flex items-center justify-center shrink-0">
                       {p.name.slice(0, 2)}
                     </div>
-                    <span className="text-sm flex-1">{p.name}</span>
-                    <span className="size-1.5 rounded-full bg-primary" />
+                    <span className="text-sm flex-1 min-w-0 truncate">{p.name}</span>
+                    {p.role && (
+                      <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px font-mono text-[8px] uppercase tracking-wider text-primary shrink-0">
+                        {ROLE_META[p.role].label}
+                      </span>
+                    )}
+                    <span className="size-1.5 rounded-full bg-primary shrink-0" />
                   </li>
                 ))}
               </ul>

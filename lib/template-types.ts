@@ -73,6 +73,8 @@ export interface RoundTemplate {
   }
   // If true, all participants must submit feedback before progression
   requireAllFeedback?: boolean
+  // Role-based actions for this round
+  roleActions?: import("./types").RoleAction[]
 }
 
 export interface ScenarioTemplate {

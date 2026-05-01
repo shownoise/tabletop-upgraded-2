@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { ExerciseConfig } from "@/lib/types"
+import type { ExerciseConfig, SimulationMode } from "@/lib/types"
 
 const sectors = [
   "Financial Services", "Healthcare", "Energy & Utilities", "Manufacturing",
@@ -42,6 +42,7 @@ const defaults: ExerciseConfig = {
 export function SetupForm() {
   const router = useRouter()
   const [config, setConfig] = useState<ExerciseConfig>(defaults)
+  const [mode, setMode] = useState<SimulationMode>("training")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [irFileName, setIrFileName] = useState<string | null>(null)
@@ -67,7 +68,7 @@ export function SetupForm() {
       const res = await fetch("/api/session/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ ...config, mode }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Failed to create session")
@@ -80,6 +81,36 @@ export function SetupForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-8">
+      {/* Simulation mode selector */}
+      <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 p-5">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs uppercase tracking-wider text-primary">Simulation mode</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {(["training", "event"] as SimulationMode[]).map(m => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={`flex flex-col gap-1.5 rounded-lg border px-4 py-3 text-left transition-all ${
+                mode === m
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-card hover:border-primary/40"
+              }`}
+            >
+              <span className={`font-mono text-sm font-medium ${mode === m ? "text-primary" : "text-foreground"}`}>
+                {m === "training" ? "Training" : "Event"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {m === "training"
+                  ? "NIS2-focused training with IR plan adherence and process deviation tracking."
+                  : "Multi-team event mode with team-based grouping and leaderboard scoring."}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <FieldRow label="Sector" hint="Industry vertical of the simulated organization">
           <Select value={config.sector} onValueChange={(v) => update("sector", v)}>

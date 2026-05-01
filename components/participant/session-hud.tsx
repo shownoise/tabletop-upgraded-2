@@ -2,15 +2,25 @@
 
 import { useEffect, useState } from "react"
 import { ShieldAlert, Wifi, WifiOff, Users } from "lucide-react"
-import type { SessionState } from "@/lib/types"
+import type { Role, SessionState } from "@/lib/types"
+import { ROLE_META } from "@/lib/types"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
+
+const ESCALATION_LABELS = ["normal", "elevated", "high", "critical"] as const
+const ESCALATION_CLASSES = [
+  "border-border bg-card text-muted-foreground",
+  "border-amber-500/40 bg-amber-500/10 text-amber-600",
+  "border-orange-500/40 bg-orange-500/10 text-orange-600",
+  "border-destructive/40 bg-destructive/10 text-destructive",
+]
 
 interface Props {
   session: SessionState
   connected: boolean
   name: string | null
+  participantRole?: Role
   lang: Lang
   setLang: (l: Lang) => void
 }
@@ -53,11 +63,12 @@ function RoundProgressBar({ current, total }: { current: number; total: number }
   )
 }
 
-export function SessionHUD({ session, connected, name, lang, setLang }: Props) {
+export function SessionHUD({ session, connected, name, participantRole, lang, setLang }: Props) {
   const status = session.status
   const totalRounds = session.scenario.rounds.length
   const currentIdx = session.currentRound
   const isActive = status === "active"
+  const escalationIndex = Math.min(Math.max(currentIdx, 0), 3)
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-md">
@@ -78,6 +89,24 @@ export function SessionHUD({ session, connected, name, lang, setLang }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Role badge */}
+          {participantRole && (
+            <div className="hidden items-center rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1 md:flex">
+              <span className="font-mono text-[9px] uppercase tracking-wider text-primary">
+                {ROLE_META[participantRole].label}
+              </span>
+            </div>
+          )}
+
+          {/* Escalation badge */}
+          {isActive && (
+            <div className={`hidden items-center rounded-md border px-2.5 py-1 md:flex ${ESCALATION_CLASSES[escalationIndex]}`}>
+              <span className="font-mono text-[9px] uppercase tracking-wider">
+                {tr(lang, "escalationLevel")}: {tr(lang, `escalation_${ESCALATION_LABELS[escalationIndex]}` as Parameters<typeof tr>[1])}
+              </span>
+            </div>
+          )}
+
           {/* Session timer */}
           {session.createdAt && (
             <div className="hidden items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 md:flex">

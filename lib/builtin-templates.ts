@@ -5,7 +5,7 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
   name: "Ransomware — Full Crisis",
   operationName: "OPERATION BLACK TIDE",
   description: "A full-scale ransomware attack escalating from initial detection to payment decision, regulatory notification, and recovery. Four rounds, decision-gated at round 3.",
-  tags: ["ransomware", "tabletop", "nis2", "gdpr", "intermediate"],
+  tags: ["ransomware", "tabletop", "nis2", "gdpr"],
   difficulty: "intermediate",
   contentMode: "hybrid",
   version: "1.0",
@@ -125,6 +125,14 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
           "What would your alert triage process have looked like in a real scenario at 02:14?",
         ],
       },
+      roleActions: [
+        { id: "r1-a1", label: "Isolate affected endpoint", description: "Isolate the affected workstation from the network to prevent lateral movement.", allowedRoles: ["it_manager", "soc_analyst"], isRecommended: true, irPlanAligned: true },
+        { id: "r1-a2", label: "Escalate to CISO", description: "Formally escalate the incident to the CISO for strategic oversight.", allowedRoles: ["soc_analyst", "it_manager"], isRecommended: true, irPlanAligned: true },
+        { id: "r1-a3", label: "Open crisis bridge call", description: "Initiate a crisis bridge call to convene key stakeholders.", allowedRoles: ["ciso", "head_of_comms"], isRecommended: true, irPlanAligned: true },
+        { id: "r1-a4", label: "Request legal briefing", description: "Brief legal team on initial findings and potential regulatory implications.", allowedRoles: ["ciso", "legal"], irPlanAligned: true },
+        { id: "r1-a5", label: "Notify board immediately", description: "Send immediate notification to the board of directors.", allowedRoles: ["ceo", "ciso"], irPlanAligned: false, consequence: "Premature escalation before facts are established" },
+        { id: "r1-a6", label: "No action taken", description: "Do not take any immediate action.", allowedRoles: [], irPlanAligned: true },
+      ],
     },
     {
       id: "r2",
@@ -213,6 +221,14 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
           "At this point — did you know if your backups were clean?",
         ],
       },
+      roleActions: [
+        { id: "r2-a1", label: "Disable compromised domain admin account", description: "Immediately disable the compromised domain admin account to prevent further access.", allowedRoles: ["it_manager", "soc_analyst"], isRecommended: true, irPlanAligned: true },
+        { id: "r2-a2", label: "Engage external IR firm", description: "Contact and engage the external incident response retainer for forensic support.", allowedRoles: ["ciso", "it_manager"], isRecommended: true, irPlanAligned: true },
+        { id: "r2-a3", label: "Shut down crown jewel systems", description: "Immediately shut down all crown jewel systems to prevent further encryption.", allowedRoles: ["it_manager"], irPlanAligned: false, consequence: "Causes business disruption and logging gaps" },
+        { id: "r2-a4", label: "Draft internal staff communication", description: "Prepare and send internal communication to all staff about the incident.", allowedRoles: ["head_of_comms", "ciso"], irPlanAligned: true },
+        { id: "r2-a5", label: "Brief CEO on incident status", description: "Provide a structured briefing to the CEO on the current incident status.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true },
+        { id: "r2-a6", label: "No action taken", description: "Do not take any immediate action.", allowedRoles: [], irPlanAligned: true },
+      ],
     },
     {
       id: "r3",
@@ -346,6 +362,14 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
           "Did you know exactly when your NIS2 clock started?",
         ],
       },
+      roleActions: [
+        { id: "r3-a1", label: "Issue holding statement to media", description: "Release an approved holding statement to media inquiries.", allowedRoles: ["head_of_comms"], isRecommended: true, irPlanAligned: true },
+        { id: "r3-a2", label: "Advise on GDPR/NIS2 notification timeline", description: "Provide legal guidance on regulatory notification obligations and deadlines.", allowedRoles: ["legal", "ciso"], isRecommended: true, irPlanAligned: true },
+        { id: "r3-a3", label: "Authorize ransom negotiation", description: "Authorize engagement with the threat actor to negotiate ransom payment.", allowedRoles: ["ceo", "cfo"], irPlanAligned: false, consequence: "Financially and legally risky; no guarantee of decryption" },
+        { id: "r3-a4", label: "Respond directly to journalist", description: "Respond to journalist inquiry without approved messaging.", allowedRoles: ["head_of_comms"], irPlanAligned: false, consequence: "Without approved messaging, risks information leak" },
+        { id: "r3-a5", label: "Maintain media silence", description: "Maintain media silence and do not issue any statement.", allowedRoles: ["head_of_comms", "ceo"], irPlanAligned: true },
+        { id: "r3-a6", label: "No action taken", description: "Do not take any immediate action.", allowedRoles: [], irPlanAligned: true },
+      ],
     },
     {
       id: "r4",
@@ -422,6 +446,14 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
           "Who owns the post-incident report?",
         ],
       },
+      roleActions: [
+        { id: "r4-a1", label: "Authorize recovery from clean backups", description: "Formally authorize initiation of recovery from confirmed clean backups.", allowedRoles: ["it_manager", "ciso"], isRecommended: true, irPlanAligned: true },
+        { id: "r4-a2", label: "File regulatory notification", description: "Submit the required NIS2/GDPR regulatory notification to authorities.", allowedRoles: ["legal", "ciso"], isRecommended: true, irPlanAligned: true },
+        { id: "r4-a3", label: "Send customer breach notification", description: "Send breach notification to affected customers.", allowedRoles: ["head_of_comms", "legal"], isRecommended: true, irPlanAligned: true },
+        { id: "r4-a4", label: "Present financial impact to board", description: "Present financial impact analysis to the board of directors.", allowedRoles: ["cfo", "ceo"], irPlanAligned: true },
+        { id: "r4-a5", label: "Resume all systems without full forensics", description: "Resume all systems immediately without completing forensic analysis.", allowedRoles: ["it_manager"], irPlanAligned: false, consequence: "Risk of reinfection if root cause not confirmed" },
+        { id: "r4-a6", label: "No action taken", description: "Do not take any immediate action.", allowedRoles: [], irPlanAligned: true },
+      ],
     },
   ],
   outcomes: {

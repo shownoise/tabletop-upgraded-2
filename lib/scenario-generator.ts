@@ -1,4 +1,4 @@
-import type { ExerciseConfig, Scenario, Round, Inject, FacilitatorNotes, InjectChannel } from "./types"
+import type { ExerciseConfig, Scenario, Round, Inject, FacilitatorNotes, InjectChannel, RoleAction } from "./types"
 
 let counter = 0
 function id(prefix: string) {
@@ -105,6 +105,14 @@ function round1(sector: string, systems: string): Round {
     ],
   }
 
+  const roleActions: RoleAction[] = [
+    { id: "gen-r1-a1", label: "Isolate affected endpoint", description: "Isolate the affected endpoint from the network.", allowedRoles: ["it_manager", "soc_analyst"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r1-a2", label: "Escalate to CISO", description: "Formally escalate the incident to the CISO.", allowedRoles: ["soc_analyst", "it_manager"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r1-a3", label: "Open crisis bridge call", description: "Initiate a crisis bridge call with key stakeholders.", allowedRoles: ["ciso", "head_of_comms"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r1-a4", label: "Notify board immediately", description: "Send immediate notification to the board.", allowedRoles: ["ceo", "ciso"], irPlanAligned: false, consequence: "Premature escalation before facts are established" },
+    { id: "gen-r1-a5", label: "No action taken", description: "Do not take any immediate action.", allowedRoles: [], irPlanAligned: true },
+  ]
+
   return {
     round_number: 1,
     title: "Initial Detection",
@@ -112,6 +120,7 @@ function round1(sector: string, systems: string): Round {
     timerMinutes: 15,
     injects,
     facilitatorNotes,
+    roleActions,
   }
 }
 
@@ -190,6 +199,14 @@ function round2(crown: string, systems: string): Round {
     ],
   }
 
+  const roleActions: RoleAction[] = [
+    { id: "gen-r2-a1", label: "Disable compromised admin account", description: "Immediately disable the compromised admin account.", allowedRoles: ["it_manager", "soc_analyst"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r2-a2", label: "Engage external IR firm", description: "Contact and engage the external incident response retainer.", allowedRoles: ["ciso", "it_manager"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r2-a3", label: "Brief CEO on incident status", description: "Provide a structured briefing to the CEO.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r2-a4", label: "Shut down crown jewel systems", description: "Immediately shut down all crown jewel systems.", allowedRoles: ["it_manager"], irPlanAligned: false, consequence: "Causes business disruption and logging gaps" },
+    { id: "gen-r2-a5", label: "No action taken", description: "Do not take any immediate action.", allowedRoles: [], irPlanAligned: true },
+  ]
+
   return {
     round_number: 2,
     title: "Containment & Investigation",
@@ -197,6 +214,7 @@ function round2(crown: string, systems: string): Round {
     timerMinutes: 20,
     injects,
     facilitatorNotes,
+    roleActions,
   }
 }
 
@@ -276,6 +294,14 @@ function round3(sector: string): Round {
     ],
   }
 
+  const roleActions: RoleAction[] = [
+    { id: "gen-r3-a1", label: "Issue holding statement to media", description: "Release an approved holding statement to media inquiries.", allowedRoles: ["head_of_comms"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r3-a2", label: "Advise on regulatory notification timeline", description: "Provide legal guidance on notification obligations and deadlines.", allowedRoles: ["legal", "ciso"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r3-a3", label: "Authorize ransom negotiation", description: "Authorize engagement with the threat actor to negotiate ransom.", allowedRoles: ["ceo", "cfo"], irPlanAligned: false, consequence: "Financially and legally risky; no guarantee of decryption" },
+    { id: "gen-r3-a4", label: "Maintain media silence", description: "Maintain media silence and do not issue any statement.", allowedRoles: ["head_of_comms", "ceo"], irPlanAligned: true },
+    { id: "gen-r3-a5", label: "No action taken", description: "Do not take any immediate action.", allowedRoles: [], irPlanAligned: true },
+  ]
+
   return {
     round_number: 3,
     title: "Escalation & Public Pressure",
@@ -283,6 +309,7 @@ function round3(sector: string): Round {
     timerMinutes: 20,
     injects,
     facilitatorNotes,
+    roleActions,
   }
 }
 
@@ -363,6 +390,14 @@ function round4(sector: string, crown: string): Round {
     ],
   }
 
+  const roleActions: RoleAction[] = [
+    { id: "gen-r4-a1", label: "Authorize recovery from clean backups", description: "Formally authorize recovery from confirmed clean backups.", allowedRoles: ["it_manager", "ciso"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r4-a2", label: "File regulatory notification", description: "Submit the required regulatory notification to authorities.", allowedRoles: ["legal", "ciso"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r4-a3", label: "Send customer breach notification", description: "Send breach notification to affected customers.", allowedRoles: ["head_of_comms", "legal"], isRecommended: true, irPlanAligned: true },
+    { id: "gen-r4-a4", label: "Resume all systems without full forensics", description: "Resume all systems immediately without completing forensic analysis.", allowedRoles: ["it_manager"], irPlanAligned: false, consequence: "Risk of reinfection if root cause not confirmed" },
+    { id: "gen-r4-a5", label: "No action taken", description: "Do not take any immediate action.", allowedRoles: [], irPlanAligned: true },
+  ]
+
   return {
     round_number: 4,
     title: "Recovery & Communications",
@@ -370,5 +405,6 @@ function round4(sector: string, crown: string): Round {
     timerMinutes: 15,
     injects,
     facilitatorNotes,
+    roleActions,
   }
 }

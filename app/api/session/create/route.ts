@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import type { ExerciseConfig } from "@/lib/types"
+import type { ExerciseConfig, SimulationMode } from "@/lib/types"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
@@ -22,7 +22,7 @@ async function generateWithAI(config: ExerciseConfig) {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as Partial<ExerciseConfig>
+  const body = (await req.json()) as Partial<ExerciseConfig> & { mode?: string }
   const config: ExerciseConfig = {
     sector: body.sector?.toString() ?? "",
     companySize: body.companySize?.toString() ?? "",
@@ -34,11 +34,12 @@ export async function POST(req: Request) {
     teams: body.teams?.toString() ?? "",
     irTemplateText: body.irTemplateText?.toString(),
   }
+  const mode: SimulationMode = body.mode === "event" ? "event" : "training"
   let scenario = null
   let aiGenerated = false
   try { scenario = await generateWithAI(config); if (scenario) aiGenerated = true } catch {}
   if (!scenario) { const { generateScenario } = await import("@/lib/scenario-generator"); scenario = generateScenario(config) }
   const { createSession } = await import("@/lib/session-store")
-  const session = await createSession(config, scenario)
+  const session = await createSession(config, scenario, mode)
   return NextResponse.json({ ok: true, sessionId: session.id, joinCode: session.joinCode, aiGenerated })
 }

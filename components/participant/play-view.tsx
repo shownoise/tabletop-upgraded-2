@@ -4,17 +4,21 @@ import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, ChevronDown, Info, ShieldAlert } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
-import type { Inject, LiveEvent } from "@/lib/types"
+import type { Inject, LiveEvent, Role, SubmittedDecision } from "@/lib/types"
+import { ROLE_META } from "@/lib/types"
 import { InjectFeed } from "./inject-feed"
 import { UrgentInjectModal } from "./urgent-inject-modal"
 import { RoundTimerCompact } from "./round-timer"
 import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
+import { DecisionPanel } from "./decision-panel"
 import { Empty } from "@/components/ui/empty"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 
 const NAME_KEY = "ctt:name"
+const ID_KEY = "ctt:participantId"
+const ROLE_KEY = "ctt:role"
 const FEEDBACK_KEY = "ctt:feedback_rounds"
 
 // ─── Intro overlay ───
@@ -109,11 +113,25 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
   )
 }
 
+// ─── Escalation overlay ───
+function EscalationOverlay({ roundIndex }: { roundIndex: number }) {
+  if (roundIndex < 2) return null
+  const isCritical = roundIndex >= 3
+  return (
+    <div className={`pointer-events-none fixed inset-x-0 top-0 z-20 h-1.5 ${
+      isCritical
+        ? "bg-destructive animate-pulse"
+        : "bg-orange-500/70"
+    }`} />
+  )
+}
+
 // ─── Main view ───
 export function PlayView() {
   const [lang, setLang] = useLang()
   const { state, connected, onEvent } = useSessionStream()
   const [name, setName] = useState<string | null>(null)
+  const [participantId, setParticipantId] = useState<string | null>(null)
   const [showIntro, setShowIntro] = useState(true)
   const [urgent, setUrgent] = useState<Inject | null>(null)
   const [banner, setBanner] = useState<{ id: number; text: string; type?: string } | null>(null)
@@ -122,7 +140,10 @@ export function PlayView() {
   const prevRoundRef = useRef<number>(-1)
 
   useEffect(() => {
-    try { setName(window.sessionStorage.getItem(NAME_KEY)) } catch {}
+    try {
+      setName(window.sessionStorage.getItem(NAME_KEY))
+      setParticipantId(window.sessionStorage.getItem(ID_KEY))
+    } catch {}
     try {
       const stored = localStorage.getItem(FEEDBACK_KEY)
       if (stored) setDoneFeedbackRounds(new Set(JSON.parse(stored)))
@@ -130,6 +151,18 @@ export function PlayView() {
   }, [])
 
   const session = state.session
+
+  // Derive participant role from session (authoritative) or sessionStorage fallback
+  const participantRole: Role | undefined = useMemo(() => {
+    if (!session || !participantId) {
+      try {
+        const stored = window.sessionStorage.getItem(ROLE_KEY)
+        return stored as Role | undefined
+      } catch { return undefined }
+    }
+    const p = session.participants.find(p => p.id === participantId)
+    return p?.role
+  }, [session, participantId])
 
   // Detect round transitions → trigger feedback
   useEffect(() => {
@@ -218,8 +251,13 @@ export function PlayView() {
         />
       )}
 
+      {/* Escalation overlay */}
+      {session.status === "active" && session.currentRound >= 0 && (
+        <EscalationOverlay roundIndex={session.currentRound} />
+      )}
+
       {/* HUD header */}
-      <SessionHUD session={session} connected={connected} name={name} lang={lang} setLang={setLang} />
+      <SessionHUD session={session} connected={connected} name={name} participantRole={participantRole} lang={lang} setLang={setLang} />
 
       {/* Round timer + inline banner zone */}
       {currentRound && (
@@ -270,6 +308,21 @@ export function PlayView() {
 
             {/* Inject feed */}
             <InjectFeed pushed={session.pushedInjects} lang={lang} />
+
+            {/* Decision panel — shown during decision phase */}
+            {session.roundPhase === "decision" && currentRound?.roleActions && participantId && (
+              <DecisionPanel
+                roundIndex={session.currentRound}
+                roundActions={currentRound.roleActions}
+                participantId={participantId}
+                participantName={name ?? ""}
+                participantRole={participantRole}
+                existingDecision={(session.submittedDecisions ?? []).find(
+                  d => d.participantId === participantId && d.roundIndex === session.currentRound
+                ) as SubmittedDecision | undefined}
+                lang={lang}
+              />
+            )}
           </div>
 
           {/* Sidebar */}
@@ -288,7 +341,14 @@ export function PlayView() {
                       </div>
                       <span className="text-sm">{p.name}</span>
                     </div>
-                    <span className="size-1.5 rounded-full bg-primary" />
+                    <div className="flex items-center gap-2">
+                      {p.role && (
+                        <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px font-mono text-[8px] uppercase tracking-wider text-primary">
+                          {ROLE_META[p.role].label}
+                        </span>
+                      )}
+                      <span className="size-1.5 rounded-full bg-primary" />
+                    </div>
                   </li>
                 ))}
               </ul>
