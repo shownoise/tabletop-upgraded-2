@@ -8,9 +8,6 @@ export type Role =
   | 'system_admin'
   | 'hr_lead'
   | 'ops_manager'
-  | 'ir_retainer'
-  | 'ext_it'
-  | 'negotiator'
 
 export const ROLE_META: Record<Role, { label: string; team: 'crisis_management' | 'technical_it'; description: string }> = {
   it_manager:    { label: 'IT Manager',             team: 'technical_it',      description: 'IT infrastructure, systems isolation' },
@@ -22,9 +19,6 @@ export const ROLE_META: Record<Role, { label: string; team: 'crisis_management' 
   system_admin:  { label: 'System Administrator',   team: 'technical_it',      description: 'Technical validation, logs, backups, infrastructure' },
   hr_lead:       { label: 'HR Lead',                team: 'crisis_management', description: 'Employee communication and insider threat cases' },
   ops_manager:   { label: 'Operations Manager',     team: 'crisis_management', description: 'Business continuity and operational impact' },
-  ir_retainer:   { label: 'External IR Retainer',   team: 'technical_it',      description: 'Investigation, containment advice, forensics' },
-  ext_it:        { label: 'External IT Provider',   team: 'technical_it',      description: 'Infrastructure support and system access' },
-  negotiator:    { label: 'Negotiation Specialist', team: 'crisis_management', description: 'Ransom negotiation support and threat actor comms' },
 }
 
 export type SimulationMode = 'event' | 'training'

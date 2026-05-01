@@ -130,7 +130,7 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
       },
       roleActions: [
         { id: "r1-a1", label: "Isolate affected endpoint", description: "Isolate the affected workstation from the network to prevent lateral movement.", allowedRoles: ["it_manager", "system_admin"], isRecommended: true, irPlanAligned: true },
-        { id: "r1-a2", label: "Escalate to CISO", description: "Formally escalate the incident to the CISO for strategic oversight.", allowedRoles: ["it_manager", "ir_retainer"], isRecommended: true, irPlanAligned: true },
+        { id: "r1-a2", label: "Escalate to CISO", description: "Formally escalate the incident to the CISO for strategic oversight.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true },
         { id: "r1-a3", label: "Open crisis bridge call", description: "Initiate a crisis bridge call to convene key stakeholders.", allowedRoles: ["ciso", "head_of_comms"], isRecommended: true, irPlanAligned: true },
         { id: "r1-a4", label: "Request legal briefing", description: "Brief legal team on initial findings and potential regulatory implications.", allowedRoles: ["ciso", "legal"], irPlanAligned: true },
         { id: "r1-a5", label: "Notify board immediately", description: "Send immediate notification to the board of directors.", allowedRoles: ["ceo", "ciso"], irPlanAligned: false, consequence: "Premature escalation before facts are established" },
@@ -230,7 +230,7 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
       roleActions: [
         { id: "r2-a1", label: "Disable compromised domain admin account", description: "Immediately disable the compromised domain admin account to prevent further access.", allowedRoles: ["it_manager", "system_admin"], isRecommended: true, irPlanAligned: true },
         { id: "r2-a2", label: "Engage external IR firm", description: "Contact and engage the external incident response retainer for forensic support.", allowedRoles: ["ciso", "it_manager"], isRecommended: true, irPlanAligned: true },
-        { id: "r2-a3", label: "Begin forensic preservation", description: "Capture memory dumps and log snapshots before isolation.", allowedRoles: ["system_admin", "ir_retainer"], isRecommended: true, irPlanAligned: true },
+        { id: "r2-a3", label: "Begin forensic preservation", description: "Capture memory dumps and log snapshots before isolation.", allowedRoles: ["system_admin", "it_manager"], isRecommended: true, irPlanAligned: true },
         { id: "r2-a4", label: "Shut down crown jewel systems", description: "Immediately shut down all crown jewel systems to prevent further encryption.", allowedRoles: ["it_manager"], irPlanAligned: false, consequence: "Causes business disruption and logging gaps" },
         { id: "r2-a5", label: "Draft internal staff communication", description: "Prepare and send internal communication to all staff about the incident.", allowedRoles: ["head_of_comms", "hr_lead"], irPlanAligned: true },
         { id: "r2-a6", label: "Brief CEO on incident status", description: "Provide a structured briefing to the CEO on the current incident status.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true },
@@ -377,7 +377,7 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
         { id: "r3-a1", label: "Issue holding statement to media", description: "Release an approved holding statement to media inquiries.", allowedRoles: ["head_of_comms"], isRecommended: true, irPlanAligned: true },
         { id: "r3-a2", label: "Advise on GDPR/NIS2 notification timeline", description: "Provide legal guidance on regulatory notification obligations and deadlines.", allowedRoles: ["legal", "ciso"], isRecommended: true, irPlanAligned: true },
         { id: "r3-a3", label: "Authorize ransom negotiation", description: "Authorize engagement with the threat actor through negotiation specialist.", allowedRoles: ["ceo", "cfo"], irPlanAligned: false, consequence: "Financially and legally risky; no guarantee of decryption" },
-        { id: "r3-a4", label: "Engage negotiation specialist", description: "Bring in negotiation specialist to assess threat actor and buy time.", allowedRoles: ["negotiator", "ceo"], irPlanAligned: true, consequence: "Buys time for recovery; no payment commitment made yet" },
+        { id: "r3-a4", label: "Approve engaging a negotiation specialist", description: "Decide to bring in an external negotiation specialist to engage with the threat actor and buy time.", allowedRoles: ["ceo", "cfo", "legal"], irPlanAligned: true, consequence: "Buys time for recovery; no payment commitment made yet" },
         { id: "r3-a5", label: "Respond directly to journalist", description: "Respond to journalist inquiry without approved messaging.", allowedRoles: ["head_of_comms"], irPlanAligned: false, consequence: "Without approved messaging, risks information leak" },
         { id: "r3-a6", label: "Maintain media silence", description: "Maintain media silence and do not issue any statement.", allowedRoles: ["head_of_comms", "ceo"], irPlanAligned: true },
         { id: "r3-a7", label: "Do nothing / wait for more information", description: "Wait for IR retainer assessment before any external communication.", allowedRoles: [], irPlanAligned: true, consequence: "Journalist deadline passes — story runs without your input." },
