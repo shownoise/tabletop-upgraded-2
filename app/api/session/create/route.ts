@@ -1,26 +1,43 @@
 import { NextResponse } from "next/server"
-import type { ExerciseConfig, SimulationMode, AiIntensity } from "@/lib/types"
+import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario } from "@/lib/types"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-const CTX = (c: ExerciseConfig) =>
-  `sector=${c.sector}, size=${c.companySize}, type=${c.scenarioType}, systems=${c.criticalSystems}, crown=${c.crownJewels}, maturity=${c.irMaturity}, duration=${c.duration}`
+function buildContext(c: ExerciseConfig): string {
+  const parts = [
+    `sector=${c.sector}`,
+    `size=${c.companySize}`,
+    `type=${c.scenarioType}`,
+    `systems=${c.criticalSystems}`,
+    `crown=${c.crownJewels}`,
+  ]
+  if (c.itMaturity) parts.push(`it_maturity=${c.itMaturity}`)
+  if (c.securityCapability) parts.push(`security_capability=${c.securityCapability}`)
+  if (c.exerciseGoal) parts.push(`goal=${c.exerciseGoal}`)
+  if (c.teamStructure) parts.push(`team_structure=${c.teamStructure}`)
+  if (c.difficulty) parts.push(`difficulty=${c.difficulty}`)
+  if (c.existingPlans?.length) parts.push(`existing_plans=${c.existingPlans.join(',')}`)
+  parts.push(`duration=${c.duration}`)
+  return parts.join(', ')
+}
 
 async function generateLean(config: ExerciseConfig, apiKey: string) {
+  const roundCount = config.roundCount ?? 4
+  const timerPerRound = config.timerPerRound ?? 15
   const irCtx = config.irTemplateText
     ? `\nIR plan excerpt:\n${config.irTemplateText.slice(0, 3000)}`
     : ""
-  const prompt = `You are a cybersecurity exercise designer. Generate a 4-round ${config.scenarioType} scenario for: ${CTX(config)}${irCtx}
+  const prompt = `You are a cybersecurity exercise designer for MKB+ organizations. Generate a ${roundCount}-round ${config.scenarioType} scenario for: ${buildContext(config)}${irCtx}
 
 Return ONLY valid JSON (no markdown):
-{"scenario_title":"...","scenario_summary":"1-2 sentence summary","rounds":[{"round_number":1,"title":"...","situation_update":"2-3 sentence situation for facilitator","timerMinutes":15},{"round_number":2,...},{"round_number":3,...},{"round_number":4,...}]}`
+{"scenario_title":"...","scenario_summary":"1-2 sentence summary","rounds":[{"round_number":1,"title":"...","situation_update":"2-3 sentence situation for facilitator","timerMinutes":${timerPerRound}},{"round_number":2,...}]}`
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: "claude-haiku-4-5",
-      max_tokens: 600,
+      max_tokens: 800,
       messages: [{ role: "user", content: prompt }],
     }),
   })
@@ -31,24 +48,99 @@ Return ONLY valid JSON (no markdown):
 }
 
 async function generateFull(config: ExerciseConfig, apiKey: string) {
-  const irCtx = config.irTemplateText
+  const roundCount = config.roundCount ?? 4
+  const timerPerRound = config.timerPerRound ?? 15
+  const existingPlans = config.existingPlans?.length ? config.existingPlans.join(', ') : 'none documented'
+  const irPlanContext = config.irTemplateText
     ? `\nClient IR plan:\n<ir_plan>\n${config.irTemplateText.slice(0, 6000)}\n</ir_plan>`
     : ""
-  const prompt = `You are a senior cybersecurity tabletop exercise designer. Generate a realistic scenario as JSON.
 
-Config: ${CTX(config)}${irCtx}
+  const secCapabilityNote = {
+    no_soc: "This organization has NO internal SOC and no dedicated IR capability.",
+    small_it: "This organization has a small IT team only, no dedicated security function.",
+    outsourced_it: "This organization relies entirely on outsourced IT. Internal IT knowledge is limited.",
+    it_mssp: "This organization has IT + MSSP. The MSSP handles monitoring and alerts.",
+    it_ir_retainer: "This organization has IT + an external IR retainer on contract.",
+  }[config.securityCapability ?? "small_it"] ?? ""
+
+  const prompt = `You are a senior IR exercise designer for MKB+ organizations. Generate a realistic, narrative-coherent ${config.scenarioType} incident scenario.
+
+Organization profile:
+- Sector: ${config.sector}, Size: ${config.companySize}, IT maturity: ${config.itMaturity ?? "medium"}
+- Security capability: ${config.securityCapability ?? "small_it"}
+- Exercise goal: ${config.exerciseGoal ?? "ransomware_tabletop"}, Difficulty: ${config.difficulty ?? "intermediate"}
+- Team structure: ${config.teamStructure ?? "crisis_it"}
+- Existing plans: ${existingPlans}
+- Crown jewels: ${config.crownJewels}, Critical systems: ${config.criticalSystems}
+${irPlanContext}
+
+Important constraints:
+- ${secCapabilityNote}
+- The customer's role is: make decisions, escalate timely, approve actions, communicate, follow IR plan
+- The IR retainer handles: investigation, containment, forensics, malware analysis
+- Generate exactly ${roundCount} rounds with ${timerPerRound} minute timers
+- Each round MUST build logically on the previous
+- Round 1: Early warning signs / initial detection
+- Round 2: Triage and uncertainty, business impact begins
+- Round 3: Escalation, external stakeholder pressure
+- Round ${roundCount}: Decision point — containment/recovery trade-off and consequences
+- Every roleActions array MUST include a "do_nothing" option
 
 Return ONLY valid JSON:
-{"scenario_title":"...","scenario_summary":"...","rounds":[{"round_number":1,"title":"...","situation_update":"...","timerMinutes":15,"facilitatorNotes":{"discussionGoal":"...","keyQuestions":["..."],"hints":["..."],"expectedDecisions":["..."],"redFlags":["..."]},"injects":[{"id":"r1-i1","type":"alert","channel":"siem_alert","title":"...","content":"...","urgency":"high","source":"...","senderName":"...","timestamp":"09:00"}]},...]}
-
-4 rounds, 3-4 injects each. Channels: whatsapp/slack/email/siem_alert/sms/phone/news_ticker/system_alert. Urgency: low/medium/high/critical.`
+{
+  "scenario_title": "...",
+  "scenario_summary": "2-3 sentences",
+  "rounds": [{
+    "round_number": 1,
+    "title": "...",
+    "situation_update": "3-4 sentences for facilitator",
+    "timerMinutes": ${timerPerRound},
+    "facilitatorNotes": {
+      "discussionGoal": "...",
+      "keyQuestions": ["...", "..."],
+      "hints": ["...", "..."],
+      "expectedDecisions": ["...", "..."],
+      "redFlags": ["...", "..."]
+    },
+    "injects": [{
+      "id": "r1-i1",
+      "type": "alert|intel|media|executive|technical|regulatory|social|internal",
+      "channel": "whatsapp|slack|email|siem_alert|sms|phone|news_ticker|system_alert|raw",
+      "title": "...",
+      "content": "...",
+      "urgency": "low|medium|high|critical",
+      "source": "...",
+      "senderName": "...",
+      "senderHandle": "...",
+      "timestamp": "HH:MM",
+      "targetTeam": "all|crisis_management|technical_it",
+      "nis2Relevant": false
+    }],
+    "roleActions": [{
+      "id": "r1-a1",
+      "label": "...",
+      "description": "...",
+      "allowedRoles": ["ciso", "it_manager"],
+      "isRecommended": true,
+      "irPlanAligned": true,
+      "consequence": "..."
+    }, {
+      "id": "r1-do-nothing",
+      "label": "Do nothing / wait for more information",
+      "description": "Gather more facts before acting. Ask IR retainer for assessment.",
+      "allowedRoles": [],
+      "irPlanAligned": true,
+      "consequence": "May be correct at this stage — avoids premature action. Risky if detection was already clear."
+    }]
+  }]
+}`
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 3500,
+      max_tokens: 4500,
       messages: [{ role: "user", content: prompt }],
     }),
   })
@@ -58,8 +150,7 @@ Return ONLY valid JSON:
   return JSON.parse(text.replace(/```json|```/g, "").trim())
 }
 
-// Lean: AI provides titles/narrative; mock generator provides injects & role actions
-async function generateWithAI(config: ExerciseConfig): Promise<{ scenario: object; intensity: AiIntensity } | null> {
+async function generateWithAI(config: ExerciseConfig): Promise<{ scenario: Scenario; intensity: AiIntensity } | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
   const intensity = config.aiIntensity ?? "full"
@@ -71,9 +162,8 @@ async function generateWithAI(config: ExerciseConfig): Promise<{ scenario: objec
       const base = generateScenario(config)
       const aiMeta = await generateLean(config, apiKey)
       if (!aiMeta) return null
-      // Overlay AI titles/situation updates onto mock-generated rounds
-      const rounds = (base.rounds as Array<Record<string, unknown>>).map((r, i) => {
-        const aiRound = aiMeta.rounds?.[i]
+      const rounds = base.rounds.map((r, i) => {
+        const aiRound = aiMeta.rounds?.[i] as { title?: string; situation_update?: string; timerMinutes?: number } | undefined
         return {
           ...r,
           title: aiRound?.title ?? r.title,
@@ -82,15 +172,14 @@ async function generateWithAI(config: ExerciseConfig): Promise<{ scenario: objec
         }
       })
       return {
-        scenario: { ...base, scenario_title: aiMeta.scenario_title ?? base.scenario_title, scenario_summary: aiMeta.scenario_summary ?? base.scenario_summary, rounds },
-        intensity: "lean",
+        scenario: { ...base, scenario_title: aiMeta.scenario_title ?? base.scenario_title, scenario_summary: aiMeta.scenario_summary ?? base.scenario_summary, rounds } as Scenario,
+        intensity: "lean" as const,
       }
     }
 
-    // full
-    const scenario = await generateFull(config, apiKey)
+    const scenario = await generateFull(config, apiKey) as Scenario | null
     if (!scenario) return null
-    return { scenario, intensity: "full" }
+    return { scenario, intensity: "full" as const }
   } catch {
     return null
   }
@@ -109,6 +198,17 @@ export async function POST(req: Request) {
     teams: body.teams?.toString() ?? "",
     irTemplateText: body.irTemplateText?.toString(),
     aiIntensity: (body.aiIntensity as AiIntensity | undefined) ?? "off",
+    itMaturity: body.itMaturity,
+    securityCapability: body.securityCapability,
+    existingPlans: Array.isArray(body.existingPlans) ? body.existingPlans : undefined,
+    exerciseGoal: body.exerciseGoal,
+    teamStructure: body.teamStructure,
+    teamCount: typeof body.teamCount === "number" ? body.teamCount : undefined,
+    roundCount: typeof body.roundCount === "number" ? body.roundCount : undefined,
+    timerPerRound: typeof body.timerPerRound === "number" ? body.timerPerRound : undefined,
+    difficulty: body.difficulty,
+    realism: body.realism,
+    dynamicBranching: typeof body.dynamicBranching === "boolean" ? body.dynamicBranching : undefined,
   }
   const mode: SimulationMode = body.mode === "event" ? "event" : "training"
 

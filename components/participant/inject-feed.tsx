@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import type { PushedInject, InjectChannel, Urgency } from "@/lib/types"
+import { ROLE_META } from "@/lib/types"
+import type { Role } from "@/lib/types"
 import { formatTime } from "@/lib/format"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
@@ -241,8 +243,17 @@ function getSize(urgency: Urgency, index: number, isSurprise: boolean): InjectSi
 }
 
 // ─────────────────── Feed ───────────────────
-export function InjectFeed({ pushed, lang }: { pushed: PushedInject[]; lang: Lang }) {
-  const sorted = [...pushed].sort((a, b) => b.pushedAt - a.pushedAt)
+export function InjectFeed({ pushed, lang, participantRole }: { pushed: PushedInject[]; lang: Lang; participantRole?: Role }) {
+  const participantTeam = participantRole ? ROLE_META[participantRole]?.team : undefined
+
+  const filtered = pushed.filter(p => {
+    const target = p.inject.targetTeam
+    if (!target || target === "all") return true
+    if (!participantTeam) return true
+    return target === participantTeam
+  })
+
+  const sorted = [...filtered].sort((a, b) => b.pushedAt - a.pushedAt)
   const topRef = useRef<HTMLDivElement>(null)
 
   const prevCount = useRef(pushed.length)
@@ -253,7 +264,7 @@ export function InjectFeed({ pushed, lang }: { pushed: PushedInject[]; lang: Lan
     prevCount.current = pushed.length
   }, [pushed.length])
 
-  if (sorted.length === 0) {
+  if (filtered.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card/50 px-6 py-16 text-center">
         <div className="relative">

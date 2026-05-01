@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { FileText, AlertTriangle, AlertCircle, CheckCircle, TrendingUp } from "lucide-react"
-import type { SessionReport } from "@/lib/types"
+import { FileText, AlertTriangle, AlertCircle, CheckCircle, TrendingUp, Clock, BookOpen, Wrench } from "lucide-react"
+import type { SessionReport, GovernanceFlag, TimelineEvent } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import { api } from "@/lib/api-client"
 import type { Lang } from "@/lib/i18n"
@@ -25,20 +25,112 @@ function ScoreCard({ label, value, color }: { label: string; value: number; colo
   )
 }
 
+function generateExecutiveSummary(report: SessionReport): string {
+  const n = report.perRound.reduce((s, r) => s + r.decisions.length, 0)
+  const flags = report.topFlags
+  const wrongRole = flags.filter(f => f.type === "wrong_role").length
+  const irDev = flags.filter(f => f.type === "ir_plan_deviation").length
+
+  const quality = report.scores.decisionQuality
+  const process = report.scores.processAdherence
+  const role = report.scores.roleCompliance
+
+  const overall = quality >= 70 && process >= 70 && role >= 70 ? "performed well" : "showed gaps in key areas"
+  const strengths: string[] = []
+  const gaps: string[] = []
+
+  if (quality >= 70) strengths.push("decision quality")
+  else gaps.push("decision quality")
+  if (process >= 70) strengths.push("IR plan adherence")
+  else gaps.push("IR plan adherence")
+  if (role >= 70) strengths.push("role compliance")
+  else gaps.push("role compliance")
+
+  let summary = `During this ${report.mode === "event" ? "event" : "training"} exercise, ${n} decisions were recorded across ${report.totalRounds} rounds. Overall, the team ${overall}.`
+  if (strengths.length) summary += ` Main strengths: ${strengths.join(", ")}.`
+  if (gaps.length) summary += ` Key gaps: ${gaps.join(", ")}.`
+  if (wrongRole > 0) summary += ` ${wrongRole} action${wrongRole !== 1 ? "s were" : " was"} taken outside authorized roles.`
+  if (irDev > 0) summary += ` ${irDev} action${irDev !== 1 ? "s deviated" : " deviated"} from the IR plan.`
+  return summary
+}
+
+function generateImprovements(flags: GovernanceFlag[]): string[] {
+  const improvements: string[] = []
+  const wrongRoleFlags = flags.filter(f => f.type === "wrong_role")
+  const irDevFlags = flags.filter(f => f.type === "ir_plan_deviation")
+
+  const isolationWrongRole = wrongRoleFlags.some(f => f.description.toLowerCase().includes("isolat"))
+  if (isolationWrongRole) {
+    improvements.push("Define clear authority: only IT Manager / System Administrator may approve system isolation actions.")
+  }
+
+  const commsIrDev = irDevFlags.some(f => f.description.toLowerCase().includes("communicat"))
+  if (commsIrDev) {
+    improvements.push("Add a communication approval workflow to the IR plan — require sign-off from Head of Communications before external statements.")
+  }
+
+  const ransomIrDev = irDevFlags.some(f =>
+    f.description.toLowerCase().includes("ransom") ||
+    f.description.toLowerCase().includes("negot") ||
+    f.description.toLowerCase().includes("payment")
+  )
+  if (ransomIrDev) {
+    improvements.push("Document a ransomware decision process in the IR plan with clear role responsibilities for payment authorization.")
+  }
+
+  if (wrongRoleFlags.length === 0 && irDevFlags.length === 0) {
+    improvements.push("Team correctly followed role boundaries and IR plan — no governance flags recorded. Excellent exercise discipline.")
+  }
+
+  improvements.push("Schedule a follow-up exercise in 6 months to validate improvements and test updated runbooks.")
+  return improvements
+}
+
+function formatTimelineLabel(ev: TimelineEvent): string {
+  const type = ev.type.replace(/_/g, " ")
+  const data = ev.data as Record<string, unknown>
+  if (ev.type === "participant_joined" && data.name) return `Participant joined — ${data.name}`
+  if (ev.type === "round_changed" && typeof data.roundIndex === "number") return `Round ${(data.roundIndex as number) + 1} started`
+  if (ev.type === "inject_pushed") {
+    const inj = data.inject as { title?: string } | undefined
+    return `Inject pushed${inj?.title ? ` — ${inj.title}` : ""}`
+  }
+  if (ev.type === "surprise_inject") {
+    const inj = data.inject as { title?: string } | undefined
+    return `Surprise inject${inj?.title ? ` — ${inj.title}` : ""}`
+  }
+  return type.charAt(0).toUpperCase() + type.slice(1)
+}
+
 interface Props {
   lang: Lang
 }
 
 export function ReportView({ lang }: Props) {
   const [report, setReport] = useState<SessionReport | null>(null)
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.getReport()
-      .then(setReport)
+    Promise.all([
+      api.getReport(),
+      fetch("/api/session/stream").then(() => null).catch(() => null),
+    ])
+      .then(([r]) => {
+        setReport(r)
+      })
       .catch(err => setError(err instanceof Error ? err.message : "Failed to load report"))
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    fetch("/api/session/state")
+      .then(r => r.json())
+      .then((data: { session?: { timeline?: TimelineEvent[] } }) => {
+        if (data?.session?.timeline) setTimeline(data.session.timeline)
+      })
+      .catch(() => {})
   }, [])
 
   if (loading) {
@@ -66,6 +158,12 @@ export function ReportView({ lang }: Props) {
   const scoreColor = (v: number): "primary" | "amber" | "destructive" =>
     v >= 70 ? "primary" : v >= 40 ? "amber" : "destructive"
 
+  const executiveSummary = generateExecutiveSummary(report)
+  const improvements = generateImprovements(report.topFlags)
+  const wrongRoleFlags = report.topFlags.filter(f => f.type === "wrong_role")
+  const irDevFlags = report.topFlags.filter(f => f.type === "ir_plan_deviation")
+  const sortedTimeline = [...timeline].sort((a, b) => a.timestamp - b.timestamp)
+
   return (
     <div className="flex flex-col gap-8 print:gap-6">
       {/* Header */}
@@ -84,6 +182,17 @@ export function ReportView({ lang }: Props) {
         </div>
       </div>
 
+      {/* Executive Summary */}
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <BookOpen className="size-4 text-primary" />
+          <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "report_executive_summary")}</h2>
+        </div>
+        <div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-4">
+          <p className="text-sm leading-relaxed text-foreground">{executiveSummary}</p>
+        </div>
+      </section>
+
       {/* Score summary */}
       <section>
         <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-3">Summary Scores</h2>
@@ -98,6 +207,83 @@ export function ReportView({ lang }: Props) {
           <p className="text-xs text-muted-foreground">% of decisions by authorized role</p>
         </div>
       </section>
+
+      {/* Timeline */}
+      {sortedTimeline.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className="size-4 text-primary" />
+            <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "report_timeline")}</h2>
+          </div>
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <div className="flex flex-col divide-y divide-border max-h-72 overflow-y-auto">
+              {sortedTimeline.map(ev => (
+                <div key={ev.id} className="flex items-start gap-3 px-4 py-2.5">
+                  <span className="font-mono text-[10px] text-muted-foreground shrink-0 mt-0.5 min-w-[46px]">
+                    {new Date(ev.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <span className={`size-1.5 rounded-full shrink-0 mt-1.5 ${
+                    ev.type === "session_started" ? "bg-primary" :
+                    ev.type === "session_ended" ? "bg-destructive" :
+                    ev.type === "round_changed" ? "bg-amber-500" :
+                    ev.type === "inject_pushed" || ev.type === "surprise_inject" ? "bg-orange-500" :
+                    "bg-muted-foreground"
+                  }`} />
+                  <span className="text-xs text-muted-foreground leading-relaxed">{formatTimelineLabel(ev)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* IR Plan Alignment */}
+      {(wrongRoleFlags.length > 0 || irDevFlags.length > 0) && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="size-4 text-amber-500" />
+            <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "report_ir_alignment")}</h2>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
+            {wrongRoleFlags.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-semibold text-orange-600">{wrongRoleFlags.length} action{wrongRoleFlags.length !== 1 ? "s were" : " was"} taken</span> by unauthorized roles.
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {wrongRoleFlags.slice(0, 3).map(f => (
+                    <div key={f.id} className="flex items-start gap-2 rounded-lg border border-orange-500/20 bg-orange-500/5 px-3 py-2">
+                      <AlertTriangle className="size-3.5 text-orange-500 shrink-0 mt-0.5" />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs font-medium">{f.participantName} ({ROLE_META[f.role]?.label ?? f.role}) — R{f.roundIndex + 1}</span>
+                        <span className="text-xs text-muted-foreground">{f.description}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {irDevFlags.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-semibold text-destructive">{irDevFlags.length} action{irDevFlags.length !== 1 ? "s deviated" : " deviated"}</span> from the IR plan.
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {irDevFlags.slice(0, 3).map(f => (
+                    <div key={f.id} className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2">
+                      <AlertCircle className="size-3.5 text-destructive shrink-0 mt-0.5" />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs font-medium">{f.participantName} ({ROLE_META[f.role]?.label ?? f.role}) — R{f.roundIndex + 1}</span>
+                        <span className="text-xs text-muted-foreground">{f.description}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Per-round breakdown */}
       <section>
@@ -200,20 +386,40 @@ export function ReportView({ lang }: Props) {
         )}
       </section>
 
-      {/* Recommendations */}
+      {/* Improvement Actions */}
       <section>
-        <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-3">{tr(lang, "recommendations")}</h2>
+        <div className="flex items-center gap-2 mb-3">
+          <Wrench className="size-4 text-primary" />
+          <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "report_improvements")}</h2>
+        </div>
         <div className="flex flex-col gap-2">
-          {report.recommendations.map((rec, i) => (
+          {improvements.map((imp, i) => (
             <div key={i} className="flex gap-3 rounded-lg border border-border bg-card px-4 py-3">
               <div className="flex size-5 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 mt-0.5">
                 <TrendingUp className="size-3 text-primary" />
               </div>
-              <p className="text-sm leading-relaxed text-muted-foreground">{rec}</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">{imp}</p>
             </div>
           ))}
         </div>
       </section>
+
+      {/* Recommendations */}
+      {report.recommendations.length > 0 && (
+        <section>
+          <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-3">{tr(lang, "recommendations")}</h2>
+          <div className="flex flex-col gap-2">
+            {report.recommendations.map((rec, i) => (
+              <div key={i} className="flex gap-3 rounded-lg border border-border bg-card px-4 py-3">
+                <div className="flex size-5 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 mt-0.5">
+                  <TrendingUp className="size-3 text-primary" />
+                </div>
+                <p className="text-sm leading-relaxed text-muted-foreground">{rec}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

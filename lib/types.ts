@@ -5,6 +5,12 @@ export type Role =
   | 'legal'
   | 'ceo'
   | 'cfo'
+  | 'system_admin'
+  | 'hr_lead'
+  | 'ops_manager'
+  | 'ir_retainer'
+  | 'ext_it'
+  | 'negotiator'
 
 export const ROLE_META: Record<Role, { label: string; team: 'crisis_management' | 'technical_it'; description: string }> = {
   it_manager:    { label: 'IT Manager',             team: 'technical_it',      description: 'IT infrastructure, systems isolation' },
@@ -13,6 +19,12 @@ export const ROLE_META: Record<Role, { label: string; team: 'crisis_management' 
   legal:         { label: 'Legal',                  team: 'crisis_management', description: 'Compliance, regulatory notifications' },
   ceo:           { label: 'CEO',                    team: 'crisis_management', description: 'Executive decisions, board communication' },
   cfo:           { label: 'CFO',                    team: 'crisis_management', description: 'Financial decisions, insurance, ransom' },
+  system_admin:  { label: 'System Administrator',   team: 'technical_it',      description: 'Technical validation, logs, backups, infrastructure' },
+  hr_lead:       { label: 'HR Lead',                team: 'crisis_management', description: 'Employee communication and insider threat cases' },
+  ops_manager:   { label: 'Operations Manager',     team: 'crisis_management', description: 'Business continuity and operational impact' },
+  ir_retainer:   { label: 'External IR Retainer',   team: 'technical_it',      description: 'Investigation, containment advice, forensics' },
+  ext_it:        { label: 'External IT Provider',   team: 'technical_it',      description: 'Infrastructure support and system access' },
+  negotiator:    { label: 'Negotiation Specialist', team: 'crisis_management', description: 'Ransom negotiation support and threat actor comms' },
 }
 
 export type SimulationMode = 'event' | 'training'
@@ -107,6 +119,8 @@ export interface Inject {
   senderName?: string
   senderHandle?: string
   timestamp?: string
+  targetTeam?: 'all' | 'crisis_management' | 'technical_it'
+  nis2Relevant?: boolean
 }
 
 export interface FacilitatorNotes {
@@ -135,6 +149,29 @@ export interface Scenario {
 
 export type AiIntensity = 'off' | 'lean' | 'full'
 
+export type ITMaturity = 'low' | 'medium' | 'high'
+export type SecurityCapability =
+  | 'no_soc'
+  | 'small_it'
+  | 'outsourced_it'
+  | 'it_mssp'
+  | 'it_ir_retainer'
+export type TeamStructure =
+  | 'crisis_only'
+  | 'it_only'
+  | 'crisis_it'
+  | 'full'
+export type ExerciseGoal =
+  | 'nis2_readiness'
+  | 'board_decisions'
+  | 'crisis_comms'
+  | 'ransomware_tabletop'
+  | 'technical_containment'
+  | 'supplier_incident'
+  | 'data_breach'
+export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
+export type RealismLevel = 'standard' | 'high' | 'extreme'
+
 export interface ExerciseConfig {
   sector: string
   companySize: string
@@ -146,6 +183,17 @@ export interface ExerciseConfig {
   teams: string
   irTemplateText?: string
   aiIntensity?: AiIntensity
+  itMaturity?: ITMaturity
+  securityCapability?: SecurityCapability
+  existingPlans?: string[]
+  exerciseGoal?: ExerciseGoal
+  teamStructure?: TeamStructure
+  teamCount?: number
+  roundCount?: number
+  timerPerRound?: number
+  difficulty?: DifficultyLevel
+  realism?: RealismLevel
+  dynamicBranching?: boolean
 }
 
 export interface Participant {

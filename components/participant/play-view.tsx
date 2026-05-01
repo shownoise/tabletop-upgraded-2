@@ -307,7 +307,7 @@ export function PlayView() {
             )}
 
             {/* Inject feed */}
-            <InjectFeed pushed={session.pushedInjects} lang={lang} />
+            <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} />
 
             {/* Decision panel — shown during decision phase */}
             {session.roundPhase === "decision" && currentRound?.roleActions && participantId && (

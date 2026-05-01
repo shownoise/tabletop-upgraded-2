@@ -30,6 +30,9 @@ export interface InjectTemplate {
   showNotes?: string
   context?: string
   expectedActions?: string[]
+  // Team targeting and compliance metadata
+  targetTeam?: 'all' | 'crisis_management' | 'technical_it'
+  nis2Relevant?: boolean
 }
 
 export interface DecisionPoint {

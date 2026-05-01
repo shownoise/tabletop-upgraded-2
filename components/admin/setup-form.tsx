@@ -4,7 +4,6 @@ import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Sparkles, Upload, X, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -14,14 +13,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { ExerciseConfig, SimulationMode, AiIntensity } from "@/lib/types"
+import type {
+  ExerciseConfig, SimulationMode, AiIntensity,
+  ITMaturity, SecurityCapability, TeamStructure,
+  ExerciseGoal, DifficultyLevel,
+} from "@/lib/types"
 
 const sectors = [
   "Financial Services", "Healthcare", "Energy & Utilities", "Manufacturing",
   "Retail & E-commerce", "Public Sector", "Technology / SaaS", "Transportation",
 ]
-const sizes = ["< 100 staff", "100 - 1,000", "1,000 - 10,000", "10,000+"]
-const maturities = ["Initial", "Developing", "Defined", "Managed", "Optimizing"]
+const sizes = ["100–250", "250–500", "500–1,500", "1,500+"]
 const scenarios = [
   "Ransomware", "Data Exfiltration", "Insider Threat", "Business Email Compromise",
   "Supply Chain Compromise", "DDoS / Extortion", "Cloud Account Takeover",
@@ -30,14 +32,49 @@ const durations = ["60 minutes", "90 minutes", "2 hours", "Half day"]
 
 const defaults: ExerciseConfig = {
   sector: "Financial Services",
-  companySize: "1,000 - 10,000",
-  criticalSystems: "Core banking, customer portal, identity provider",
-  crownJewels: "Customer PII, payment data, trading systems",
+  companySize: "250–500",
+  criticalSystems: "ERP, customer portal, identity provider",
+  crownJewels: "Customer PII, financial records",
   irMaturity: "Developing",
   scenarioType: "Ransomware",
   duration: "90 minutes",
-  teams: "SOC, Legal, Communications, Executives",
+  teams: "",
+  itMaturity: "medium",
+  securityCapability: "small_it",
+  exerciseGoal: "ransomware_tabletop",
+  teamStructure: "crisis_it",
+  roundCount: 4,
+  timerPerRound: 15,
+  difficulty: "intermediate",
+  existingPlans: [],
 }
+
+const IT_MATURITY_OPTIONS: { id: ITMaturity; label: string }[] = [
+  { id: "low",    label: "Low" },
+  { id: "medium", label: "Medium" },
+  { id: "high",   label: "High" },
+]
+
+const DIFFICULTY_OPTIONS: { id: DifficultyLevel; label: string }[] = [
+  { id: "beginner",     label: "Beginner" },
+  { id: "intermediate", label: "Intermediate" },
+  { id: "advanced",     label: "Advanced" },
+]
+
+const TEAM_STRUCTURE_OPTIONS: { id: TeamStructure; label: string }[] = [
+  { id: "crisis_only", label: "Crisis Team only" },
+  { id: "it_only",     label: "IT Team only" },
+  { id: "crisis_it",   label: "Crisis + IT" },
+  { id: "full",        label: "Crisis + IT + Comms/Legal" },
+]
+
+const PLAN_OPTIONS = [
+  { id: "ir_plan",         label: "IR plan available" },
+  { id: "crisis_comms_plan", label: "Crisis communication plan" },
+  { id: "backup_procedure",  label: "Backup procedure" },
+  { id: "nis2_process",      label: "NIS2 process documented" },
+  { id: "none",              label: "No documented process" },
+]
 
 export function SetupForm() {
   const router = useRouter()
@@ -51,6 +88,15 @@ export function SetupForm() {
 
   function update<K extends keyof ExerciseConfig>(key: K, value: ExerciseConfig[K]) {
     setConfig((c) => ({ ...c, [key]: value }))
+  }
+
+  function togglePlan(planId: string) {
+    const current = config.existingPlans ?? []
+    if (current.includes(planId)) {
+      update("existingPlans", current.filter(p => p !== planId))
+    } else {
+      update("existingPlans", [...current, planId])
+    }
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -84,9 +130,7 @@ export function SetupForm() {
     <form onSubmit={onSubmit} className="flex flex-col gap-8">
       {/* Simulation mode selector */}
       <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 p-5">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs uppercase tracking-wider text-primary">Simulation mode</span>
-        </div>
+        <span className="font-mono text-xs uppercase tracking-wider text-primary">Simulation mode</span>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {(["training", "event"] as SimulationMode[]).map(m => (
             <button
@@ -112,6 +156,8 @@ export function SetupForm() {
         </div>
       </div>
 
+      {/* Section 1 — Organization profile */}
+      <SectionHeader label="Organization profile" />
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <FieldRow label="Sector" hint="Industry vertical of the simulated organization">
           <Select value={config.sector} onValueChange={(v) => update("sector", v)}>
@@ -127,10 +173,48 @@ export function SetupForm() {
           </Select>
         </FieldRow>
 
-        <FieldRow label="IR maturity" hint="Self-assessed incident response capability">
-          <Select value={config.irMaturity} onValueChange={(v) => update("irMaturity", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{maturities.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+        <FieldRow label="IT maturity" hint="Self-assessed IT capability level">
+          <div className="grid grid-cols-3 gap-2">
+            {IT_MATURITY_OPTIONS.map(opt => (
+              <ToggleButton
+                key={opt.id}
+                active={config.itMaturity === opt.id}
+                onClick={() => update("itMaturity", opt.id)}
+                label={opt.label}
+              />
+            ))}
+          </div>
+        </FieldRow>
+
+        <FieldRow label="Internal security capability" hint="Current security team setup">
+          <Select value={config.securityCapability ?? ""} onValueChange={(v) => update("securityCapability", v as SecurityCapability)}>
+            <SelectTrigger><SelectValue placeholder="Select capability…" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="no_soc">No internal SOC</SelectItem>
+              <SelectItem value="small_it">Small IT team</SelectItem>
+              <SelectItem value="outsourced_it">Outsourced IT</SelectItem>
+              <SelectItem value="it_mssp">IT + MSSP</SelectItem>
+              <SelectItem value="it_ir_retainer">IT + IR retainer</SelectItem>
+            </SelectContent>
+          </Select>
+        </FieldRow>
+      </div>
+
+      {/* Section 2 — Exercise setup */}
+      <SectionHeader label="Exercise setup" />
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <FieldRow label="Exercise goal" hint="Primary learning objective">
+          <Select value={config.exerciseGoal ?? ""} onValueChange={(v) => update("exerciseGoal", v as ExerciseGoal)}>
+            <SelectTrigger><SelectValue placeholder="Select goal…" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nis2_readiness">NIS2 Readiness</SelectItem>
+              <SelectItem value="board_decisions">Board Decision-Making</SelectItem>
+              <SelectItem value="crisis_comms">Crisis Communication</SelectItem>
+              <SelectItem value="ransomware_tabletop">Ransomware Tabletop</SelectItem>
+              <SelectItem value="technical_containment">Technical Containment</SelectItem>
+              <SelectItem value="supplier_incident">Supplier Incident</SelectItem>
+              <SelectItem value="data_breach">Data Breach</SelectItem>
+            </SelectContent>
           </Select>
         </FieldRow>
 
@@ -141,18 +225,102 @@ export function SetupForm() {
           </Select>
         </FieldRow>
 
-        <FieldRow label="Duration" hint="Total exercise duration target">
-          <Select value={config.duration} onValueChange={(v) => update("duration", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{durations.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-          </Select>
-        </FieldRow>
-
-        <FieldRow label="Teams" hint="Comma-separated participating teams">
-          <Input value={config.teams} onChange={(e) => update("teams", e.target.value)} placeholder="SOC, Legal, Communications, Executives" />
+        <FieldRow label="Difficulty" hint="Scenario complexity and decision pressure">
+          <div className="grid grid-cols-3 gap-2">
+            {DIFFICULTY_OPTIONS.map(opt => (
+              <ToggleButton
+                key={opt.id}
+                active={config.difficulty === opt.id}
+                onClick={() => update("difficulty", opt.id)}
+                label={opt.label}
+              />
+            ))}
+          </div>
         </FieldRow>
       </div>
 
+      {/* Section 3 — Structure */}
+      <SectionHeader label="Structure" />
+      <div className="grid grid-cols-1 gap-5">
+        <FieldRow label="Team structure" hint="Which teams participate in this exercise">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {TEAM_STRUCTURE_OPTIONS.map(opt => (
+              <ToggleButton
+                key={opt.id}
+                active={config.teamStructure === opt.id}
+                onClick={() => update("teamStructure", opt.id)}
+                label={opt.label}
+              />
+            ))}
+          </div>
+        </FieldRow>
+
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          <FieldRow label="Number of rounds" hint="Default is 4">
+            <div className="grid grid-cols-4 gap-2">
+              {[2, 3, 4, 5].map(n => (
+                <ToggleButton
+                  key={n}
+                  active={config.roundCount === n}
+                  onClick={() => update("roundCount", n)}
+                  label={String(n)}
+                />
+              ))}
+            </div>
+          </FieldRow>
+
+          <FieldRow label="Timer per round" hint="Minutes per round">
+            <div className="grid grid-cols-4 gap-2">
+              {[10, 15, 20, 30].map(n => (
+                <ToggleButton
+                  key={n}
+                  active={config.timerPerRound === n}
+                  onClick={() => update("timerPerRound", n)}
+                  label={`${n}m`}
+                />
+              ))}
+            </div>
+          </FieldRow>
+
+          <FieldRow label="Total duration" hint="Overall exercise duration target">
+            <Select value={config.duration} onValueChange={(v) => update("duration", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{durations.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </FieldRow>
+        </div>
+      </div>
+
+      {/* Section 4 — Existing plans */}
+      <SectionHeader label="Existing plans" />
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-muted-foreground">Select all plans the organization currently has documented.</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+          {PLAN_OPTIONS.map(plan => {
+            const checked = (config.existingPlans ?? []).includes(plan.id)
+            return (
+              <button
+                key={plan.id}
+                type="button"
+                onClick={() => togglePlan(plan.id)}
+                className={`flex items-center gap-2.5 rounded-lg border px-4 py-2.5 text-left text-sm transition-all ${
+                  checked
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-card hover:border-primary/40 text-foreground"
+                }`}
+              >
+                <span className={`size-4 rounded border flex items-center justify-center shrink-0 ${checked ? "border-primary bg-primary" : "border-border"}`}>
+                  {checked && <span className="text-primary-foreground text-[10px] font-bold">✓</span>}
+                </span>
+                {plan.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Section 5 — Scenario context */}
+      <SectionHeader label="Scenario context" />
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <FieldRow label="Critical systems" hint="Systems whose disruption would materially affect operations">
           <Textarea value={config.criticalSystems} onChange={(e) => update("criticalSystems", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
@@ -162,7 +330,7 @@ export function SetupForm() {
         </FieldRow>
       </div>
 
-      {/* AI Generation */}
+      {/* Section 6 — AI generation */}
       <div className="flex flex-col gap-4 rounded-lg border border-primary/20 bg-primary/5 p-5">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-primary" />
@@ -171,9 +339,9 @@ export function SetupForm() {
 
         <div className="grid grid-cols-3 gap-2">
           {([
-            { id: "off",  label: "Template",  cost: "Free",    model: "",               desc: "Pre-built scenario, no API call." },
-            { id: "lean", label: "Smart",     cost: "~€0.002", model: "Haiku",          desc: "AI tailors titles & narrative. Injects from template." },
-            { id: "full", label: "Full",      cost: "~€0.05",  model: "Sonnet",         desc: "AI writes everything from scratch." },
+            { id: "off",  label: "Template",  cost: "Free",    model: "",       desc: "Pre-built scenario, no API call." },
+            { id: "lean", label: "Smart",     cost: "~€0.002", model: "Haiku",  desc: "AI tailors titles & narrative. Injects from template." },
+            { id: "full", label: "Full",      cost: "~€0.05",  model: "Sonnet", desc: "AI writes everything from scratch." },
           ] as { id: AiIntensity; label: string; cost: string; model: string; desc: string }[]).map(opt => (
             <button
               key={opt.id}
@@ -253,6 +421,31 @@ export function SetupForm() {
         </Button>
       </div>
     </form>
+  )
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="font-mono text-xs uppercase tracking-wider text-primary">{label}</span>
+      <div className="flex-1 border-t border-border" />
+    </div>
+  )
+}
+
+function ToggleButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-3 py-2 text-center font-mono text-sm transition-all ${
+        active
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-border bg-card hover:border-primary/40 text-foreground"
+      }`}
+    >
+      {label}
+    </button>
   )
 }
 
