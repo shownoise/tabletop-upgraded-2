@@ -45,13 +45,73 @@ function emit(name: LiveEventName, payload: Record<string, unknown>) {
   for (const l of listeners) l({ type: "event", data: event })
 }
 
+// ─── Participant-safe state ───────────────────────────────────
+// Strips all facilitator-only data before broadcasting to unauthenticated clients.
+// Server-side logic (flagging, scoring) always uses the real stored state.
+
+export function toParticipantState(session: SessionState): SessionState {
+  return {
+    ...session,
+    scenario: {
+      ...session.scenario,
+      rounds: session.scenario.rounds.map((round, i) => {
+        // Future rounds: expose shell only — no content, no injects, no actions
+        if (i > session.currentRound) {
+          return {
+            ...round,
+            situation_update: "",
+            injects: [],
+            roleActions: undefined,
+            facilitatorNotes: undefined,
+          }
+        }
+        // Current + past rounds: strip facilitator-only fields
+        return {
+          ...round,
+          facilitatorNotes: undefined,
+          roleActions: round.roleActions?.map(action => ({
+            id: action.id,
+            label: action.label,
+            description: action.description,
+            allowedRoles: action.allowedRoles,
+            irPlanAligned: true,  // neutral placeholder — real value is server-side only
+          })),
+        }
+      }),
+    },
+    // Strip flags — these reveal which decisions were marked bad
+    governanceFlags: [],
+    // Keep decisions for own-decision display, but strip flag metadata
+    submittedDecisions: (session.submittedDecisions ?? []).map(d => ({
+      ...d,
+      isWrongRole: false,
+      isIrDeviation: false,
+    })),
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────
 
 export function subscribe(listener: Listener): () => void {
   listeners.add(listener)
-  // Send current state immediately on subscribe
   dbGetSession().then(s => listener({ type: "state", data: { session: s } }))
   return () => { listeners.delete(listener) }
+}
+
+export function subscribeParticipant(listener: Listener): () => void {
+  const wrapped: Listener = (msg) => {
+    if (msg.type === "state" && msg.data.session) {
+      listener({ type: "state", data: { session: toParticipantState(msg.data.session) } })
+    } else {
+      listener(msg)
+    }
+  }
+  listeners.add(wrapped)
+  dbGetSession().then(s => {
+    const safe = s ? toParticipantState(s) : null
+    wrapped({ type: "state", data: { session: safe } })
+  })
+  return () => { listeners.delete(wrapped) }
 }
 
 export async function getState(): Promise<PublicState> {
@@ -301,6 +361,8 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     f => !(f.participantId === input.participantId && f.roundIndex === input.roundIndex)
   )
 
+  const hasIrPlan = !!(session.config.irTemplateText) || (session.config.existingPlans?.includes("ir_plan") ?? false)
+
   const newFlags: GovernanceFlag[] = []
   if (isWrongRole) {
     newFlags.push({
@@ -315,6 +377,9 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     })
   }
   if (isIrDeviation) {
+    const deviationContext = hasIrPlan
+      ? "deviates from the IR plan"
+      : "deviates from recommended best practice"
     newFlags.push({
       id: genId("flag"),
       participantId: input.participantId,
@@ -322,7 +387,7 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
       role,
       roundIndex: input.roundIndex,
       type: "ir_plan_deviation",
-      description: `${participant.name} took action "${action.label}" which deviates from the IR plan.${action.consequence ? ` Consequence: ${action.consequence}` : ""}`,
+      description: `${participant.name} took action "${action.label}" which ${deviationContext}.${action.consequence ? ` Consequence: ${action.consequence}` : ""}`,
       flaggedAt: new Date().toISOString(),
     })
   }

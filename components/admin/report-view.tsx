@@ -66,7 +66,7 @@ function generateImprovements(flags: GovernanceFlag[]): string[] {
 
   const commsIrDev = irDevFlags.some(f => f.description.toLowerCase().includes("communicat"))
   if (commsIrDev) {
-    improvements.push("Add a communication approval workflow to the IR plan — require sign-off from Head of Communications before external statements.")
+    improvements.push("Define a communication approval workflow — require sign-off from Head of Communications before any external statements are issued.")
   }
 
   const ransomIrDev = irDevFlags.some(f =>
@@ -75,11 +75,11 @@ function generateImprovements(flags: GovernanceFlag[]): string[] {
     f.description.toLowerCase().includes("payment")
   )
   if (ransomIrDev) {
-    improvements.push("Document a ransomware decision process in the IR plan with clear role responsibilities for payment authorization.")
+    improvements.push("Document a ransomware decision process with clear role responsibilities for payment authorization before the next exercise.")
   }
 
   if (wrongRoleFlags.length === 0 && irDevFlags.length === 0) {
-    improvements.push("Team correctly followed role boundaries and IR plan — no governance flags recorded. Excellent exercise discipline.")
+    improvements.push("Team correctly followed role boundaries and best practice — no governance flags recorded. Excellent exercise discipline.")
   }
 
   improvements.push("Schedule a follow-up exercise in 6 months to validate improvements and test updated runbooks.")
@@ -237,7 +237,7 @@ export function ReportView({ lang }: Props) {
         </section>
       )}
 
-      {/* IR Plan Alignment */}
+      {/* Governance flags */}
       {(wrongRoleFlags.length > 0 || irDevFlags.length > 0) && (
         <section>
           <div className="flex items-center gap-2 mb-3">

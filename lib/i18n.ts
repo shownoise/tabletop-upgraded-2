@@ -16,7 +16,7 @@ export const t = {
     intro1: "You'll go through a series of rounds, each describing an evolving cyber incident.",
     intro2: "The facilitator will send you injects — messages, alerts, and signals — that arrive as they would in a real incident.",
     intro3: "Each round has a discussion timer. Use the time to debate, decide, and respond together.",
-    intro4: "There are no wrong answers — the goal is to surface gaps and improve your team's response.",
+    intro4: "Every decision counts — the goal is to surface gaps and improve your team's response. Feedback is provided at the end of each round.",
     intro5: "Stay in role. React as you would in a real crisis.",
     timerNote: "Each round: 10 minutes discussion. The facilitator controls the pace.",
     readyBtn: "I'm ready — join the exercise",
@@ -149,6 +149,7 @@ export const t = {
     decisionsView: "Decisions",
     submittedDecisions: "Submitted decisions",
     decidedOf: "{n} of {total} submitted",
+    feedbackPending: "Feedback will be shared at the end of this round.",
 
     // Simulation mode
     mode_event: "Event",
@@ -227,7 +228,7 @@ export const t = {
     intro1: "Je doorloopt een aantal rondes, elk met een nieuw hoofdstuk van een cybersecurity-incident.",
     intro2: "De facilitator stuurt je injects — berichten, meldingen en signalen — zoals ze ook in een echte crisis binnenkomen.",
     intro3: "Elke ronde heeft een discussietimer. Gebruik de tijd om samen te overleggen en beslissingen te nemen.",
-    intro4: "Er zijn geen foute antwoorden — het doel is om hiaten te ontdekken en de respons van je team te verbeteren.",
+    intro4: "Elke beslissing telt — het doel is om hiaten te ontdekken en de respons van je team te verbeteren. Terugkoppeling volgt aan het einde van elke ronde.",
     intro5: "Blijf in rol. Reageer zoals je in een echte crisis zou doen.",
     timerNote: "Elke ronde: 10 minuten overleg. De facilitator bepaalt het tempo.",
     readyBtn: "Ik ben klaar — doe mee",
@@ -356,6 +357,7 @@ export const t = {
     decisionsView: "Beslissingen",
     submittedDecisions: "Ingediende beslissingen",
     decidedOf: "{n} van {total} ingediend",
+    feedbackPending: "Terugkoppeling wordt gedeeld aan het einde van deze ronde.",
 
     // Simulation mode
     mode_event: "Evenement",

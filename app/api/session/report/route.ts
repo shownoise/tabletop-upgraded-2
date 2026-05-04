@@ -3,7 +3,7 @@ import type { GovernanceFlag, SessionReport, SubmittedDecision } from "@/lib/typ
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-function generateRecommendations(flags: GovernanceFlag[]): string[] {
+function generateRecommendations(flags: GovernanceFlag[], hasIrPlan: boolean): string[] {
   const recs: string[] = []
   const wrongRoleCount = flags.filter(f => f.type === "wrong_role").length
   const irDeviationCount = flags.filter(f => f.type === "ir_plan_deviation").length
@@ -14,12 +14,18 @@ function generateRecommendations(flags: GovernanceFlag[]): string[] {
     )
   }
   if (irDeviationCount > 0) {
-    recs.push(
-      `${irDeviationCount} action(s) deviated from the IR plan. Update the IR plan to include explicit guidance on these decision points, or provide pre-authorized escalation paths.`
-    )
+    if (hasIrPlan) {
+      recs.push(
+        `${irDeviationCount} action(s) deviated from the IR plan. Update the IR plan to include explicit guidance on these decision points, or provide pre-authorized escalation paths.`
+      )
+    } else {
+      recs.push(
+        `${irDeviationCount} action(s) deviated from recommended best practice. Consider formalizing these decision points in an Incident Response plan to give participants clear guidance during a real crisis.`
+      )
+    }
   }
   if (wrongRoleCount === 0 && irDeviationCount === 0) {
-    recs.push("Excellent governance observed. All decisions were taken by authorized roles and aligned with the IR plan.")
+    recs.push("Excellent governance observed. All decisions were taken by authorized roles and aligned with recommended best practice.")
   }
   recs.push("Schedule a follow-up tabletop exercise within 90 days to reinforce lessons learned.")
   recs.push("Assign owners to each gap identified in the post-incident review within 5 business days.")
@@ -60,8 +66,9 @@ export async function GET() {
     flags: flags.filter(f => f.roundIndex === roundIndex),
   }))
 
+  const hasIrPlan = !!(session.config.irTemplateText) || (session.config.existingPlans?.includes("ir_plan") ?? false)
   const topFlags = flags.slice(0, 10)
-  const recommendations = generateRecommendations(flags)
+  const recommendations = generateRecommendations(flags, hasIrPlan)
 
   const report: SessionReport = {
     sessionId: session.id,

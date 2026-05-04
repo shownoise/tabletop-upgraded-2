@@ -1,10 +1,16 @@
-import { subscribe } from "@/lib/session-store"
+import { auth } from "@/auth"
+import { subscribe, subscribeParticipant } from "@/lib/session-store"
 import type { StreamMessage } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 export async function GET(req: Request): Promise<Response> {
+  // Admins/facilitators get the full state (facilitator notes, flags, etc.)
+  // Participants get a stripped view — no hints, no answer metadata, no future rounds
+  const session = await auth()
+  const isAdmin = !!session?.user
+
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream<Uint8Array>({
@@ -24,9 +30,8 @@ export async function GET(req: Request): Promise<Response> {
         safeEnqueue(`data: ${JSON.stringify(msg.data)}\n\n`)
       }
 
-      const unsubscribe = subscribe(send)
+      const unsubscribe = isAdmin ? subscribe(send) : subscribeParticipant(send)
 
-      // periodic comment line keeps proxies from closing the stream
       const heartbeat = setInterval(() => {
         safeEnqueue(`: hb ${Date.now()}\n\n`)
       }, 15000)
@@ -43,7 +48,6 @@ export async function GET(req: Request): Promise<Response> {
         }
       }
 
-      // close when client disconnects
       req.signal.addEventListener("abort", cleanup)
     },
   })

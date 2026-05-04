@@ -63,6 +63,10 @@ async function generateFull(config: ExerciseConfig, apiKey: string) {
     it_ir_retainer: "This organization has IT + an external IR retainer on contract.",
   }[config.securityCapability ?? "small_it"] ?? ""
 
+  const irAlignedNote = config.irTemplateText
+    ? `- "irPlanAligned": true means the action is consistent with the uploaded IR plan above. false means it deviates from it.`
+    : `- "irPlanAligned": true means the action follows industry best practice for this type of incident. false means it is objectively risky or inadvisable (e.g. paying ransom without authorization, resuming systems before forensics, making premature public statements). Do NOT reference a specific IR plan — no plan has been uploaded. Base this flag purely on recognized crisis-response best practice.`
+
   const prompt = `You are a senior IR exercise designer for MKB+ organizations. Generate a realistic, narrative-coherent ${config.scenarioType} incident scenario.
 
 Organization profile:
@@ -85,6 +89,9 @@ Important constraints:
 - Round 3: Escalation, external stakeholder pressure
 - Round ${roundCount}: Decision point — containment/recovery trade-off and consequences
 - Every roleActions array MUST include a "do_nothing" option
+- ${irAlignedNote}
+- Do NOT hallucinate the contents of any plan. If no IR plan was provided, only mark irPlanAligned: false for clearly inadvisable actions.
+- consequence: describe the realistic outcome of this action (neutral, not preachy). Never say "this violates the IR plan" unless an IR plan was provided.
 
 Return ONLY valid JSON:
 {

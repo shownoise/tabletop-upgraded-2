@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle, AlertTriangle, AlertCircle, Send } from "lucide-react"
+import { CheckCircle, AlertTriangle, Clock, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import type { Role, RoleAction, SubmittedDecision } from "@/lib/types"
@@ -35,12 +35,6 @@ export function DecisionPanel({
   const [submitted, setSubmitted] = useState<SubmittedDecision | null>(existingDecision ?? null)
   const [error, setError] = useState<string | null>(null)
 
-  const selectedAction = roundActions.find(a => a.id === selectedActionId)
-  const isWrongRole = selectedAction && participantRole
-    ? selectedAction.allowedRoles.length > 0 && !selectedAction.allowedRoles.includes(participantRole)
-    : false
-  const isIrDeviation = selectedAction ? !selectedAction.irPlanAligned : false
-
   async function onSubmit() {
     if (!selectedActionId) { setError("Please select an action."); return }
     setError(null)
@@ -54,6 +48,9 @@ export function DecisionPanel({
         reasoning,
       })
       const action = roundActions.find(a => a.id === selectedActionId)
+      const isWrongRole = action && participantRole
+        ? action.allowedRoles.length > 0 && !action.allowedRoles.includes(participantRole)
+        : false
       setSubmitted({
         participantId,
         participantName,
@@ -64,7 +61,7 @@ export function DecisionPanel({
         reasoning,
         submittedAt: new Date().toISOString(),
         isWrongRole: isWrongRole ?? false,
-        isIrDeviation: isIrDeviation,
+        isIrDeviation: action ? !action.irPlanAligned : false,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit")
@@ -108,20 +105,10 @@ export function DecisionPanel({
                 <span className="text-sm font-medium">{submitted.actionLabel}</span>
               </div>
             </div>
-            {(submitted.isWrongRole || submitted.isIrDeviation) && (
-              <div className="flex flex-wrap gap-2">
-                {submitted.isWrongRole && (
-                  <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-orange-600">
-                    {tr(lang, "wrongRoleBadge")}
-                  </span>
-                )}
-                {submitted.isIrDeviation && (
-                  <span className="rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-destructive">
-                    {tr(lang, "irDeviationBadge")}
-                  </span>
-                )}
-              </div>
-            )}
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-card/50 px-3 py-2.5">
+              <Clock className="size-3.5 text-muted-foreground shrink-0" />
+              <p className="text-xs text-muted-foreground">{tr(lang, "feedbackPending")}</p>
+            </div>
             {submitted.reasoning && (
               <p className="text-xs text-muted-foreground italic">"{submitted.reasoning}"</p>
             )}
@@ -141,7 +128,6 @@ export function DecisionPanel({
               <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "selectAction")}</span>
               {roundActions.map(action => {
                 const authorized = action.allowedRoles.length === 0 || action.allowedRoles.includes(participantRole)
-                const irOk = action.irPlanAligned
                 const isSelected = selectedActionId === action.id
                 return (
                   <button
@@ -152,7 +138,7 @@ export function DecisionPanel({
                         ? "border-primary bg-primary/10"
                         : authorized
                         ? "border-border bg-card hover:border-primary/40 hover:bg-primary/5"
-                        : "border-border bg-card/50 opacity-70 hover:border-orange-500/40 hover:bg-orange-500/5"
+                        : "border-border bg-card/50 opacity-70 hover:border-primary/20 hover:bg-card/80"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -161,19 +147,9 @@ export function DecisionPanel({
                           <span className={`text-sm font-medium ${authorized ? "text-foreground" : "text-muted-foreground"}`}>
                             {action.label}
                           </span>
-                          {action.isRecommended && (
-                            <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-primary">
-                              Recommended
-                            </span>
-                          )}
                           {!authorized && (
-                            <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-orange-600">
+                            <span className="rounded-full border border-border px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                               {tr(lang, "actionUnauthorized")}
-                            </span>
-                          )}
-                          {!irOk && (
-                            <span className="rounded-full border border-destructive/40 bg-destructive/10 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-destructive">
-                              IR Deviation
                             </span>
                           )}
                         </div>
@@ -187,27 +163,6 @@ export function DecisionPanel({
                 )
               })}
             </div>
-
-            {/* Warnings */}
-            {selectedAction && (isWrongRole || isIrDeviation) && (
-              <div className="flex flex-col gap-2">
-                {isWrongRole && (
-                  <div className="flex items-start gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2.5">
-                    <AlertTriangle className="size-3.5 text-orange-500 shrink-0 mt-0.5" />
-                    <p className="text-xs text-orange-700 dark:text-orange-400">{tr(lang, "actionWarning")}</p>
-                  </div>
-                )}
-                {isIrDeviation && (
-                  <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5">
-                    <AlertCircle className="size-3.5 text-destructive shrink-0 mt-0.5" />
-                    <p className="text-xs text-destructive">
-                      {tr(lang, "irDeviationWarning")}
-                      {selectedAction.consequence && ` ${selectedAction.consequence}`}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Reasoning */}
             <div className="flex flex-col gap-1.5">
