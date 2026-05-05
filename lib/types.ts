@@ -369,6 +369,15 @@ export interface TimelineEvent {
   data: Record<string, unknown>
 }
 
+export interface RoleDocument {
+  id: string
+  targetRole: Role
+  title: string
+  type: 'policy' | 'checklist' | 'template' | 'plan' | 'reference'
+  content: string   // markdown-lite text shown to participant
+  referenceTag?: string  // e.g. 'insurance', 'gdpr', 'ransom' — matches inject/decision context
+}
+
 export interface SessionState {
   id: string
   joinCode: string
@@ -387,6 +396,7 @@ export interface SessionState {
   submittedDecisions?: SubmittedDecision[]
   governanceFlags?: GovernanceFlag[]
   specialEvents?: SpecialEvent[]
+  documents?: RoleDocument[]
 }
 
 export interface PublicState {

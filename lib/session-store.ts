@@ -8,7 +8,7 @@ import { generateScenario } from "./scenario-generator"
 import { dbGetSession, dbSetSession } from "./db"
 import type {
   ExerciseConfig, GovernanceFlag, Inject, InjectType, LiveEvent, LiveEventName,
-  Participant, PublicState, Role, RoleAction, RoundPhase, Scenario, SessionState,
+  Participant, PublicState, Role, RoleAction, RoleDocument, RoundPhase, Scenario, SessionState,
   SimulationMode, SpecialEvent, SpecialMessage, SpecialType, StreamMessage, SubmittedDecision,
   TimelineEvent, TimelineEventType, Urgency,
 } from "./types"
@@ -89,6 +89,8 @@ export function toParticipantState(session: SessionState): SessionState {
     })),
     // Pass through special events — participants only see what's relevant to them
     specialEvents: session.specialEvents ?? [],
+    // All documents included — filtered by role in the participant's own UI
+    documents: session.documents ?? [],
   }
 }
 
@@ -124,7 +126,7 @@ export async function getSession(): Promise<SessionState | null> {
   return dbGetSession()
 }
 
-export async function createSession(config: ExerciseConfig, scenario?: Scenario, mode?: SimulationMode): Promise<SessionState> {
+export async function createSession(config: ExerciseConfig, scenario?: Scenario, mode?: SimulationMode, documents?: RoleDocument[]): Promise<SessionState> {
   const resolvedScenario = scenario ?? generateScenario(config)
   const session: SessionState = {
     id: genId("ses"),
@@ -146,6 +148,7 @@ export async function createSession(config: ExerciseConfig, scenario?: Scenario,
     roundPhase: "inject",
     submittedDecisions: [],
     governanceFlags: [],
+    documents: documents ?? [],
   }
   await dbSetSession(session)
   broadcastState(session)

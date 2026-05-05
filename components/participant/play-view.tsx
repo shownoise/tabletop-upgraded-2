@@ -2,9 +2,9 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, CheckCircle, ChevronDown, Info, Loader2, ShieldAlert, Users } from "lucide-react"
+import { ArrowLeft, CheckCircle, ChevronDown, FileText, Info, Loader2, ShieldAlert, Users } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
-import type { Inject, LiveEvent, Participant, Role, SessionState, SpecialEvent, SubmittedDecision } from "@/lib/types"
+import type { Inject, LiveEvent, Participant, Role, RoleDocument, SessionState, SpecialEvent, SubmittedDecision } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import { api } from "@/lib/api-client"
 import { InjectFeed } from "./inject-feed"
@@ -224,6 +224,44 @@ function RolePickerLobby({
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Role documents panel ───
+function RoleDocumentsPanel({ docs }: { docs: RoleDocument[] }) {
+  const [openId, setOpenId] = useState<string | null>(null)
+  if (docs.length === 0) return null
+  const typeLabel: Record<string, string> = {
+    policy: "Polis", checklist: "Checklist", template: "Sjabloon", plan: "Plan", reference: "Referentie",
+  }
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="border-b border-border px-4 py-2.5 flex items-center gap-2">
+        <FileText className="size-3.5 text-primary" />
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Uw documenten</span>
+      </div>
+      <div className="flex flex-col divide-y divide-border">
+        {docs.map(doc => (
+          <div key={doc.id}>
+            <button
+              onClick={() => setOpenId(openId === doc.id ? null : doc.id)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors text-left"
+            >
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-sm font-medium text-foreground truncate">{doc.title}</span>
+                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{typeLabel[doc.type] ?? doc.type}</span>
+              </div>
+              <ChevronDown className={`size-4 text-muted-foreground shrink-0 ml-2 transition-transform ${openId === doc.id ? "rotate-180" : ""}`} />
+            </button>
+            {openId === doc.id && (
+              <div className="px-4 pb-4 border-t border-border bg-muted/20">
+                <pre className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed font-mono pt-3 overflow-x-auto">{doc.content}</pre>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -499,6 +537,12 @@ export function PlayView() {
                 ))}
               </ul>
             </div>
+
+            {/* Documents — filtered to this participant's role */}
+            {participantRole && (() => {
+              const myDocs = (session.documents ?? []).filter(d => d.targetRole === participantRole)
+              return <RoleDocumentsPanel docs={myDocs} />
+            })()}
 
             {/* Role authorities card — shown when participant has a role */}
             {participantRole && (() => {

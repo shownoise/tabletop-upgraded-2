@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario, SpecialsMode } from "@/lib/types"
+import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario, SpecialsMode, RoleAction } from "@/lib/types"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
@@ -50,14 +50,14 @@ async function generateLean(config: ExerciseConfig, apiKey: string) {
 Variation instruction (make the scenario distinct each time): ${variant}
 
 Return ONLY valid JSON (no markdown):
-{"scenario_title":"...","scenario_summary":"1-2 sentence summary","rounds":[{"round_number":1,"title":"...","situation_update":"2-3 sentence situation for facilitator","timerMinutes":${timerPerRound}},{"round_number":2,...}]}`
+{"scenario_title":"...","scenario_summary":"1-2 sentence summary","rounds":[{"round_number":1,"title":"...","situation_update":"2-3 sentence situation for facilitator","timerMinutes":${timerPerRound},"roleActions":[{"id":"r1-a1","label":"...","description":"...","allowedRoles":["ciso","ceo"],"isRecommended":true,"irPlanAligned":true,"consequence":"..."},{"id":"r1-a2","label":"...","description":"...","allowedRoles":["legal"],"irPlanAligned":true,"consequence":"..."},{"id":"r1-a3","label":"...","description":"...","allowedRoles":["cfo"],"irPlanAligned":false,"consequence":"..."},{"id":"r1-do-nothing","label":"Do nothing / wait","description":"Wait for more information before acting.","allowedRoles":[],"irPlanAligned":true,"consequence":"..."}]},{"round_number":2,...}]}`
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: "claude-haiku-4-5",
-      max_tokens: 800,
+      max_tokens: 2000,
       messages: [{ role: "user", content: prompt }],
     }),
   })
@@ -196,12 +196,19 @@ async function generateWithAI(config: ExerciseConfig): Promise<{ scenario: Scena
       const aiMeta = await generateLean(config, apiKey)
       if (!aiMeta) return null
       const rounds = base.rounds.map((r, i) => {
-        const aiRound = aiMeta.rounds?.[i] as { title?: string; situation_update?: string; timerMinutes?: number } | undefined
+        const aiRound = aiMeta.rounds?.[i] as {
+          title?: string
+          situation_update?: string
+          timerMinutes?: number
+          roleActions?: RoleAction[]
+        } | undefined
         return {
           ...r,
           title: aiRound?.title ?? r.title,
           situation_update: aiRound?.situation_update ?? r.situation_update,
           timerMinutes: aiRound?.timerMinutes ?? r.timerMinutes,
+          // Use AI-generated actions if present and non-empty; else keep template actions
+          roleActions: aiRound?.roleActions?.length ? aiRound.roleActions : r.roleActions,
         }
       })
       return {
@@ -246,15 +253,18 @@ export async function POST(req: Request) {
   }
   const mode: SimulationMode = body.mode === "event" ? "event" : "training"
 
-  const aiResult = await generateWithAI(config)
+  const [aiResult] = await Promise.all([generateWithAI(config)])
   let scenario = aiResult?.scenario ?? null
   if (!scenario) {
     const { generateScenario } = await import("@/lib/scenario-generator")
     scenario = generateScenario(config)
   }
 
+  const { generateDocuments } = await import("@/lib/document-generator")
+  const documents = generateDocuments(config)
+
   const { createSession } = await import("@/lib/session-store")
-  const session = await createSession(config, scenario, mode)
+  const session = await createSession(config, scenario, mode, documents)
   return NextResponse.json({
     ok: true,
     sessionId: session.id,
