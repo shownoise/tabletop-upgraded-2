@@ -2,10 +2,11 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, ChevronDown, Info, ShieldAlert } from "lucide-react"
+import { ArrowLeft, CheckCircle, ChevronDown, Info, Loader2, ShieldAlert, Users } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
-import type { Inject, LiveEvent, Role, SpecialEvent, SubmittedDecision } from "@/lib/types"
+import type { Inject, LiveEvent, Participant, Role, SessionState, SpecialEvent, SubmittedDecision } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
+import { api } from "@/lib/api-client"
 import { InjectFeed } from "./inject-feed"
 import { UrgentInjectModal } from "./urgent-inject-modal"
 import { RoundTimerCompact } from "./round-timer"
@@ -108,6 +109,119 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
               ))}
             </ul>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Real-time role picker (lobby) ───────────────────────────
+
+const CRISIS_ROLES_ORDERED: Role[] = [
+  "ceo", "ciso", "cfo", "legal", "head_of_comms", "hr_lead", "ops_manager",
+]
+
+function RolePickerLobby({
+  session,
+  participantId,
+  myRole,
+  lang,
+}: {
+  session: SessionState
+  participantId: string
+  myRole: Role | undefined
+  lang: ReturnType<typeof useLang>[0]
+}) {
+  const [claiming, setClaiming] = useState<Role | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const takenRoles = new Map<Role, Participant>()
+  for (const p of session.participants) {
+    if (p.role) takenRoles.set(p.role, p)
+  }
+
+  async function claimRole(role: Role) {
+    if (claiming) return
+    setClaiming(role)
+    setError(null)
+    try {
+      await api.assignRole({ participantId, role })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to claim role")
+    } finally {
+      setClaiming(null)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-6 rounded-xl border border-primary/20 bg-primary/5 p-6">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <Users className="size-4 text-primary" />
+          <span className="font-mono text-xs uppercase tracking-wider text-primary">Kies uw rol</span>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Elke rol kan maar door één deelnemer worden geclaimd. De facilitator start de oefening zodra iedereen klaar is.
+        </p>
+      </div>
+
+      {error && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {CRISIS_ROLES_ORDERED.map(role => {
+          const meta = ROLE_META[role]
+          const takenBy = takenRoles.get(role)
+          const isMine = myRole === role
+          const isTaken = !!takenBy && !isMine
+          const isClaiming = claiming === role
+
+          return (
+            <button
+              key={role}
+              onClick={() => !isTaken && !isMine && claimRole(role)}
+              disabled={isTaken || isClaiming || !!claiming}
+              className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-left transition-all disabled:cursor-not-allowed ${
+                isMine
+                  ? "border-primary bg-primary/10"
+                  : isTaken
+                  ? "border-border bg-card/30 opacity-50"
+                  : "border-border bg-card hover:border-primary/40 hover:bg-primary/5"
+              }`}
+            >
+              {isClaiming ? (
+                <Loader2 className="size-4 shrink-0 animate-spin text-primary mt-0.5" />
+              ) : isMine ? (
+                <CheckCircle className="size-4 shrink-0 text-primary mt-0.5" />
+              ) : (
+                <div className={`size-4 shrink-0 mt-0.5 rounded-full border-2 ${isTaken ? "border-border" : "border-primary/40"}`} />
+              )}
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className={`font-mono text-sm font-medium ${isMine ? "text-primary" : isTaken ? "text-muted-foreground" : "text-foreground"}`}>
+                  {meta.label}
+                </span>
+                <span className="text-[11px] text-muted-foreground leading-tight">{meta.description}</span>
+                {isTaken && takenBy && (
+                  <span className="font-mono text-[10px] text-muted-foreground mt-0.5">
+                    Geclaimd door {takenBy.name}
+                  </span>
+                )}
+                {isMine && (
+                  <span className="font-mono text-[10px] text-primary mt-0.5">Uw rol</span>
+                )}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      {myRole && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-background px-4 py-3">
+          <CheckCircle className="size-4 text-primary shrink-0" />
+          <p className="text-sm text-muted-foreground">
+            U speelt als <span className="font-semibold text-foreground">{ROLE_META[myRole].label}</span>. Wacht tot de facilitator de oefening start.
+          </p>
         </div>
       )}
     </div>
@@ -315,12 +429,21 @@ export function PlayView() {
             {currentRound ? (
               <RoundSituationCard session={session} lang={lang} />
             ) : status === "lobby" ? (
-              <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card/50 py-12 text-center">
-                <div className="flex gap-1.5">
-                  {[0,1,2].map(i => <span key={i} className="size-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: `${i*0.3}s` }} />)}
+              participantId ? (
+                <RolePickerLobby
+                  session={session}
+                  participantId={participantId}
+                  myRole={participantRole}
+                  lang={lang}
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card/50 py-12 text-center">
+                  <div className="flex gap-1.5">
+                    {[0,1,2].map(i => <span key={i} className="size-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: `${i*0.3}s` }} />)}
+                  </div>
+                  <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "waitingToStart")}</p>
                 </div>
-                <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "waitingToStart")}</p>
-              </div>
+              )
             ) : (
               <div className="rounded-xl border border-border bg-card/50 py-8 text-center">
                 <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "exerciseEnded")}</p>
@@ -330,9 +453,11 @@ export function PlayView() {
             {/* Inject feed */}
             <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} />
 
-            {/* Decision panel — shown during decision phase */}
+            {/* Decision panel — shown during decision phase. key= ensures a full remount
+                on round change so local state (selectedAction, submitted) always resets. */}
             {session.roundPhase === "decision" && currentRound?.roleActions && participantId && (
               <DecisionPanel
+                key={`decision-${session.currentRound}`}
                 roundIndex={session.currentRound}
                 roundActions={currentRound.roleActions}
                 participantId={participantId}

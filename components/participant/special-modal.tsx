@@ -172,11 +172,19 @@ function ChatSpecial({
   const bottomRef = useRef<HTMLDivElement>(null)
   const counterpartLabel = COUNTERPART_LABELS[special.type] ?? "Counterpart"
 
-  // After server pushes new messages (via SSE state update), clear pending state
+  // Clear pending state when new messages arrive via SSE
   useEffect(() => {
-    // Clear "waiting for response" state once new messages arrive
     setLastChoiceId(null)
+    setLastHint(null)
+    setLastQuality(null)
   }, [special.messages.length])
+
+  // Fallback: if SSE doesn't deliver within 8s, unblock buttons
+  useEffect(() => {
+    if (!lastChoiceId) return
+    const t = setTimeout(() => setLastChoiceId(null), 8000)
+    return () => clearTimeout(t)
+  }, [lastChoiceId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })

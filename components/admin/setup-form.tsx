@@ -42,7 +42,7 @@ const defaults: ExerciseConfig = {
   itMaturity: "medium",
   securityCapability: "small_it",
   exerciseGoal: "ransomware_tabletop",
-  teamStructure: "crisis_it",
+  teamStructure: "crisis_only",
   roundCount: 4,
   timerPerRound: 15,
   difficulty: "intermediate",
@@ -61,11 +61,11 @@ const DIFFICULTY_OPTIONS: { id: DifficultyLevel; label: string }[] = [
   { id: "advanced",     label: "Advanced" },
 ]
 
-const TEAM_STRUCTURE_OPTIONS: { id: TeamStructure; label: string }[] = [
+const TEAM_STRUCTURE_OPTIONS: { id: TeamStructure; label: string; disabled?: boolean }[] = [
   { id: "crisis_only", label: "Crisis Team only" },
-  { id: "it_only",     label: "IT Team only" },
-  { id: "crisis_it",   label: "Crisis + IT" },
-  { id: "full",        label: "Crisis + IT + Comms/Legal" },
+  { id: "it_only",     label: "IT Team only",              disabled: true },
+  { id: "crisis_it",   label: "Crisis + IT",               disabled: true },
+  { id: "full",        label: "Crisis + IT + Comms/Legal", disabled: true },
 ]
 
 const PLAN_OPTIONS = [
@@ -249,8 +249,9 @@ export function SetupForm() {
               <ToggleButton
                 key={opt.id}
                 active={config.teamStructure === opt.id}
-                onClick={() => update("teamStructure", opt.id)}
+                onClick={() => !opt.disabled && update("teamStructure", opt.id)}
                 label={opt.label}
+                disabled={opt.disabled}
               />
             ))}
           </div>
@@ -467,15 +468,18 @@ function SectionHeader({ label }: { label: string }) {
   )
 }
 
-function ToggleButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function ToggleButton({ active, onClick, label, disabled }: { active: boolean; onClick: () => void; label: string; disabled?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={`rounded-lg border px-3 py-2 text-center font-mono text-sm transition-all ${
-        active
-          ? "border-primary bg-primary/10 text-primary"
-          : "border-border bg-card hover:border-primary/40 text-foreground"
+        disabled
+          ? "cursor-not-allowed border-border bg-card/50 text-muted-foreground/40 opacity-50"
+          : active
+            ? "border-primary bg-primary/10 text-primary"
+            : "border-border bg-card hover:border-primary/40 text-foreground"
       }`}
     >
       {label}

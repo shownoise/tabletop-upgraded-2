@@ -21,13 +21,33 @@ function buildContext(c: ExerciseConfig): string {
   return parts.join(', ')
 }
 
+const LEAN_VARIANTS = [
+  "Focus on a scenario where the attack originates from a compromised third-party supplier.",
+  "Focus on a scenario where the initial vector is a phishing email targeting a finance employee.",
+  "Focus on a scenario where attackers exploited an unpatched VPN appliance to gain initial access.",
+  "Focus on a scenario where the breach was discovered by an external party (client complaint, CERT notification).",
+  "Focus on a scenario where the threat actor is a nation-state APT with longer dwell time before detonation.",
+  "Focus on a scenario where a malicious insider assisted the external attacker.",
+  "Focus on a scenario where the attacker encrypts backups before triggering the main payload.",
+]
+
+const FULL_COMPANY_NAMES = [
+  "Heijmans Groep B.V.", "Bakker & Zonen Logistics", "De Vries Installatietechniek",
+  "Maas Adviesgroep", "Terneuzen Maritiem B.V.", "Westland Agri Holding",
+  "Noord Brabant Energie", "Helmond Precision Parts", "IJssel Zorg Groep",
+  "Schiphol Cargo Services",
+]
+
 async function generateLean(config: ExerciseConfig, apiKey: string) {
   const roundCount = config.roundCount ?? 4
   const timerPerRound = config.timerPerRound ?? 15
   const irCtx = config.irTemplateText
     ? `\nIR plan excerpt:\n${config.irTemplateText.slice(0, 3000)}`
     : ""
-  const prompt = `You are a cybersecurity exercise designer for MKB+ organizations. Generate a ${roundCount}-round ${config.scenarioType} scenario for: ${buildContext(config)}${irCtx}
+  const variant = LEAN_VARIANTS[Math.floor(Math.random() * LEAN_VARIANTS.length)]
+  const prompt = `You are a cybersecurity exercise designer for MKB+ organizations. Generate a unique ${roundCount}-round ${config.scenarioType} scenario for: ${buildContext(config)}${irCtx}
+
+Variation instruction (make the scenario distinct each time): ${variant}
 
 Return ONLY valid JSON (no markdown):
 {"scenario_title":"...","scenario_summary":"1-2 sentence summary","rounds":[{"round_number":1,"title":"...","situation_update":"2-3 sentence situation for facilitator","timerMinutes":${timerPerRound}},{"round_number":2,...}]}`
@@ -54,6 +74,9 @@ async function generateFull(config: ExerciseConfig, apiKey: string) {
   const irPlanContext = config.irTemplateText
     ? `\nClient IR plan:\n<ir_plan>\n${config.irTemplateText.slice(0, 6000)}\n</ir_plan>`
     : ""
+  const companyName = FULL_COMPANY_NAMES[Math.floor(Math.random() * FULL_COMPANY_NAMES.length)]
+  const variant = LEAN_VARIANTS[Math.floor(Math.random() * LEAN_VARIANTS.length)]
+  const randomSeed = Math.floor(Math.random() * 10000)
 
   const secCapabilityNote = {
     no_soc: "This organization has NO internal SOC and no dedicated IR capability.",
@@ -67,13 +90,16 @@ async function generateFull(config: ExerciseConfig, apiKey: string) {
     ? `- "irPlanAligned": true means the action is consistent with the uploaded IR plan above. false means it deviates from it.`
     : `- "irPlanAligned": true means the action follows industry best practice for this type of incident. false means it is objectively risky or inadvisable (e.g. paying ransom without authorization, resuming systems before forensics, making premature public statements). Do NOT reference a specific IR plan — no plan has been uploaded. Base this flag purely on recognized crisis-response best practice.`
 
-  const prompt = `You are a senior IR exercise designer for MKB+ organizations. Generate a realistic, narrative-coherent ${config.scenarioType} incident scenario.
+  const prompt = `You are a senior IR exercise designer for MKB+ organizations. Generate a UNIQUE, realistic, narrative-coherent ${config.scenarioType} incident scenario. Seed: ${randomSeed}.
+
+Variation directive: ${variant}
+Fictional company name to use in inject messages: ${companyName}
 
 Organization profile:
 - Sector: ${config.sector}, Size: ${config.companySize}, IT maturity: ${config.itMaturity ?? "medium"}
 - Security capability: ${config.securityCapability ?? "small_it"}
 - Exercise goal: ${config.exerciseGoal ?? "ransomware_tabletop"}, Difficulty: ${config.difficulty ?? "intermediate"}
-- Team structure: ${config.teamStructure ?? "crisis_it"}
+- Team structure: ${config.teamStructure ?? "crisis_only"}
 - Existing plans: ${existingPlans}
 - Crown jewels: ${config.crownJewels}, Critical systems: ${config.criticalSystems}
 ${irPlanContext}
