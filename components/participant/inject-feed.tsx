@@ -243,14 +243,23 @@ function getSize(urgency: Urgency, index: number, isSurprise: boolean): InjectSi
 }
 
 // ─────────────────── Feed ───────────────────
+function isSelfReferential(senderName: string | undefined, myRoleLabel: string): boolean {
+  if (!senderName) return false
+  const s = senderName.toLowerCase().trim()
+  const r = myRoleLabel.toLowerCase().trim()
+  return s === r || s.startsWith(r + " ") || s.startsWith(r + ",")
+}
+
 export function InjectFeed({ pushed, lang, participantRole }: { pushed: PushedInject[]; lang: Lang; participantRole?: Role }) {
   const participantTeam = participantRole ? ROLE_META[participantRole]?.team : undefined
+  const myRoleLabel = participantRole ? ROLE_META[participantRole]?.label : undefined
 
   const filtered = pushed.filter(p => {
     const target = p.inject.targetTeam
-    if (!target || target === "all") return true
-    if (!participantTeam) return true
-    return target === participantTeam
+    if (target && target !== "all" && participantTeam && target !== participantTeam) return false
+    // Don't show injects where the sender appears to be the participant themselves
+    if (myRoleLabel && isSelfReferential(p.inject.senderName, myRoleLabel)) return false
+    return true
   })
 
   const sorted = [...filtered].sort((a, b) => b.pushedAt - a.pushedAt)

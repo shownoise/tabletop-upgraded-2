@@ -500,6 +500,33 @@ export function PlayView() {
               </ul>
             </div>
 
+            {/* Role authorities card — shown when participant has a role */}
+            {participantRole && (() => {
+              const meta = ROLE_META[participantRole]
+              return (
+                <div className="rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-primary/15">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-primary">Uw bevoegdheden</span>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{meta.label}</p>
+                  </div>
+                  <div className="px-4 py-3 flex flex-col gap-2.5">
+                    <ul className="flex flex-col gap-1.5">
+                      {meta.authorities.map((a, i) => (
+                        <li key={i} className="flex gap-2 text-xs text-foreground">
+                          <span className="text-primary shrink-0 mt-0.5">✓</span>
+                          <span>{a}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+                      <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground mb-0.5">Niet uw verantwoordelijkheid</p>
+                      <p className="text-[11px] text-muted-foreground">{meta.notResponsibleFor}</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+
             {/* Session info */}
             <div className="rounded-xl border border-border bg-card px-4 py-4 flex flex-col gap-3">
               <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "eventLog")}</span>

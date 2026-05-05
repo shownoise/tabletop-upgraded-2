@@ -111,6 +111,11 @@ export function SpecialsPanel({ session }: { session: SessionState }) {
         </span>
       </div>
 
+      {/* Positioning note */}
+      <div className="rounded-md border border-border bg-background/60 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
+        Specials simuleren situaties die <span className="text-foreground">specialistische expertise</span> vereisen — ransomware-onderhandeling, GDPR-meldingen en crisiswoordvoering. Ontbreekt deze expertise intern, dan modelleert een special het inschakelen van een externe specialist. Informeer deelnemers dat dit in de praktijk een dedicated rol vereist.
+      </div>
+
       {error && (
         <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
           <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />

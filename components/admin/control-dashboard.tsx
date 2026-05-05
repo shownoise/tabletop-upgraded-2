@@ -339,6 +339,59 @@ export function ControlDashboard() {
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">{error}</div>
         )}
 
+        {/* Facilitator notes — shown when current round has AI-generated guidance */}
+        {isActive && currentRound?.facilitatorNotes && (() => {
+          const notes = currentRound.facilitatorNotes!
+          return (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <Flag className="size-3.5 text-primary" />
+                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Facilitator sturing — ronde {currentIndex + 1}</span>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-mono text-[9px] uppercase tracking-wider text-primary">Discussiedoel</span>
+                  <p className="text-xs text-foreground leading-relaxed">{notes.discussionGoal}</p>
+                </div>
+                {notes.keyQuestions?.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-primary">Stuurvragen</span>
+                    <ul className="flex flex-col gap-1">
+                      {notes.keyQuestions.map((q, i) => (
+                        <li key={i} className="text-xs text-muted-foreground flex gap-1.5">
+                          <span className="text-primary shrink-0">?</span>{q}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {notes.redFlags?.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-destructive">Let op</span>
+                    <ul className="flex flex-col gap-1">
+                      {notes.redFlags.map((f, i) => (
+                        <li key={i} className="text-xs text-muted-foreground flex gap-1.5">
+                          <span className="text-destructive shrink-0">⚠</span>{f}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              {notes.hints?.length > 0 && (
+                <div className="flex flex-col gap-1.5 border-t border-primary/15 pt-3">
+                  <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Tips voor facilitator</span>
+                  <ul className="flex flex-wrap gap-2">
+                    {notes.hints.map((h, i) => (
+                      <li key={i} className="rounded-md border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">{h}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
         {/* Main layout: inject controls + sidebar */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Inject controls */}

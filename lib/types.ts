@@ -9,16 +9,121 @@ export type Role =
   | 'hr_lead'
   | 'ops_manager'
 
-export const ROLE_META: Record<Role, { label: string; team: 'crisis_management' | 'technical_it'; description: string }> = {
-  it_manager:    { label: 'IT Manager',             team: 'technical_it',      description: 'IT infrastructure, systems isolation' },
-  ciso:          { label: 'CISO',                   team: 'crisis_management', description: 'Security strategy, incident coordination' },
-  head_of_comms: { label: 'Head of Communications', team: 'crisis_management', description: 'Internal and external communications' },
-  legal:         { label: 'Legal',                  team: 'crisis_management', description: 'Compliance, regulatory notifications' },
-  ceo:           { label: 'CEO',                    team: 'crisis_management', description: 'Executive decisions, board communication' },
-  cfo:           { label: 'CFO',                    team: 'crisis_management', description: 'Financial decisions, insurance, ransom' },
-  system_admin:  { label: 'System Administrator',   team: 'technical_it',      description: 'Technical validation, logs, backups, infrastructure' },
-  hr_lead:       { label: 'HR Lead',                team: 'crisis_management', description: 'Employee communication and insider threat cases' },
-  ops_manager:   { label: 'Operations Manager',     team: 'crisis_management', description: 'Business continuity and operational impact' },
+export const ROLE_META: Record<Role, {
+  label: string
+  team: 'crisis_management' | 'technical_it'
+  description: string
+  authorities: string[]
+  notResponsibleFor: string
+}> = {
+  ceo: {
+    label: 'CEO',
+    team: 'crisis_management',
+    description: 'Executive decisions, board communication',
+    authorities: [
+      'Beslissen over betaling losgeld (of weigering)',
+      'Openbare communicatie autoriseren',
+      'Communicatie naar board en aandeelhouders',
+      'Escalatie naar overheid of politie',
+      'Noodsituatie intern uitroepen',
+    ],
+    notResponsibleFor: 'Technische maatregelen, GDPR-meldingen opstellen',
+  },
+  ciso: {
+    label: 'CISO',
+    team: 'crisis_management',
+    description: 'Security strategy, incident coordination',
+    authorities: [
+      'Coördineren van de incidentrespons',
+      'Aanbevelen van isolatie en containment-maatregelen',
+      'Aansturing externe IR-partij',
+      'Technische risicoafweging naar directie communiceren',
+      'Beslissen over beveiligingsmaatregelen',
+    ],
+    notResponsibleFor: 'Definitieve betaling losgeld, juridische meldingen',
+  },
+  cfo: {
+    label: 'CFO',
+    team: 'crisis_management',
+    description: 'Financial decisions, insurance, ransom',
+    authorities: [
+      'Goedkeuren van financiële noodbesluiten',
+      'Contact met verzekeraar opnemen',
+      'Financiële schade inschatten en rapporteren',
+      'Advies over losgeldsituatie geven aan CEO',
+    ],
+    notResponsibleFor: 'Technische herstelstappen, communicatie naar pers',
+  },
+  legal: {
+    label: 'Legal',
+    team: 'crisis_management',
+    description: 'Compliance, regulatory notifications',
+    authorities: [
+      'AP-melding coördineren (GDPR: binnen 72 uur)',
+      'NIS2-meldplicht bewaken richting NCSC',
+      'Juridisch advies over aansprakelijkheid geven',
+      'Contractuele verplichtingen richting klanten beoordelen',
+    ],
+    notResponsibleFor: 'Technische en financiële beslissingen',
+  },
+  head_of_comms: {
+    label: 'Head of Communications',
+    team: 'crisis_management',
+    description: 'Internal and external communications',
+    authorities: [
+      'Interne communicatie naar medewerkers verzorgen',
+      'Perscommunicatie afstemmen met CEO',
+      'Social media bewaken en reageren',
+      'Woordvoerder namens de organisatie',
+    ],
+    notResponsibleFor: 'Technische en financiële beslissingen',
+  },
+  hr_lead: {
+    label: 'HR Lead',
+    team: 'crisis_management',
+    description: 'Employee communication and insider threat cases',
+    authorities: [
+      'Medewerkerscommunicatie coördineren',
+      'Insider threat-onderzoek initiëren (samen met Legal)',
+      'Crisisopvang en welzijn medewerkers organiseren',
+    ],
+    notResponsibleFor: 'Technische en financiële beslissingen, perscommunicatie',
+  },
+  ops_manager: {
+    label: 'Operations Manager',
+    team: 'crisis_management',
+    description: 'Business continuity and operational impact',
+    authorities: [
+      'Operationele impact inschatten en rapporteren',
+      'Noodprocedures en handmatige processen activeren',
+      'Herstelprioriteiten op basis van bedrijfskriticaliteit bepalen',
+      'Coördineren met externe partners en leveranciers',
+    ],
+    notResponsibleFor: 'Technische herstelstappen, financiële goedkeuring',
+  },
+  it_manager: {
+    label: 'IT Manager',
+    team: 'technical_it',
+    description: 'IT infrastructure, systems isolation',
+    authorities: [
+      'Systemen isoleren en netwerk segmenteren',
+      'IT-infrastructuur monitoren en beheren',
+      'Backups inventariseren en herstelbaarheid bepalen',
+      'Technische maatregelen coördineren',
+    ],
+    notResponsibleFor: 'Businessbeslissingen, communicatie naar pers of board',
+  },
+  system_admin: {
+    label: 'System Administrator',
+    team: 'technical_it',
+    description: 'Technical validation, logs, backups, infrastructure',
+    authorities: [
+      'Logs en forensische data veiligstellen',
+      'Backupsystemen controleren en herstellen',
+      'Technische validatie van containment-stappen uitvoeren',
+    ],
+    notResponsibleFor: 'Businessbeslissingen, communicatie',
+  },
 }
 
 export type SimulationMode = 'event' | 'training'
