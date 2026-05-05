@@ -14,6 +14,7 @@ import { useSessionStream } from "@/lib/use-session-stream"
 import { api } from "@/lib/api-client"
 import { InjectControls } from "./inject-controls"
 import { DecisionsView } from "./decisions-view"
+import { SpecialsPanel } from "./specials-panel"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
@@ -389,6 +390,11 @@ export function ControlDashboard() {
                 ))}
               </ul>
             </div>
+
+            {/* Specials panel — shown when mode is not off */}
+            {session.config.specialsMode && session.config.specialsMode !== "off" && (
+              <SpecialsPanel session={session} />
+            )}
 
             {/* Scenario summary */}
             <div className="rounded-xl border border-border bg-card px-4 py-4">

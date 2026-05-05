@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type {
-  ExerciseConfig, SimulationMode, AiIntensity,
+  ExerciseConfig, SimulationMode, AiIntensity, SpecialsMode,
   ITMaturity, SecurityCapability, TeamStructure,
   ExerciseGoal, DifficultyLevel,
 } from "@/lib/types"
@@ -81,6 +81,7 @@ export function SetupForm() {
   const [config, setConfig] = useState<ExerciseConfig>(defaults)
   const [mode, setMode] = useState<SimulationMode>("training")
   const [aiIntensity, setAiIntensity] = useState<AiIntensity>("lean")
+  const [specialsMode, setSpecialsMode] = useState<SpecialsMode>("static")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [irFileName, setIrFileName] = useState<string | null>(null)
@@ -115,7 +116,7 @@ export function SetupForm() {
       const res = await fetch("/api/session/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...config, mode, aiIntensity }),
+        body: JSON.stringify({ ...config, mode, aiIntensity, specialsMode }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Failed to create session")
@@ -400,6 +401,39 @@ export function SetupForm() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Section 7 — Special events */}
+      <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs uppercase tracking-wider text-primary">Special events</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Interactive crisis injects — ransomware negotiation chat, AP breach notification form, journalist Q&A. Triggered manually by the facilitator during the session.
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            { id: "off",    label: "Disabled",  desc: "No special events." },
+            { id: "static", label: "Scripted",  desc: "Pre-written scripts. Realistic, no API cost." },
+            { id: "ai",     label: "AI-driven", desc: "Claude plays the counterpart. ~€0.01/exchange." },
+          ] as { id: SpecialsMode; label: string; desc: string }[]).map(opt => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setSpecialsMode(opt.id)}
+              className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-all ${
+                specialsMode === opt.id
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-background hover:border-primary/40"
+              }`}
+            >
+              <span className={`font-mono text-sm font-medium ${specialsMode === opt.id ? "text-primary" : "text-foreground"}`}>
+                {opt.label}
+              </span>
+              <span className="text-[11px] text-muted-foreground leading-tight">{opt.desc}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && (

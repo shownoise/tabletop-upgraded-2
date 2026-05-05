@@ -1,4 +1,4 @@
-import type { ExerciseConfig, InjectType, Role, RoundPhase, SessionReport, SimulationMode, Urgency } from "./types"
+import type { ExerciseConfig, InjectType, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, Urgency } from "./types"
 
 async function post<T = unknown>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -45,4 +45,14 @@ export const api = {
     post<{ ok: true }>("/api/session/assign-role", input),
   getReport: () =>
     get<SessionReport>("/api/session/report"),
+  triggerSpecial: (type: SpecialType) =>
+    post<{ ok: true; special: SpecialEvent }>("/api/session/special/trigger", { type }),
+  chooseSpecial: (input: { specialId: string; participantId: string; choiceId: string }) =>
+    post<{ ok: true }>("/api/session/special/message", input),
+  sendSpecialMessage: (input: { specialId: string; participantId: string; text: string }) =>
+    post<{ ok: true }>("/api/session/special/message", input),
+  submitApForm: (input: { specialId: string; participantId: string; formData: Record<string, string> }) =>
+    post<{ ok: true }>("/api/session/special/form", input),
+  completeSpecial: (specialId: string) =>
+    post<{ ok: true }>("/api/session/special/complete", { specialId }),
 }

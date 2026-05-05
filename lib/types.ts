@@ -142,6 +142,47 @@ export interface Scenario {
 }
 
 export type AiIntensity = 'off' | 'lean' | 'full'
+export type SpecialsMode = 'off' | 'static' | 'ai'
+export type SpecialType = 'ransomware_negotiation' | 'ap_notification' | 'journalist_qa'
+
+export interface SpecialChoice {
+  id: string
+  label: string
+  quality: 'bad' | 'neutral' | 'good'
+  scoreImpact: number   // -2 to +2
+  hint: string          // brief rationale shown after selection
+}
+
+export interface SpecialMessage {
+  id: string
+  sender: 'counterpart' | 'participant'
+  participantId?: string
+  participantName?: string
+  text: string
+  timestamp: string
+  // set on participant messages (scripted: chosen, ai: evaluated)
+  choiceQuality?: 'bad' | 'neutral' | 'good'
+  scoreImpact?: number
+  aiEvaluationHint?: string
+  // choices offered to participant at this turn (set on counterpart messages, scripted only)
+  choices?: SpecialChoice[]
+}
+
+export interface SpecialEvent {
+  id: string
+  type: SpecialType
+  mode: 'static' | 'ai'
+  status: 'active' | 'completed'
+  assignedParticipantId?: string
+  assignedParticipantName?: string
+  assignedRole?: Role
+  triggeredAt: number
+  completedAt?: number
+  messages: SpecialMessage[]
+  formData?: Record<string, string>
+  totalScore?: number       // cumulative score from choices
+  currentTurnIndex?: number // which scripted turn we're on
+}
 
 export type ITMaturity = 'low' | 'medium' | 'high'
 export type SecurityCapability =
@@ -177,6 +218,7 @@ export interface ExerciseConfig {
   teams: string
   irTemplateText?: string
   aiIntensity?: AiIntensity
+  specialsMode?: SpecialsMode
   itMaturity?: ITMaturity
   securityCapability?: SecurityCapability
   existingPlans?: string[]
@@ -212,6 +254,8 @@ export type TimelineEventType =
   | "participant_joined"
   | "inject_pushed"
   | "surprise_inject"
+  | "special_triggered"
+  | "special_completed"
 
 export interface TimelineEvent {
   id: string
@@ -237,6 +281,7 @@ export interface SessionState {
   roundPhase?: RoundPhase
   submittedDecisions?: SubmittedDecision[]
   governanceFlags?: GovernanceFlag[]
+  specialEvents?: SpecialEvent[]
 }
 
 export interface PublicState {
@@ -255,6 +300,9 @@ export type LiveEventName =
   | "phase_changed"
   | "decision_submitted"
   | "role_assigned"
+  | "special_triggered"
+  | "special_message"
+  | "special_completed"
 
 export interface LiveEvent {
   name: LiveEventName

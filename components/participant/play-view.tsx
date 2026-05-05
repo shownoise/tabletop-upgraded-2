@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, ChevronDown, Info, ShieldAlert } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
-import type { Inject, LiveEvent, Role, SubmittedDecision } from "@/lib/types"
+import type { Inject, LiveEvent, Role, SpecialEvent, SubmittedDecision } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import { InjectFeed } from "./inject-feed"
 import { UrgentInjectModal } from "./urgent-inject-modal"
@@ -12,6 +12,7 @@ import { RoundTimerCompact } from "./round-timer"
 import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
+import { SpecialModal } from "./special-modal"
 import { Empty } from "@/components/ui/empty"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
@@ -136,6 +137,7 @@ export function PlayView() {
   const [urgent, setUrgent] = useState<Inject | null>(null)
   const [banner, setBanner] = useState<{ id: number; text: string; type?: string } | null>(null)
   const [feedbackFor, setFeedbackFor] = useState<{ round: number; isFinal: boolean } | null>(null)
+  const [specialDismissed, setSpecialDismissed] = useState<Set<string>>(new Set())
   const [doneFeedbackRounds, setDoneFeedbackRounds] = useState<Set<number>>(new Set())
   const prevRoundRef = useRef<number>(-1)
 
@@ -177,9 +179,19 @@ export function PlayView() {
     prevRoundRef.current = idx
   }, [session?.currentRound, session?.status])
 
+  // Derived: find the special assigned to this participant (not dismissed)
+  const activeSpecial = useMemo(() => {
+    if (!participantId || !session) return null
+    return (session.specialEvents ?? []).find(
+      sp => sp.assignedParticipantId === participantId && !specialDismissed.has(sp.id)
+    ) ?? null
+  }, [session, participantId, specialDismissed])
+
   useEffect(() => {
     return onEvent((e: LiveEvent) => {
-      if (e.name === "push_inject" || e.name === "surprise_inject") {
+      if (e.name === "special_triggered") {
+        setBanner({ id: Date.now(), text: "A special event has been triggered!", type: "special" })
+      } else if (e.name === "push_inject" || e.name === "surprise_inject") {
         const inj = (e.payload as { inject?: Inject }).inject
         if (inj && (inj.urgency === "critical" || e.name === "surprise_inject")) setUrgent(inj)
         else if (inj) setBanner({ id: Date.now(), text: `New inject: ${inj.title}`, type: "inject" })
@@ -238,6 +250,15 @@ export function PlayView() {
       {/* Intro overlay */}
       {showIntro && session.status === "lobby" && (
         <IntroOverlay lang={lang} onReady={() => setShowIntro(false)} />
+      )}
+
+      {/* Special event modal */}
+      {activeSpecial && participantId && (
+        <SpecialModal
+          special={activeSpecial}
+          participantId={participantId}
+          onClose={() => setSpecialDismissed(prev => new Set(prev).add(activeSpecial.id))}
+        />
       )}
 
       {/* Feedback screen */}

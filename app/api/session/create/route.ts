@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario } from "@/lib/types"
+import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario, SpecialsMode } from "@/lib/types"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
@@ -205,6 +205,7 @@ export async function POST(req: Request) {
     teams: body.teams?.toString() ?? "",
     irTemplateText: body.irTemplateText?.toString(),
     aiIntensity: (body.aiIntensity as AiIntensity | undefined) ?? "off",
+    specialsMode: (body.specialsMode as SpecialsMode | undefined) ?? "off",
     itMaturity: body.itMaturity,
     securityCapability: body.securityCapability,
     existingPlans: Array.isArray(body.existingPlans) ? body.existingPlans : undefined,

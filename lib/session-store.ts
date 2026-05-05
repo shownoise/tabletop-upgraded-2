@@ -9,7 +9,7 @@ import { dbGetSession, dbSetSession } from "./db"
 import type {
   ExerciseConfig, GovernanceFlag, Inject, InjectType, LiveEvent, LiveEventName,
   Participant, PublicState, Role, RoleAction, RoundPhase, Scenario, SessionState,
-  SimulationMode, StreamMessage, SubmittedDecision,
+  SimulationMode, SpecialEvent, SpecialMessage, SpecialType, StreamMessage, SubmittedDecision,
   TimelineEvent, TimelineEventType, Urgency,
 } from "./types"
 
@@ -87,6 +87,8 @@ export function toParticipantState(session: SessionState): SessionState {
       isWrongRole: false,
       isIrDeviation: false,
     })),
+    // Pass through special events — participants only see what's relevant to them
+    specialEvents: session.specialEvents ?? [],
   }
 }
 
@@ -400,5 +402,420 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
   await dbSetSession(updated)
   broadcastState(updated)
   emit("decision_submitted", { participantId: input.participantId, roundIndex: input.roundIndex })
+  return { ok: true }
+}
+
+// ─── Specials ─────────────────────────────────────────────────
+
+const SPECIAL_PREFERRED_ROLES: Record<SpecialType, Role[]> = {
+  ransomware_negotiation: ["cfo", "ceo"],
+  ap_notification: ["legal", "ciso"],
+  journalist_qa: ["head_of_comms", "ceo"],
+}
+
+const CRISIS_ROLES: Role[] = ["ciso", "head_of_comms", "legal", "ceo", "cfo", "hr_lead", "ops_manager"]
+
+function assignSpecialParticipant(session: SessionState, type: SpecialType): Participant | undefined {
+  for (const role of SPECIAL_PREFERRED_ROLES[type]) {
+    const p = session.participants.find(p => p.role === role)
+    if (p) return p
+  }
+  const fallback = session.participants.find(p => p.role && CRISIS_ROLES.includes(p.role))
+  return fallback ?? session.participants[0]
+}
+
+// ─── Scripted turn definitions ────────────────────────────────
+
+interface ScriptedTurn {
+  counterpartMessage: string
+  choices: Array<{
+    id: string
+    label: string
+    quality: "bad" | "neutral" | "good"
+    scoreImpact: number
+    hint: string
+  }>
+  // optional follow-up from counterpart after participant's choice
+  followUp?: { bad?: string; neutral?: string; good?: string }
+}
+
+const SCRIPTED_TURNS: Record<SpecialType, ScriptedTurn[]> = {
+  // ── Ransomware negotiation — 4 rounds ─────────────────────
+  ransomware_negotiation: [
+    {
+      counterpartMessage:
+        "Uw systemen zijn versleuteld. Wij zijn DarkBridge Collective. Betaal 50 BTC (~€1,5M) naar wallet 1FrNQ8TQ… binnen 48 uur, anders publiceren wij al uw data: klant-PII, financiële records, e-mail van directie. Reageer hier om te onderhandelen.",
+      choices: [
+        { id: "r1_a", label: "Akkoord — wat zijn de betalingsinstructies?", quality: "bad", scoreImpact: -2,
+          hint: "Direct betalen normaliseert ransomware en biedt geen garantie op herstel. Betaling kan ook wettelijk problematisch zijn." },
+        { id: "r1_b", label: "We hebben 24 uur nodig om intern te overleggen.", quality: "neutral", scoreImpact: 0,
+          hint: "Tijd kopen kan tactisch zijn, maar zonder actief herstelplan verlies je kostbare uren." },
+        { id: "r1_c", label: "We overleggen met onze cyber-verzekeraar en IR-partner over de opties.", quality: "neutral", scoreImpact: 1,
+          hint: "Juist instinct — verzekeraar en IR-partner betrekken. Communiceer dit echter niet naar de aanvaller." },
+        { id: "r1_d", label: "We betalen geen losgeld. We werken aan herstel via back-ups en informeren politie en NCSC.", quality: "good", scoreImpact: 2,
+          hint: "Correct protocol: niet betalen, aangifte doen, herstellen via clean back-ups. Dit is de aanbeveling van NCSC en politie." },
+      ],
+      followUp: {
+        bad: "Slimme keuze. Betalingsinstructies volgen. Ontsleuteling begint na bevestigde transactie. Betrek geen justitie — wij monitoren uw communicatie.",
+        neutral: "24 uur genoteerd. De klok loopt. Over 12 uur publiceren wij een sample als bewijs van onze capaciteit. Denk goed na.",
+        good: "Uw back-upsystemen zijn 72 uur geleden al uitgeschakeld. U heeft niets om op terug te vallen. Heroverweeg uw positie.",
+      },
+    },
+    {
+      counterpartMessage:
+        "De tijd tikt. Wij hebben 500 klantrecords gepubliceerd op ons leakplatform als bewijs. Uw IT-team probeert herstel — maar uw primaire back-upsystemen zijn offline. Wij kenden uw infrastructuur al. Definitief bod: 25 BTC binnen 6 uur.",
+      choices: [
+        { id: "r2_a", label: "25 BTC is acceptabel. Stuur de betalingsinstructies.", quality: "bad", scoreImpact: -2,
+          hint: "Betalen na escalatie beloont de drukstrategie. Er is geen garantie dat data gewist wordt na betaling." },
+        { id: "r2_b", label: "We onderzoeken onze juridische en technische opties.", quality: "neutral", scoreImpact: 0,
+          hint: "Onderzoek doen is goed, maar communiceer dit standpunt niet naar de aanvaller — het geeft ruimte voor verdere druk." },
+        { id: "r2_c", label: "We overleggen met onze cyber-verzekeraar over de haalbaarheid van betaling.", quality: "neutral", scoreImpact: -1,
+          hint: "Betaling overwegen signaleert zwakte. Verzekeraars raden ook steeds vaker af. Gebruik de tijd voor herstel." },
+        { id: "r2_d", label: "We doen aangifte bij politie en NCSC en werken met onze IR-partner. We betalen niet.", quality: "good", scoreImpact: 2,
+          hint: "Juiste escalatie. Law enforcement inschakelen, NCSC informeren en IR-partner activeren is het aanbevolen protocol." },
+      ],
+      followUp: {
+        bad: "Betaling bevestigd. Decryptiesleutel is verstuurd. Tip: zwijg over deze transactie — dat is in uw eigen belang.",
+        neutral: "Opties onderzoeken kost tijd die u niet heeft. De teller staat op 5 uur. Elke minuut kost u meer.",
+        good: "Justitie kan u niet op tijd helpen. Uw data staat al verspreid over meerdere servers. Dit is geen bluf. Laatste waarschuwing.",
+      },
+    },
+    {
+      counterpartMessage:
+        "Uw back-upherstel is mislukt — wij hadden de herstelsystemen al geïnfecteerd. Uw IT-team weet het nu ook. Wij zijn bereid tot een finale schikking: 15 BTC als goodwillaanbod. Dit is onze laatste concessie. U heeft 3 uur.",
+      choices: [
+        { id: "r3_a", label: "15 BTC is acceptabel als daarmee de zaak gesloten is.", quality: "bad", scoreImpact: -2,
+          hint: "Late betaling na meerdere rondes is het slechtste resultaat — aanvallers zijn beloond, data blijft mogelijk alsnog uitlekken." },
+        { id: "r3_b", label: "We onderzoeken of gedeeltelijke betaling de publicatie stopt.", quality: "neutral", scoreImpact: -1,
+          hint: "Gedeeltelijke betaling geeft geen garanties. Aanvallers kunnen altijd claimen 'er is nog meer data' en opnieuw dreigen." },
+        { id: "r3_c", label: "We weigeren betaling en focussen op schadebeperking en klantcommunicatie.", quality: "neutral", scoreImpact: 1,
+          hint: "Correct standpunt. Klantcommunicatie en AP-melding zijn nu de prioriteit." },
+        { id: "r3_d", label: "We betalen niet. We activeren ons crisisplan, informeren klanten en werken aan forensisch bewijs voor aangifte.", quality: "good", scoreImpact: 2,
+          hint: "Uitstekend. Crisisplan activeren, klanten proactief informeren en forensisch bewijs verzamelen voor aangifte is de professionele respons." },
+      ],
+      followUp: {
+        bad: "Uitstekend. Betaling ontvangen. Uw goodwill zal niet vergeten worden — tot de volgende keer.",
+        neutral: "Er is geen 'gedeeltelijke stop'. Betaal volledig of niet. De klok loopt.",
+        good: "Tevergeefs. De data is al bij meerdere partijen. Maar uw klanten zullen uw transparantie waarderen. Tot de volgende keer.",
+      },
+    },
+    {
+      counterpartMessage:
+        "Finale boodschap: wij beginnen over 2 uur met volledige publicatie op drie leakplatforms tegelijk. Geen wet, geen justitie, geen NCSC kan een gedistribueerde release tegenhouden. Uw keuze — 25 BTC nu, of uw reputatie morgen.",
+      choices: [
+        { id: "r4_a", label: "Oké — we gaan betalen. Stuur de betalingslink.", quality: "bad", scoreImpact: -2,
+          hint: "Betalen op het absolute laatste moment is het slechtste eindresultaat — beloont criminelen terwijl data mogelijk al gelekt is." },
+        { id: "r4_b", label: "We onderzoeken nog of een noodbetalingsregeling via verzekeraar mogelijk is.", quality: "neutral", scoreImpact: -1,
+          hint: "Op dit punt is betaling in overweging nemen een signaal van falend crisismanagement." },
+        { id: "r4_c", label: "We betalen niet. We communiceren proactief richting klanten en toezichthouders.", quality: "good", scoreImpact: 2,
+          hint: "Transparantie naar klanten en AP is de beste strategie op dit punt. Reputatieherstel via eerlijkheid is duurzamer dan betalen." },
+        { id: "r4_d", label: "We betalen niet. We stellen een persbericht op en werken nauw samen met de politie voor strafrechtelijke vervolging.", quality: "good", scoreImpact: 2,
+          hint: "Proactieve communicatie + actieve samenwerking met politie. Sterke afsluiting die aantoont dat de organisatie verantwoordelijkheid neemt." },
+      ],
+    },
+  ],
+
+  // ── Journalist Q&A — 4 rounds ─────────────────────────────
+  journalist_qa: [
+    {
+      counterpartMessage:
+        "Goedemiddag, ik ben Sanne Visser van NOS Nieuws. We hebben meerdere meldingen ontvangen van een ernstig cyberincident bij uw organisatie. Kunt u bevestigen: liggen systemen plat? Is er klantdata gelekt? Wat is uw officiële reactie?",
+      choices: [
+        { id: "j1_a", label: "We kunnen momenteel niets zeggen — geen commentaar.", quality: "bad", scoreImpact: -2,
+          hint: "Geen commentaar vergroot speculatie. NOS publiceert dan op basis van anonieme bronnen, buiten uw controle." },
+        { id: "j1_b", label: "We zijn op de hoogte van een technisch probleem en onderzoeken de oorzaak.", quality: "neutral", scoreImpact: 0,
+          hint: "Vaag maar niet schadelijk. 'Technisch probleem' nodigt uit tot doorvragen over de ernst." },
+        { id: "j1_c", label: "We ondervinden een cyberincident. Onze teams werken aan herstel. We communiceren zodra we meer weten.", quality: "good", scoreImpact: 2,
+          hint: "Correct: erken het incident, toon actie, beloof transparantie. Crisis-comms gouden regel." },
+        { id: "j1_d", label: "Er is sprake van een cyberincident. Klantdata heeft onze hoogste prioriteit. We werken nauw samen met externe experts.", quality: "good", scoreImpact: 2,
+          hint: "Sterk antwoord: erkenning + prioriteit klantdata + externe expertise. Bouwt vertrouwen op." },
+      ],
+      followUp: {
+        bad: "Geen commentaar — dat publiceren wij. Onze bronnen spreken van een grootschalig datalek. Wilt u nog iets toevoegen?",
+        neutral: "'Technisch probleem' — kunt u preciseren? Hebben klanten risico gelopen? Onze deadline is over twee uur.",
+        good: "Dank u. Vervolgvraag: hoeveel klanten zijn getroffen, en heeft u de AP al geïnformeerd conform de 72-uurs meldplicht van de AVG?",
+      },
+    },
+    {
+      counterpartMessage:
+        "Hoeveel klanten zijn getroffen? En heeft uw organisatie de Autoriteit Persoonsgegevens geïnformeerd? De AVG verplicht melding binnen 72 uur. We hebben signalen dat dit nog niet is gebeurd.",
+      choices: [
+        { id: "j2_a", label: "De omvang is nog onduidelijk en we bekijken of een AP-melding nodig is.", quality: "bad", scoreImpact: -2,
+          hint: "Fatale fout. 'Bekijken of melding nodig is' suggereert actieve non-compliance. AP-melding is verplicht bij hoog risico." },
+        { id: "j2_b", label: "We zijn in de afrondende fase van onze beoordeling en handelen conform de wet.", quality: "neutral", scoreImpact: 0,
+          hint: "Juridisch veilig maar geeft geen houvast. Journalist interpreteert dit als omzeilen van de vraag." },
+        { id: "j2_c", label: "We schatten dat circa X klanten getroffen zijn. AP-melding is gedaan binnen de wettelijke 72-uurs termijn.", quality: "good", scoreImpact: 2,
+          hint: "Concreet en compliant. Bevestiging van AP-melding toont dat de organisatie wettelijke verplichtingen serieus neemt." },
+        { id: "j2_d", label: "We kunnen het exacte aantal nog niet bevestigen. Wat we wél kunnen zeggen: de AP is geïnformeerd en wij nemen contact op met betrokkenen.", quality: "good", scoreImpact: 2,
+          hint: "Eerlijk over de onzekerheid én compliant. Proactieve klantcommunicatie noemen is een sterk signaal." },
+      ],
+      followUp: {
+        bad: "Dat klinkt zorgwekkend. Wij publiceren dat uw organisatie de AP-meldplicht mogelijk heeft geschonden.",
+        neutral: "Geen concreet antwoord. Wij schrijven: 'organisatie houdt AP-melding en omvang in beraad'.",
+        good: "Dank. Volgende vraag: we hebben een bron die stelt dat er losgeld is betaald. Kunt u dit bevestigen of ontkennen?",
+      },
+    },
+    {
+      counterpartMessage:
+        "Een anonieme bron stelt dat er losgeld is geëist — mogelijk betaald. Kunt u dit bevestigen of ontkennen? En is uw organisatie al eerder het slachtoffer geweest van een cyberincident?",
+      choices: [
+        { id: "j3_a", label: "We bevestigen noch ontkennen betalingen die gedaan zijn.", quality: "bad", scoreImpact: -2,
+          hint: "Dit is journalistisch goud voor een negatief verhaal. NOS schrijft: 'organisatie weigert ransomwarebetaling te ontkennen'." },
+        { id: "j3_b", label: "We gaan niet in op operationele details van lopend onderzoek.", quality: "neutral", scoreImpact: -1,
+          hint: "Veiliger dan bevestigen, maar wekt alsnog argwaan. Journalist leest dit als impliciete bevestiging." },
+        { id: "j3_c", label: "We bevestigen dat we geen losgeld hebben betaald. We werken met politie en NCSC aan strafrechtelijke vervolging.", quality: "good", scoreImpact: 2,
+          hint: "Duidelijk en geloofwaardig. Samenwerking met politie versterkt de boodschap." },
+        { id: "j3_d", label: "Er is geen losgeld betaald. Ons beleid is om niet te betalen. Eerdere incidenten becommentariëren we niet.", quality: "good", scoreImpact: 2,
+          hint: "Sterke ontkenning + beleid toelichten. Weigeren eerdere incidenten te bespreken is legitiem en professioneel." },
+      ],
+      followUp: {
+        bad: "Interessant. Wij publiceren: 'organisatie wil betaling niet uitsluiten'. Nog een laatste vraag.",
+        neutral: "Operationele details — begrijpelijk. Maar uw stakeholders verdienen duidelijkheid. Laatste vraag.",
+        good: "Duidelijk. Laatste vraag: wanneer verwacht u de systemen volledig hersteld te hebben, en hoe informeert u getroffen klanten?",
+      },
+    },
+    {
+      counterpartMessage:
+        "Laatste vraag voor onze deadline: wanneer zijn de systemen hersteld? Hoe worden getroffen klanten direct geïnformeerd? En wat doet uw organisatie om herhaling te voorkomen? Onze publicatie gaat in 20 minuten live.",
+      choices: [
+        { id: "j4_a", label: "We kunnen momenteel geen tijdlijn geven en verwijzen naar toekomstige communicatie.", quality: "bad", scoreImpact: -2,
+          hint: "Vaag en niet geruststellend. NOS heeft nu een verhaal van een organisatie die geen grip heeft op het incident." },
+        { id: "j4_b", label: "We verwachten herstel binnen 48-72 uur. Klanten worden per e-mail geïnformeerd.", quality: "neutral", scoreImpact: 1,
+          hint: "Geeft houvast maar is vrij minimaal. Geen preventieve maatregelen benoemen is een gemiste kans." },
+        { id: "j4_c", label: "Herstel verwachten we binnen 48 uur. Klanten worden direct geïnformeerd via e-mail én onze website. We investeren in aanvullende beveiligingsmaatregelen.", quality: "good", scoreImpact: 2,
+          hint: "Concreet, klantgericht en vooruitblikkend. Dit is het antwoord dat reputatieschade beperkt." },
+        { id: "j4_d", label: "Klanten ontvangen vandaag nog persoonlijk bericht. Herstel is in de afrondende fase. We geven volgende week een uitgebreide toelichting op onze aanpak.", quality: "good", scoreImpact: 2,
+          hint: "Proactieve klantcommunicatie + transparantie over aanpak. Sterke afsluiting die vertrouwen herstelt." },
+      ],
+    },
+  ],
+
+  ap_notification: [],
+}
+
+export async function triggerSpecial(type: SpecialType): Promise<{ ok: boolean; error?: string; special?: SpecialEvent }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+
+  const mode = session.config.specialsMode
+  if (!mode || mode === "off") return { ok: false, error: "Specials are disabled for this session." }
+
+  const assigned = assignSpecialParticipant(session, type)
+
+  const firstTurn = SCRIPTED_TURNS[type]?.[0]
+  const openingMsg: SpecialMessage | undefined = firstTurn
+    ? {
+        id: genId("sm"),
+        sender: "counterpart",
+        text: firstTurn.counterpartMessage,
+        timestamp: new Date().toISOString(),
+        choices: firstTurn.choices,
+      }
+    : undefined
+
+  const special: SpecialEvent = {
+    id: genId("sp"),
+    type,
+    mode: mode as "static" | "ai",
+    status: "active",
+    assignedParticipantId: assigned?.id,
+    assignedParticipantName: assigned?.name,
+    assignedRole: assigned?.role,
+    triggeredAt: Date.now(),
+    messages: openingMsg ? [openingMsg] : [],
+    totalScore: 0,
+    currentTurnIndex: 0,
+  }
+
+  let updated: SessionState = {
+    ...session,
+    specialEvents: [...(session.specialEvents ?? []), special],
+  }
+  updated = pushTimeline(updated, "special_triggered", { specialId: special.id, type, assignedTo: assigned?.name })
+  await dbSetSession(updated)
+  broadcastState(updated)
+  emit("special_triggered", { special })
+  return { ok: true, special }
+}
+
+// Scripted mode: participant picks a choice
+export async function submitSpecialChoice(input: {
+  specialId: string
+  participantId: string
+  choiceId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+
+  const specialIdx = (session.specialEvents ?? []).findIndex(s => s.id === input.specialId)
+  if (specialIdx === -1) return { ok: false, error: "Special event not found." }
+
+  const special = session.specialEvents![specialIdx]
+  if (special.status === "completed") return { ok: false, error: "This event is already completed." }
+  if (special.assignedParticipantId !== input.participantId) return { ok: false, error: "Not assigned to you." }
+
+  const turnIdx = special.currentTurnIndex ?? 0
+  const turns = SCRIPTED_TURNS[special.type]
+  const turn = turns[turnIdx]
+  if (!turn) return { ok: false, error: "No current turn." }
+
+  const choice = turn.choices.find(c => c.id === input.choiceId)
+  if (!choice) return { ok: false, error: "Invalid choice." }
+
+  const participant = session.participants.find(p => p.id === input.participantId)
+  const newMessages: SpecialMessage[] = [...special.messages]
+
+  // Add participant message (the chosen label as text)
+  newMessages.push({
+    id: genId("sm"),
+    sender: "participant",
+    participantId: input.participantId,
+    participantName: participant?.name,
+    text: choice.label,
+    timestamp: new Date().toISOString(),
+    choiceQuality: choice.quality,
+    scoreImpact: choice.scoreImpact,
+  })
+
+  // Follow-up from counterpart if defined
+  const followUpText = turn.followUp?.[choice.quality]
+  if (followUpText) {
+    newMessages.push({
+      id: genId("sm"),
+      sender: "counterpart",
+      text: followUpText,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  const nextTurnIdx = turnIdx + 1
+  const nextTurn = turns[nextTurnIdx]
+  let isCompleted = false
+
+  // Add next turn's counterpart message (with choices)
+  if (nextTurn) {
+    newMessages.push({
+      id: genId("sm"),
+      sender: "counterpart",
+      text: nextTurn.counterpartMessage,
+      timestamp: new Date().toISOString(),
+      choices: nextTurn.choices,
+    })
+  } else {
+    // No more turns — event done
+    isCompleted = true
+  }
+
+  const updatedSpecials = [...session.specialEvents!]
+  updatedSpecials[specialIdx] = {
+    ...special,
+    messages: newMessages,
+    totalScore: (special.totalScore ?? 0) + choice.scoreImpact,
+    currentTurnIndex: nextTurnIdx,
+    status: isCompleted ? "completed" : "active",
+    completedAt: isCompleted ? Date.now() : undefined,
+  }
+
+  let updated: SessionState = { ...session, specialEvents: updatedSpecials }
+  if (isCompleted) {
+    updated = pushTimeline(updated, "special_completed", { specialId: input.specialId, type: special.type })
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  emit("special_message", { specialId: input.specialId, participantId: input.participantId })
+  if (isCompleted) emit("special_completed", { specialId: input.specialId, type: special.type })
+  return { ok: true }
+}
+
+// AI mode: participant types free text, AI responds + evaluation stored
+export async function submitSpecialMessageWithAiResponse(input: {
+  specialId: string
+  participantId: string
+  text: string
+  aiResponse: string
+  evaluation?: { quality: "bad" | "neutral" | "good"; scoreImpact: number; hint: string }
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+
+  const specialIdx = (session.specialEvents ?? []).findIndex(s => s.id === input.specialId)
+  if (specialIdx === -1) return { ok: false, error: "Special event not found." }
+
+  const special = session.specialEvents![specialIdx]
+  if (special.status === "completed") return { ok: false, error: "This event is already completed." }
+
+  const participant = session.participants.find(p => p.id === input.participantId)
+  const updatedSpecials = [...session.specialEvents!]
+  updatedSpecials[specialIdx] = {
+    ...special,
+    messages: [
+      ...special.messages,
+      {
+        id: genId("sm"),
+        sender: "participant",
+        participantId: input.participantId,
+        participantName: participant?.name,
+        text: input.text.trim(),
+        timestamp: new Date().toISOString(),
+        choiceQuality: input.evaluation?.quality,
+        scoreImpact: input.evaluation?.scoreImpact,
+        aiEvaluationHint: input.evaluation?.hint,
+      },
+      {
+        id: genId("sm"),
+        sender: "counterpart",
+        text: input.aiResponse,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+    totalScore: (special.totalScore ?? 0) + (input.evaluation?.scoreImpact ?? 0),
+  }
+
+  const updated: SessionState = { ...session, specialEvents: updatedSpecials }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  emit("special_message", { specialId: input.specialId, participantId: input.participantId })
+  return { ok: true }
+}
+
+export async function submitApForm(input: {
+  specialId: string
+  participantId: string
+  formData: Record<string, string>
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+
+  const specialIdx = (session.specialEvents ?? []).findIndex(s => s.id === input.specialId)
+  if (specialIdx === -1) return { ok: false, error: "Special event not found." }
+
+  const special = session.specialEvents![specialIdx]
+  const updatedSpecials = [...session.specialEvents!]
+  updatedSpecials[specialIdx] = { ...special, formData: input.formData, status: "completed", completedAt: Date.now() }
+
+  let updated: SessionState = { ...session, specialEvents: updatedSpecials }
+  updated = pushTimeline(updated, "special_completed", { specialId: input.specialId, type: special.type })
+  await dbSetSession(updated)
+  broadcastState(updated)
+  emit("special_completed", { specialId: input.specialId, type: special.type })
+  return { ok: true }
+}
+
+export async function completeSpecial(specialId: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+
+  const specialIdx = (session.specialEvents ?? []).findIndex(s => s.id === specialId)
+  if (specialIdx === -1) return { ok: false, error: "Special event not found." }
+
+  const special = session.specialEvents![specialIdx]
+  const updatedSpecials = [...session.specialEvents!]
+  updatedSpecials[specialIdx] = { ...special, status: "completed", completedAt: Date.now() }
+
+  let updated: SessionState = { ...session, specialEvents: updatedSpecials }
+  updated = pushTimeline(updated, "special_completed", { specialId, type: special.type })
+  await dbSetSession(updated)
+  broadcastState(updated)
+  emit("special_completed", { specialId, type: special.type })
   return { ok: true }
 }
