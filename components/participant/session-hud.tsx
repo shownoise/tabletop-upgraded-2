@@ -7,6 +7,7 @@ import { ROLE_META } from "@/lib/types"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 const ESCALATION_LABELS = ["normal", "elevated", "high", "critical"] as const
 const ESCALATION_CLASSES = [
@@ -108,12 +109,12 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
           )}
 
           {/* Session timer */}
-          {session.createdAt && (
+          {session.startedAt && (
             <div className="hidden items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 md:flex">
               <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                 {tr(lang, "sessionTimer")}
               </span>
-              <SessionTimer startedAt={session.createdAt} />
+              <SessionTimer startedAt={session.startedAt} />
             </div>
           )}
 
@@ -132,6 +133,7 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
           </div>
 
           <LangToggle lang={lang} setLang={setLang} />
+          <ThemeToggle />
         </div>
       </div>
 

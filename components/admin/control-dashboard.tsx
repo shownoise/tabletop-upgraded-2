@@ -18,6 +18,7 @@ import { SpecialsPanel } from "./specials-panel"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
+import { ThemeToggle } from "@/components/theme-toggle"
 import type { RoundPhase } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 
@@ -169,6 +170,7 @@ export function ControlDashboard() {
               {connected ? <Wifi className="size-3 text-primary" /> : <WifiOff className="size-3 text-destructive" />}
             </div>
             <LangToggle lang={lang} setLang={setLang} />
+            <ThemeToggle />
             {/* Extra nav buttons */}
             <Link href="/admin/present" className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors" title="Presentation mode">
               <Monitor className="size-3.5" />
@@ -204,7 +206,7 @@ export function ControlDashboard() {
           {/* Session timer */}
           <div className="flex flex-col gap-1.5">
             <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "sessionTimer")}</span>
-            {isActive || isEnded ? <SessionClock startedAt={session.createdAt} /> : <span className="font-mono text-2xl font-bold text-muted-foreground">—</span>}
+            {isActive || isEnded ? <SessionClock startedAt={session.startedAt ?? session.createdAt} /> : <span className="font-mono text-2xl font-bold text-muted-foreground">—</span>}
             <span className="text-xs text-muted-foreground">{isLobby ? tr(lang, "waitingToStartAdmin") : isActive ? tr(lang, "roundProgress", { n: String(currentIndex + 1), total: String(totalRounds) }) : tr(lang, "exerciseComplete")}</span>
           </div>
 

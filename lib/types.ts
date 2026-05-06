@@ -389,6 +389,7 @@ export interface SessionState {
   pushedInjects: PushedInject[]
   timeline: TimelineEvent[]
   createdAt: number
+  startedAt?: number
   roundStartedAt?: number
   // New fields — all optional for backward compat
   mode?: SimulationMode

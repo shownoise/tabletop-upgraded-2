@@ -295,8 +295,8 @@ export function PlayView() {
 
   useEffect(() => {
     try {
-      setName(window.sessionStorage.getItem(NAME_KEY))
-      setParticipantId(window.sessionStorage.getItem(ID_KEY))
+      setName(window.localStorage.getItem(NAME_KEY))
+      setParticipantId(window.localStorage.getItem(ID_KEY))
     } catch {}
     try {
       const stored = localStorage.getItem(FEEDBACK_KEY)

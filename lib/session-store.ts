@@ -181,7 +181,7 @@ function pushTimeline(session: SessionState, type: TimelineEventType, data: Reco
 export interface JoinResult { ok: true; participantId: string; sessionId: string }
 export interface JoinError { ok: false; error: string }
 
-export async function joinSession(input: { name: string; joinCode: string; role?: Role }): Promise<JoinResult | JoinError> {
+export async function joinSession(input: { name: string; joinCode: string; role?: Role; existingParticipantId?: string }): Promise<JoinResult | JoinError> {
   const name = input.name.trim()
   const code = input.joinCode.trim().toUpperCase()
   if (!name) return { ok: false, error: "Name is required." }
@@ -189,6 +189,14 @@ export async function joinSession(input: { name: string; joinCode: string; role?
   const session = await dbGetSession()
   if (!session) return { ok: false, error: "No active session. Ask the facilitator to create one." }
   if (session.joinCode.toUpperCase() !== code) return { ok: false, error: "Invalid join code." }
+
+  // Reconnect existing participant — avoids duplicates on refresh / back navigation
+  if (input.existingParticipantId) {
+    const existing = session.participants.find(p => p.id === input.existingParticipantId)
+    if (existing) {
+      return { ok: true, participantId: existing.id, sessionId: session.id }
+    }
+  }
 
   const participant: Participant = { id: genId("p"), name, joinedAt: Date.now(), role: input.role }
   let updated = { ...session, participants: [...session.participants, participant] }
@@ -203,7 +211,8 @@ export async function joinSession(input: { name: string; joinCode: string; role?
 export async function startSession(): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(s => {
     if (s.scenario.rounds.length === 0) return null
-    let updated: SessionState = { ...s, status: "active" as const, currentRound: 0, roundStartedAt: Date.now() }
+    const now = Date.now()
+    let updated: SessionState = { ...s, status: "active" as const, currentRound: 0, roundStartedAt: now, startedAt: now }
     updated = pushTimeline(updated, "session_started", { roundIndex: 0 })
     return updated
   })

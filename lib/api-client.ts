@@ -27,7 +27,7 @@ async function get<T = unknown>(url: string): Promise<T> {
 export const api = {
   createSession: (config: ExerciseConfig & { mode?: SimulationMode }) =>
     post<{ ok: true; sessionId: string; joinCode: string; aiGenerated?: boolean }>("/api/session/create", config),
-  joinSession: (input: { name: string; joinCode: string; role?: Role }) =>
+  joinSession: (input: { name: string; joinCode: string; role?: Role; existingParticipantId?: string }) =>
     post<{ ok: true; participantId: string; sessionId: string }>("/api/session/join", input),
   startSession: () => post<{ ok: true }>("/api/session/start"),
   nextRound: () => post<{ ok: true }>("/api/session/next-round"),

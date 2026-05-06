@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { api } from "@/lib/api-client"
 
-const NAME_KEY = "ctt:name"
-const ID_KEY = "ctt:participantId"
+const NAME_KEY  = "ctt:name"
+const ID_KEY    = "ctt:participantId"
+const CODE_KEY  = "ctt:joinCode"
 
 export function JoinForm() {
   const router = useRouter()
@@ -17,6 +18,16 @@ export function JoinForm() {
   const [code, setCode] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Pre-fill from localStorage on mount
+  useState(() => {
+    try {
+      const storedName = localStorage.getItem(NAME_KEY)
+      const storedCode = localStorage.getItem(CODE_KEY)
+      if (storedName) setName(storedName)
+      if (storedCode) setCode(storedCode)
+    } catch { /* noop */ }
+  })
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -31,13 +42,19 @@ export function JoinForm() {
     }
     setSubmitting(true)
     try {
+      // Send existing ID if available — server returns same participant instead of creating a new one
+      let existingParticipantId: string | undefined
+      try { existingParticipantId = localStorage.getItem(ID_KEY) ?? undefined } catch { /* noop */ }
+
       const res = await api.joinSession({
         name: name.trim(),
         joinCode: code.trim().toUpperCase(),
+        existingParticipantId,
       })
       try {
-        window.sessionStorage.setItem(NAME_KEY, name.trim())
-        window.sessionStorage.setItem(ID_KEY, res.participantId)
+        localStorage.setItem(NAME_KEY, name.trim())
+        localStorage.setItem(ID_KEY, res.participantId)
+        localStorage.setItem(CODE_KEY, code.trim().toUpperCase())
       } catch { /* noop */ }
       router.push("/play")
     } catch (err) {
