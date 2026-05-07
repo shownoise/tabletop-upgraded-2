@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowLeft, ShieldAlert } from "lucide-react"
 import { JoinForm } from "@/components/participant/join-form"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function JoinPage() {
   return (
@@ -17,6 +18,7 @@ export default function JoinPage() {
             Home
           </Link>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <ShieldAlert className="size-4 text-primary" />
             <span className="font-mono text-sm tracking-wider">PARTICIPANT_JOIN</span>
           </div>

@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowLeft, ShieldAlert } from "lucide-react"
 import { SetupForm } from "@/components/admin/setup-form"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function AdminSetupPage() {
   return (
@@ -15,6 +16,7 @@ export default function AdminSetupPage() {
             Home
           </Link>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <ShieldAlert className="size-4 text-primary" />
             <span className="font-mono text-sm tracking-wider">FACILITATOR_SETUP</span>
           </div>

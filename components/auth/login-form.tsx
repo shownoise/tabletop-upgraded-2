@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ShieldAlert, Loader2, Eye, EyeOff } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export function LoginForm() {
   const router = useRouter()
@@ -46,6 +47,9 @@ export function LoginForm() {
       {/* Grid bg */}
       <div className="grid-bg pointer-events-none absolute inset-0 opacity-20" aria-hidden />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" aria-hidden />
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle />
+      </div>
 
       <div className="relative z-10 w-full max-w-sm flex flex-col gap-8">
         {/* Logo */}

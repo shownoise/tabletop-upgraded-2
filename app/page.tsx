@@ -5,6 +5,7 @@ import { ArrowRight, ShieldAlert, Library } from "lucide-react"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function LandingPage() {
   const [lang, setLang] = useLang()
@@ -22,6 +23,7 @@ export default function LandingPage() {
           <span className="font-mono text-sm tracking-wider text-foreground">CYBER_TABLETOP</span>
         </div>
         <div className="flex items-center gap-3">
+          <ThemeToggle />
           <LangToggle lang={lang} setLang={setLang} />
           <Link href="/templates" className="flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
             <Library className="size-3.5" /> Templates
