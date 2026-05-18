@@ -79,3 +79,17 @@ When the user signals they are done (e.g. "bye", "done", "wrap up", "end session
 - **Next Steps**: bullet list, max 3 items
 
 Keep `CONTEXT.md` under 20 lines total. Do NOT summarize the full conversation — only what's needed to resume next session.
+
+## Project Rules (load before exploring)
+
+Before reading any project file, consult these rule files — they often make file reads unnecessary:
+
+- **`.claude/rules/codebase-map.md`** — exact file locations for every task, search strategy, key invariants
+- **`.claude/rules/patterns.md`** — anti-patterns, type patterns, component/API conventions, state flow
+
+## Custom Commands
+
+- `/add-scenario [type]` — add a new scenario type to the template generator
+- `/add-role [id / label]` — add a new participant role
+- `/check` — run TypeScript check and filter pre-existing errors
+- `/deploy` — type-check then deploy to Vercel preview
