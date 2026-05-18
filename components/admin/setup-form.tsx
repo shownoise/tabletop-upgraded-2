@@ -13,10 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ROLE_META } from "@/lib/types"
 import type {
   ExerciseConfig, SimulationMode, AiIntensity, SpecialsMode,
   ITMaturity, SecurityCapability, TeamStructure,
-  ExerciseGoal, DifficultyLevel,
+  ExerciseGoal, DifficultyLevel, Role,
 } from "@/lib/types"
 
 const sectors = [
@@ -29,6 +30,9 @@ const scenarios = [
   "Supply Chain Compromise", "DDoS / Extortion", "Cloud Account Takeover",
 ]
 const durations = ["60 minutes", "90 minutes", "2 hours", "Half day"]
+
+const ALL_ROLES = Object.keys(ROLE_META) as Role[]
+const CRISIS_ROLES = ALL_ROLES.filter(r => ROLE_META[r].team === "crisis_management")
 
 const defaults: ExerciseConfig = {
   sector: "Financial Services",
@@ -47,6 +51,7 @@ const defaults: ExerciseConfig = {
   timerPerRound: 15,
   difficulty: "intermediate",
   existingPlans: [],
+  selectedRoles: CRISIS_ROLES,
 }
 
 const IT_MATURITY_OPTIONS: { id: ITMaturity; label: string }[] = [
@@ -89,6 +94,22 @@ export function SetupForm() {
 
   function update<K extends keyof ExerciseConfig>(key: K, value: ExerciseConfig[K]) {
     setConfig((c) => ({ ...c, [key]: value }))
+  }
+
+  function handleTeamStructureChange(ts: TeamStructure) {
+    update("teamStructure", ts)
+    if (ts === "crisis_only") update("selectedRoles", CRISIS_ROLES)
+    else if (ts === "it_only") update("selectedRoles", ALL_ROLES.filter(r => ROLE_META[r].team === "technical_it"))
+    else update("selectedRoles", ALL_ROLES)
+  }
+
+  function toggleRole(role: Role) {
+    const current = config.selectedRoles ?? []
+    if (current.includes(role)) {
+      update("selectedRoles", current.filter(r => r !== role))
+    } else {
+      update("selectedRoles", [...current, role])
+    }
   }
 
   function togglePlan(planId: string) {
@@ -249,11 +270,56 @@ export function SetupForm() {
               <ToggleButton
                 key={opt.id}
                 active={config.teamStructure === opt.id}
-                onClick={() => !opt.disabled && update("teamStructure", opt.id)}
+                onClick={() => !opt.disabled && handleTeamStructureChange(opt.id)}
                 label={opt.label}
                 disabled={opt.disabled}
               />
             ))}
+          </div>
+        </FieldRow>
+
+        <FieldRow label="Participating roles" hint="Select the specific roles that will be in this exercise — used to tailor AI injects and decisions">
+          <div className="flex flex-col gap-3">
+            {(["crisis_management", "technical_it"] as const).map(team => {
+              const teamRoles = ALL_ROLES.filter(r => ROLE_META[r].team === team)
+              const teamDisabled = config.teamStructure === "crisis_only" && team === "technical_it"
+              return (
+                <div key={team} className="flex flex-col gap-1.5">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {team === "crisis_management" ? "Crisis management" : "IT / Technical"}
+                    {teamDisabled && <span className="ml-2 opacity-50">(inactive)</span>}
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {teamRoles.map(role => {
+                      const meta = ROLE_META[role]
+                      const checked = (config.selectedRoles ?? []).includes(role)
+                      return (
+                        <button
+                          key={role}
+                          type="button"
+                          onClick={() => !teamDisabled && toggleRole(role)}
+                          disabled={teamDisabled}
+                          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-all ${
+                            teamDisabled
+                              ? "cursor-not-allowed border-border bg-card/30 text-muted-foreground/30 opacity-40"
+                              : checked
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-card hover:border-primary/40 text-foreground"
+                          }`}
+                        >
+                          <span className={`size-4 rounded border flex items-center justify-center shrink-0 ${
+                            teamDisabled ? "border-border/30" : checked ? "border-primary bg-primary" : "border-border"
+                          }`}>
+                            {checked && !teamDisabled && <span className="text-primary-foreground text-[9px] font-bold">✓</span>}
+                          </span>
+                          <span className="font-mono text-xs truncate">{meta.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </FieldRow>
 

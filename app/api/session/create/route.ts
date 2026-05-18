@@ -1,7 +1,18 @@
 import { NextResponse } from "next/server"
-import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario, SpecialsMode, RoleAction } from "@/lib/types"
+import { ROLE_META } from "@/lib/types"
+import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario, SpecialsMode, RoleAction, Role } from "@/lib/types"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
+
+function buildRoleContext(config: ExerciseConfig): string {
+  const roles = config.selectedRoles
+  if (!roles?.length) return ""
+  const lines = roles.map(r => {
+    const m = ROLE_META[r]
+    return `- ${m.label} (${r}): ${m.description}\n  Authorities: ${m.authorities.join("; ")}`
+  })
+  return `\nRoles participating in this exercise (ONLY generate roleActions and injects for these roles):\n${lines.join("\n")}\nCRITICAL: In every roleActions entry, allowedRoles must ONLY contain values from this list: [${roles.join(", ")}]. Never include roles not in this list. Generate injects specifically relevant to what these roles need to act on.`
+}
 
 function buildContext(c: ExerciseConfig): string {
   const parts = [
@@ -21,6 +32,127 @@ function buildContext(c: ExerciseConfig): string {
   return parts.join(', ')
 }
 
+function buildScenarioDirectives(c: ExerciseConfig, mode?: string): string {
+  const d: string[] = []
+
+  // Simulation mode
+  if (mode === "event") d.push(
+    "SIMULATION MODE — EVENT: This is a competitive multi-team event. Keep the scenario fast-paced and decision-focused. Each round should have clear scoring moments. Inject urgency from the start."
+  )
+  else d.push(
+    "SIMULATION MODE — TRAINING: This is a learning-focused exercise. Facilitator notes should be rich and educational. The scenario should expose process gaps and decision-making weaknesses, not just test speed. Include hints that help the facilitator draw out lessons."
+  )
+
+  // Crown jewels and critical systems — must appear by name in injects
+  if (c.crownJewels) d.push(
+    `CROWN JEWELS: The most sensitive assets are: "${c.crownJewels}". Reference these specifically by name in inject content — do NOT use generic placeholders like 'sensitive data' or 'important files'. When the attacker targets or exfiltrates data, name these assets explicitly.`
+  )
+  if (c.criticalSystems) d.push(
+    `CRITICAL SYSTEMS: The systems whose disruption materially affects operations are: "${c.criticalSystems}". Reference these by name in injects about outages, encryption, performance degradation, or recovery. Do NOT use generic 'the systems' — name them.`
+  )
+
+  // Duration / pacing
+  const durationPacing: Record<string, string> = {
+    "60 minutes": "DURATION — 60 MINUTES: This is a short exercise. Keep injects concise (2–3 sentences max). Each round should have 3 injects max and 3–4 roleActions. Facilitator notes should be brief bullet points, not paragraphs.",
+    "90 minutes": "DURATION — 90 MINUTES: Standard exercise pace. 3–4 injects per round, 4–5 roleActions per round. Facilitator notes should cover the key questions and 2–3 red flags.",
+    "2 hours": "DURATION — 2 HOURS: Extended exercise. Can support 4–5 injects per round and richer roleActions. Facilitator notes should include discussion questions for debrief segments between rounds.",
+    "Half day": "DURATION — HALF DAY: Full workshop format. Each round should support extended team discussion. Include rich facilitator notes with discussion goals, expected decisions, and debrief questions. Injects can be more detailed and nuanced.",
+  }
+  if (c.duration && durationPacing[c.duration]) d.push(durationPacing[c.duration])
+
+  // Difficulty
+  if (c.difficulty === "beginner") d.push(
+    "DIFFICULTY — BEGINNER: Use gradual escalation with clear, unambiguous signals in round 1. Each round should have one obviously correct decision and one obviously wrong one. Avoid information overload — max 3 injects per round. Facilitator notes should be encouraging and explanatory. Time pressure should be low in early rounds."
+  )
+  else if (c.difficulty === "intermediate") d.push(
+    "DIFFICULTY — INTERMEDIATE: Mix clear and ambiguous signals. Include at least one round where the 'right' decision is debatable and the consequence of each option has real trade-offs. 3–4 injects per round. Moderate time pressure from round 2 onwards."
+  )
+  else if (c.difficulty === "advanced") d.push(
+    "DIFFICULTY — ADVANCED: Use contradictory or misleading signals in round 1. Multiple crises should run simultaneously by round 2. Decisions should have significant irreversible consequences with no single obvious right answer. Include pressure from multiple external stakeholders at once. 4–5 injects per round. Red flags in facilitator notes should cover realistic overconfident team responses."
+  )
+
+  // Exercise goal
+  const goalDirectives: Record<string, string> = {
+    nis2_readiness: "EXERCISE GOAL — NIS2 READINESS: Set nis2Relevant:true on every inject that triggers an NIS2 obligation. Include explicit NIS2 notification timeline decisions in at least 2 rounds (24h early warning to NCSC/competent authority, 72h notification, 30-day final report). At least one round should test whether the team knows which authority to notify and what must be included. Reference the NIS2 threshold test (significant incident) explicitly.",
+    board_decisions: "EXERCISE GOAL — BOARD DECISION-MAKING: Every round must have at least one decision that requires CEO or CFO authority (financial threshold, public disclosure, legal exposure). Include board-level pressure in at least 2 rounds — either a direct board member inquiry inject, or a decision that explicitly requires board sign-off. The scenario climax should be a structured board recommendation.",
+    crisis_comms: "EXERCISE GOAL — CRISIS COMMUNICATIONS: Every round must have a communication-facing pressure point (media, social media, customer, internal staff). Include a journalist inquiry in round 2 at the latest. Head of Communications must have specific decisions in every round. Round 3 or 4 should include a social media or press scenario that forces a real-time response decision.",
+    ransomware_tabletop: "EXERCISE GOAL — RANSOMWARE TABLETOP: Round 1 = detection and initial scoping. Round 2 = active encryption / containment decision. Round 3 = ransom demand received, communication crisis, regulatory clock. Round 4 = pay vs recover decision with known backup status. Each round must test a distinct phase of the ransomware playbook.",
+    technical_containment: "EXERCISE GOAL — TECHNICAL CONTAINMENT: Technical roles (it_manager, system_admin, ciso) must have the most critical decisions in every round. Include explicit choices about: network isolation, access revocation, forensic preservation vs business continuity, and logging chain of custody. Non-technical roles should be in a supporting/decision-approval role rather than leading.",
+    supplier_incident: "EXERCISE GOAL — SUPPLIER INCIDENT: The scenario must involve a third-party supplier as the primary attack vector or critical dependency. Include supplier notification, SLA/contract review, and alternative supplier assessment as decision points. At least one inject should come from the affected supplier. Legal liability towards the supplier and downstream customers should both be tested.",
+    data_breach: "EXERCISE GOAL — DATA BREACH: Every round must reference the personal data at risk (categories, number of individuals). Include GDPR Art.33 (72h AP notification clock), Art.34 (individual notification assessment), and at least one decision about whether the breach meets the 'high risk to individuals' threshold. Data subject rights requests should appear in at least one inject.",
+  }
+  if (c.exerciseGoal && goalDirectives[c.exerciseGoal]) d.push(goalDirectives[c.exerciseGoal])
+
+  // Security capability — affects what detection sources are realistic
+  const capDirectives: Record<string, string> = {
+    no_soc: "SECURITY CAPABILITY — NO SOC: This organisation has NO monitoring tools, no SIEM, no EDR. Do NOT generate any SIEM alerts or automated detection injects. Detection in round 1 MUST come from: a user complaint, a client tip-off, an external party notification, or accidental discovery. The absence of monitoring is itself a theme — facilitator notes should reference it as a gap.",
+    small_it: "SECURITY CAPABILITY — SMALL IT TEAM (1–3 people): Technical alerts should come from basic tools (firewall log, antivirus, helpdesk ticket). The IT team is reactive, not proactive. Include at least one inject where the IT team is overwhelmed or slow to respond due to capacity constraints.",
+    outsourced_it: "SECURITY CAPABILITY — OUTSOURCED IT: All technical actions go through an external MSP. Injects from IT should reference the MSP. There is no internal IT expertise. Include realistic friction: the MSP has their own escalation process, their response time adds 30–60 minutes to any technical action, and they may have limited context on business priorities.",
+    it_mssp: "SECURITY CAPABILITY — IT + MSSP: The MSSP provides monitoring and sends alerts. Include MSSP-sourced injects (they notice the anomaly before internal IT does in round 1). The MSSP is a key actor but decisions and authorisations rest with the internal team. Include an MSSP escalation call or report in round 1.",
+    it_ir_retainer: "SECURITY CAPABILITY — IT + IR RETAINER: The organisation has a contracted IR firm. Reference the IR retainer from round 2 onwards — they join the call, provide forensic analysis, and give recommendations. Their input should feature in facilitator notes (e.g. 'IR retainer recommends X'). The internal team's role is decision-making and stakeholder management, not forensics.",
+  }
+  if (c.securityCapability && capDirectives[c.securityCapability]) d.push(capDirectives[c.securityCapability])
+
+  // Sector context
+  const sectorDirectives: Record<string, string> = {
+    "Financial Services": "SECTOR — FINANCIAL SERVICES: Reference relevant Dutch/EU regulators (DNB, AFM) where appropriate. Crown jewels are transaction data, client portfolios, and payment infrastructure. PSD2 open banking obligations may be relevant. Regulatory reporting obligations are strict and time-bound. Customer trust and regulatory relationship are primary reputation risks.",
+    "Healthcare": "SECTOR — HEALTHCARE: Reference patient safety implications explicitly — delayed treatments, cancelled procedures, unavailable medication records. Electronic Patient Records (EPD/EHR) are the primary crown jewel. Both AVG/GDPR and NEN 7510 apply. The IGJ (healthcare regulator) is a relevant authority. Clinical staff disruption should feature in at least one inject.",
+    "Energy & Utilities": "SECTOR — ENERGY & UTILITIES: Reference OT/SCADA implications if operational systems are affected. This organisation likely qualifies as an essential entity under NIS2 — notification obligations are more stringent. Include potential physical operational impact (production outage, grid instability, supply disruption) in at least one round.",
+    "Manufacturing": "SECTOR — MANUFACTURING: Include production line / OT impact — downtime costs per hour should be referenced. Crown jewels include production designs, client order data, and supply chain integrations. At least one inject should reference a downstream client or supplier impacted by the disruption.",
+    "Retail & E-commerce": "SECTOR — RETAIL & E-COMMERCE: Reference PCI-DSS obligations if payment data is involved. Customer data and order history are crown jewels. Reputation damage and customer trust are the primary business risk. Include a customer-facing impact (website down, checkout failures, fraudulent orders) in at least one round.",
+    "Public Sector": "SECTOR — PUBLIC SECTOR: Reference BIO (Baseline Informatiebeveiliging Overheid) and DigiD implications if applicable. Public accountability and political exposure are higher than private sector — include a media/political pressure inject. The NCSC and relevant sector CERT are notification targets.",
+    "Technology / SaaS": "SECTOR — TECHNOLOGY / SAAS: The organisation's customers may be affected if their platform is compromised (multi-tenant breach). Include downstream customer impact in at least one inject. Contractual SLA obligations and data processor responsibilities under GDPR are key themes.",
+    "Transportation": "SECTOR — TRANSPORTATION: Operational continuity is paramount — reference disruption to fleet, routing, or logistics systems. Include a physical operational impact (delayed shipments, grounded vehicles, route data unavailable) in at least one round. Customer and partner SLA breaches should feature.",
+  }
+  if (c.sector && sectorDirectives[c.sector]) d.push(sectorDirectives[c.sector])
+
+  // Company size
+  const sizeDirectives: Record<string, string> = {
+    "100–250": "COMPANY SIZE — SMALL (100–250 employees): Resources are limited. The CEO likely doubles as a de facto decision-maker on everything. No dedicated crisis comms team — the CEO or HR Lead handles communications. Budget constraints are a real factor in decisions (e.g. IR retainer cost, ransom payment, forensics). Reflect the leanness in the scenario — fewer stakeholders, more hats worn per person.",
+    "250–500": "COMPANY SIZE — MEDIUM-SMALL (250–500 employees): Dedicated functions exist but teams are lean (1–3 people per department). Decisions involve a small group. Legal may be a single person or outsourced. Reflect that escalation is fast but capacity is limited.",
+    "500–1,500": "COMPANY SIZE — MEDIUM (500–1,500 employees): Established functions with some process maturity. Multiple stakeholders need to be aligned. Include cross-departmental coordination challenges as a realistic friction point.",
+    "1,500+": "COMPANY SIZE — LARGE (1,500+ employees): Multiple business units, formal governance structures, committee-based decisions. Board involvement is structured and documented. Reflect that decisions take longer but have more institutional support. Include business unit or subsidiary complications where relevant.",
+  }
+  if (c.companySize && sizeDirectives[c.companySize]) d.push(sizeDirectives[c.companySize])
+
+  // IT maturity
+  if (c.itMaturity === "low") d.push(
+    "IT MATURITY — LOW: Basic IT hygiene gaps are expected — missing MFA, unpatched systems, no asset inventory. The scenario should reflect that the organisation is surprised by the incident and lacks basic tooling to respond quickly. At least one decision should expose a maturity gap as a factor."
+  )
+  else if (c.itMaturity === "medium") d.push(
+    "IT MATURITY — MEDIUM: The organisation has basic controls in place (some MFA, periodic patching, basic logging) but is not mature. Detection is possible but slow. Gaps will surface under pressure — include at least one moment where a missing control (e.g. no MFA on a specific system, incomplete logging) becomes a factor."
+  )
+  else if (c.itMaturity === "high") d.push(
+    "IT MATURITY — HIGH: The organisation has solid IT practices — MFA enforced, patching current, logging in place. Detection should be faster. The challenge should be in decision-making and stakeholder management, not in basic IT execution. Do not include obviously preventable technical failures as the root cause."
+  )
+
+  // Team structure
+  if (c.teamStructure === "crisis_only") d.push(
+    "TEAM STRUCTURE — CRISIS MANAGEMENT ONLY: Only crisis management roles are participating (CEO, CISO, CFO, Legal, Head of Comms, HR Lead, Ops Manager). Do NOT generate injects or roleActions targeting IT-specific technical execution. IT/technical details should appear as context in injects, but the decisions are always at the management/governance level."
+  )
+  else if (c.teamStructure === "it_only") d.push(
+    "TEAM STRUCTURE — IT TEAM ONLY: Only technical roles are participating (IT Manager, System Administrator). Focus injects on technical detection, containment, and recovery. Management escalation appears as pressure from above, but the decisions in roleActions are all technical."
+  )
+  else if (c.teamStructure === "crisis_it" || c.teamStructure === "full") d.push(
+    "TEAM STRUCTURE — FULL TEAM: Both crisis management and technical IT roles are participating. Generate injects and roleActions for both tracks. Include handoff moments where technical findings must be translated into management decisions, and where management decisions require technical execution."
+  )
+
+  // Existing plans
+  if (c.existingPlans?.includes("none") || !c.existingPlans?.length) d.push(
+    "EXISTING PLANS — NONE: This organisation has no documented IR plan, crisis comms plan, or backup procedure. Do not assume any formal process exists. Decisions will be ad hoc. This is itself a red flag — facilitator notes should reference the absence of a plan as a gap when relevant."
+  )
+  else {
+    const planNotes: string[] = []
+    if (c.existingPlans?.includes("ir_plan")) planNotes.push("IR plan exists — roleActions that follow it should be marked irPlanAligned:true")
+    if (c.existingPlans?.includes("crisis_comms_plan")) planNotes.push("Crisis comms plan exists — communications decisions should reference it")
+    if (c.existingPlans?.includes("backup_procedure")) planNotes.push("Backup procedure documented — backup recovery is a realistic option; test whether the team uses it correctly")
+    if (c.existingPlans?.includes("nis2_process")) planNotes.push("NIS2 process documented — test whether the team follows it under pressure")
+    if (planNotes.length) d.push("EXISTING PLANS: " + planNotes.join(". ") + ".")
+  }
+
+  return d.length ? "\n\nScenario generation directives (apply ALL of the following):\n" + d.map((x, i) => `${i + 1}. ${x}`).join("\n\n") : ""
+}
+
 const LEAN_VARIANTS = [
   "Focus on a scenario where the attack originates from a compromised third-party supplier.",
   "Focus on a scenario where the initial vector is a phishing email targeting a finance employee.",
@@ -38,14 +170,16 @@ const FULL_COMPANY_NAMES = [
   "Schiphol Cargo Services",
 ]
 
-async function generateLean(config: ExerciseConfig, apiKey: string) {
+async function generateLean(config: ExerciseConfig, apiKey: string, mode: string) {
   const roundCount = config.roundCount ?? 4
   const timerPerRound = config.timerPerRound ?? 15
   const irCtx = config.irTemplateText
     ? `\nIR plan excerpt:\n${config.irTemplateText.slice(0, 3000)}`
     : ""
   const variant = LEAN_VARIANTS[Math.floor(Math.random() * LEAN_VARIANTS.length)]
-  const prompt = `You are a cybersecurity exercise designer for MKB+ organizations. Generate a unique ${roundCount}-round ${config.scenarioType} scenario for: ${buildContext(config)}${irCtx}
+  const roleCtx = buildRoleContext(config)
+  const directives = buildScenarioDirectives(config, mode)
+  const prompt = `You are a cybersecurity exercise designer for MKB+ organizations. Generate a unique ${roundCount}-round ${config.scenarioType} scenario for: ${buildContext(config)}${irCtx}${roleCtx}${directives}
 
 Variation instruction (make the scenario distinct each time): ${variant}
 
@@ -67,7 +201,7 @@ Return ONLY valid JSON (no markdown):
   return JSON.parse(text.replace(/```json|```/g, "").trim())
 }
 
-async function generateFull(config: ExerciseConfig, apiKey: string) {
+async function generateFull(config: ExerciseConfig, apiKey: string, mode: string) {
   const roundCount = config.roundCount ?? 4
   const timerPerRound = config.timerPerRound ?? 15
   const existingPlans = config.existingPlans?.length ? config.existingPlans.join(', ') : 'none documented'
@@ -90,34 +224,39 @@ async function generateFull(config: ExerciseConfig, apiKey: string) {
     ? `- "irPlanAligned": true means the action is consistent with the uploaded IR plan above. false means it deviates from it.`
     : `- "irPlanAligned": true means the action follows industry best practice for this type of incident. false means it is objectively risky or inadvisable (e.g. paying ransom without authorization, resuming systems before forensics, making premature public statements). Do NOT reference a specific IR plan — no plan has been uploaded. Base this flag purely on recognized crisis-response best practice.`
 
+  const roleCtxFull = buildRoleContext(config)
+  const directivesFull = buildScenarioDirectives(config, mode)
   const prompt = `You are a senior IR exercise designer for MKB+ organizations. Generate a UNIQUE, realistic, narrative-coherent ${config.scenarioType} incident scenario. Seed: ${randomSeed}.
 
 Variation directive: ${variant}
 Fictional company name to use in inject messages: ${companyName}
-
+${roleCtxFull}
 Organization profile:
-- Sector: ${config.sector}, Size: ${config.companySize}, IT maturity: ${config.itMaturity ?? "medium"}
+- Sector: ${config.sector}
+- Company size: ${config.companySize}
+- IT maturity: ${config.itMaturity ?? "medium"}
 - Security capability: ${config.securityCapability ?? "small_it"}
-- Exercise goal: ${config.exerciseGoal ?? "ransomware_tabletop"}, Difficulty: ${config.difficulty ?? "intermediate"}
+- Exercise goal: ${config.exerciseGoal ?? "ransomware_tabletop"}
+- Difficulty: ${config.difficulty ?? "intermediate"}
 - Team structure: ${config.teamStructure ?? "crisis_only"}
 - Existing plans: ${existingPlans}
-- Crown jewels: ${config.crownJewels}, Critical systems: ${config.criticalSystems}
+- Crown jewels: ${config.crownJewels}
+- Critical systems: ${config.criticalSystems}
+- Duration: ${config.duration}
 ${irPlanContext}
+${directivesFull}
 
-Important constraints:
-- ${secCapabilityNote}
-- The customer's role is: make decisions, escalate timely, approve actions, communicate, follow IR plan
-- The IR retainer handles: investigation, containment, forensics, malware analysis
-- Generate exactly ${roundCount} rounds with ${timerPerRound} minute timers
-- Each round MUST build logically on the previous
-- Round 1: Early warning signs / initial detection
-- Round 2: Triage and uncertainty, business impact begins
+Structural constraints:
+- Generate exactly ${roundCount} rounds, each ${timerPerRound} minutes
+- Each round MUST build logically on the previous; the narrative arc must match the scenario type and exercise goal above
+- Round 1: Detection / initial awareness (informed by security capability above)
+- Round 2: Triage, business impact emerges
 - Round 3: Escalation, external stakeholder pressure
-- Round ${roundCount}: Decision point — containment/recovery trade-off and consequences
+- Round ${roundCount}: Resolution decision point — consequences are real and irreversible
 - Every roleActions array MUST include a "do_nothing" option
 - ${irAlignedNote}
-- Do NOT hallucinate the contents of any plan. If no IR plan was provided, only mark irPlanAligned: false for clearly inadvisable actions.
-- consequence: describe the realistic outcome of this action (neutral, not preachy). Never say "this violates the IR plan" unless an IR plan was provided.
+- Do NOT hallucinate plan contents. If no IR plan was provided, only mark irPlanAligned:false for clearly inadvisable actions.
+- consequence: realistic neutral outcome description. Never moralize or say "this violates the IR plan" unless one was uploaded.
 
 Return ONLY valid JSON:
 {
@@ -183,7 +322,7 @@ Return ONLY valid JSON:
   return JSON.parse(text.replace(/```json|```/g, "").trim())
 }
 
-async function generateWithAI(config: ExerciseConfig): Promise<{ scenario: Scenario; intensity: AiIntensity } | null> {
+async function generateWithAI(config: ExerciseConfig, mode: string): Promise<{ scenario: Scenario; intensity: AiIntensity } | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return null
   const intensity = config.aiIntensity ?? "full"
@@ -193,7 +332,7 @@ async function generateWithAI(config: ExerciseConfig): Promise<{ scenario: Scena
     if (intensity === "lean") {
       const { generateScenario } = await import("@/lib/scenario-generator")
       const base = generateScenario(config)
-      const aiMeta = await generateLean(config, apiKey)
+      const aiMeta = await generateLean(config, apiKey, mode)
       if (!aiMeta) return null
       const rounds = base.rounds.map((r, i) => {
         const aiRound = aiMeta.rounds?.[i] as {
@@ -217,7 +356,7 @@ async function generateWithAI(config: ExerciseConfig): Promise<{ scenario: Scena
       }
     }
 
-    const scenario = await generateFull(config, apiKey) as Scenario | null
+    const scenario = await generateFull(config, apiKey, mode) as Scenario | null
     if (!scenario) return null
     return { scenario, intensity: "full" as const }
   } catch {
@@ -250,10 +389,11 @@ export async function POST(req: Request) {
     difficulty: body.difficulty,
     realism: body.realism,
     dynamicBranching: typeof body.dynamicBranching === "boolean" ? body.dynamicBranching : undefined,
+    selectedRoles: Array.isArray(body.selectedRoles) ? body.selectedRoles as Role[] : undefined,
   }
   const mode: SimulationMode = body.mode === "event" ? "event" : "training"
 
-  const [aiResult] = await Promise.all([generateWithAI(config)])
+  const [aiResult] = await Promise.all([generateWithAI(config, mode)])
   let scenario = aiResult?.scenario ?? null
   if (!scenario) {
     const { generateScenario } = await import("@/lib/scenario-generator")
