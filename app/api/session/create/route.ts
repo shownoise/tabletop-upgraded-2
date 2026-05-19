@@ -3,6 +3,7 @@ import { ROLE_META } from "@/lib/types"
 import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario, SpecialsMode, RoleAction, Role } from "@/lib/types"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
+export const maxDuration = 300
 
 function buildRoleContext(config: ExerciseConfig): string {
   const roles = config.selectedRoles
@@ -150,6 +151,25 @@ function buildScenarioDirectives(c: ExerciseConfig, mode?: string): string {
     if (planNotes.length) d.push("EXISTING PLANS: " + planNotes.join(". ") + ".")
   }
 
+  // Learning objectives directive (Task 4)
+  const objectivesByGoal: Record<string, string> = {
+    nis2_readiness: `LEARNING OBJECTIVES per ronde: (1) "Team herkent NIS2-meldplichtig incident" (measuredBy: decision, triggerActionIds: acties die incident declareren of IR activeren) (2) "CISO/Legal besluit tot AP-melding binnen 72u" (measuredBy: decision) (3) "AP-notificatieformulier ingevuld" (measuredBy: special, triggerSpecialType: ap_notification) (4) "Board geïnformeerd over compliance-status" (measuredBy: decision).`,
+    ransomware_tabletop: `LEARNING OBJECTIVES per ronde: (1) "Incident gedeclareert en IR-retainer geactiveerd" (measuredBy: decision) (2) "Geïnfecteerde systemen geïsoleerd van netwerk" (measuredBy: decision) (3) "Ransom-onderhandelingspositie bepaald" (measuredBy: special of decision) (4) "Betaal/herstel beslissing genomen met back-up status bekend" (measuredBy: decision).`,
+    crisis_comms: `LEARNING OBJECTIVES per ronde: (2) "Interne communicatie naar medewerkers verstuurd" (measuredBy: decision) (3) "Persbericht of holding statement goedgekeurd door CEO" (measuredBy: decision) (3) "NOS-interview afgehandeld" (measuredBy: special, triggerSpecialType: journalist_qa).`,
+    board_decisions: `LEARNING OBJECTIVES elke ronde: "CEO of CFO neemt beslissing binnen eigen autoriteitsdomein" (measuredBy: decision, triggerActionIds: acties met allowedRoles CEO of CFO).`,
+    data_breach: `LEARNING OBJECTIVES per ronde: (1) "Datalek-scope bepaald: categorieën en aantal betrokkenen" (measuredBy: decision) (2) "AVG Art.33 melding besluit genomen (72u klok)" (measuredBy: decision) (3) "AP-melding ingediend" (measuredBy: special of decision) (4) "Individuele notificatie-assessment afgerond" (measuredBy: decision).`,
+  }
+  d.push(
+    `LEARNING OBJECTIVES: Every round MUST include 1–2 learningObjectives in this JSON format: { "id": "unique-string", "description": "max 15 words, action-oriented, Dutch", "module": "<one of the ModuleId values>", "measuredBy": "decision|special|manual", "triggerActionIds": ["roleAction id that fulfils this"] }. ${c.exerciseGoal && objectivesByGoal[c.exerciseGoal] ? objectivesByGoal[c.exerciseGoal] : 'Base objectives on the scenario type and exercise goal.'}`
+  )
+
+  // BOB framework directive (Task 7)
+  if (c.decisionFramework === 'bob') {
+    d.push(
+      `DECISION FRAMEWORK — BOB: Structure every round's facilitatorNotes along BOB phases. discussionGoal must name the BOB phase (Rounds 1–2: Beeldvorming; Round 3: Oordeelvorming; Round 4: Besluitvorming). keyQuestions must include at least one question per applicable BOB phase. hints must include a BOB failure pattern (e.g. "springt naar besluit vóór volledig beeld is gevormd"). Each roleAction description must start with the BOB phase label: "[Beeldvorming]", "[Oordeelvorming]", or "[Besluit]".`
+    )
+  }
+
   return d.length ? "\n\nScenario generation directives (apply ALL of the following):\n" + d.map((x, i) => `${i + 1}. ${x}`).join("\n\n") : ""
 }
 
@@ -190,7 +210,7 @@ Return ONLY valid JSON (no markdown):
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 2000,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -322,50 +342,50 @@ Return ONLY valid JSON:
   return JSON.parse(text.replace(/```json|```/g, "").trim())
 }
 
-async function generateWithAI(config: ExerciseConfig, mode: string): Promise<{ scenario: Scenario; intensity: AiIntensity } | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return null
+async function generateWithAI(
+  config: ExerciseConfig,
+  mode: string,
+  opts: { moduleSlots?: unknown; decisionFramework?: unknown },
+): Promise<{ scenario: Scenario; intensity: AiIntensity; warnings?: string[] } | { aiError: string } | null> {
   const intensity = config.aiIntensity ?? "full"
   if (intensity === "off") return null
 
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    console.error("[generateWithAI] ANTHROPIC_API_KEY is not set")
+    return { aiError: "ANTHROPIC_API_KEY is not set — contact the administrator" }
+  }
+
   try {
+    const { generateScenarioInstance } = await import("@/lib/scenario/generator")
+    const { scenarioInstanceToScenario } = await import("@/lib/scenario/bridge")
+
+    const moduleSlots = Array.isArray(opts.moduleSlots) ? opts.moduleSlots : undefined
+    const framework = (typeof opts.decisionFramework === "string" ? opts.decisionFramework : "bob") as import("@/lib/types").DecisionFramework
+
     if (intensity === "lean") {
-      const { generateScenario } = await import("@/lib/scenario-generator")
-      const base = generateScenario(config)
-      const aiMeta = await generateLean(config, apiKey, mode)
-      if (!aiMeta) return null
-      const rounds = base.rounds.map((r, i) => {
-        const aiRound = aiMeta.rounds?.[i] as {
-          title?: string
-          situation_update?: string
-          timerMinutes?: number
-          roleActions?: RoleAction[]
-        } | undefined
-        return {
-          ...r,
-          title: aiRound?.title ?? r.title,
-          situation_update: aiRound?.situation_update ?? r.situation_update,
-          timerMinutes: aiRound?.timerMinutes ?? r.timerMinutes,
-          // Use AI-generated actions if present and non-empty; else keep template actions
-          roleActions: aiRound?.roleActions?.length ? aiRound.roleActions : r.roleActions,
-        }
-      })
-      return {
-        scenario: { ...base, scenario_title: aiMeta.scenario_title ?? base.scenario_title, scenario_summary: aiMeta.scenario_summary ?? base.scenario_summary, rounds } as Scenario,
-        intensity: "lean" as const,
-      }
+      const { generateLeanScenario } = await import("@/lib/scenario/generator")
+      const scenario = await generateLeanScenario(config, apiKey, "claude-haiku-4-5-20251001", 16000)
+      return { scenario, intensity: "lean" as const, warnings: [] }
     }
 
-    const scenario = await generateFull(config, apiKey, mode) as Scenario | null
-    if (!scenario) return null
-    return { scenario, intensity: "full" as const }
-  } catch {
-    return null
+    const { instance, warnings } = await generateScenarioInstance(config, apiKey, {
+      model: "claude-sonnet-4-6",
+      maxTokens: 32000,
+      moduleSlots,
+      framework,
+      maxRetries: 0,
+    })
+    return { scenario: scenarioInstanceToScenario(instance), intensity: "full" as const, warnings }
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err))
+    console.error("[generateWithAI] FULL ERROR:", error.message, "\nStack:", error.stack)
+    return { aiError: error.message }
   }
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as Partial<ExerciseConfig> & { mode?: string }
+  const body = (await req.json()) as Partial<ExerciseConfig> & { mode?: string; moduleSlots?: unknown; decisionFramework?: unknown }
   const config: ExerciseConfig = {
     sector: body.sector?.toString() ?? "",
     companySize: body.companySize?.toString() ?? "",
@@ -393,9 +413,17 @@ export async function POST(req: Request) {
   }
   const mode: SimulationMode = body.mode === "event" ? "event" : "training"
 
-  const [aiResult] = await Promise.all([generateWithAI(config, mode)])
-  let scenario = aiResult?.scenario ?? null
+  const aiResult = await generateWithAI(config, mode, {
+    moduleSlots: body.moduleSlots,
+    decisionFramework: body.decisionFramework,
+  })
+  const aiError = aiResult && 'aiError' in aiResult ? aiResult.aiError : undefined
+  const aiSuccess = aiResult && 'scenario' in aiResult ? aiResult : null
+  let scenario = aiSuccess?.scenario ?? null
   if (!scenario) {
+    if (aiError) {
+      return NextResponse.json({ error: aiError }, { status: 500 })
+    }
     const { generateScenario } = await import("@/lib/scenario-generator")
     scenario = generateScenario(config)
   }
@@ -409,7 +437,9 @@ export async function POST(req: Request) {
     ok: true,
     sessionId: session.id,
     joinCode: session.joinCode,
-    aiGenerated: !!aiResult,
-    aiIntensity: aiResult?.intensity ?? "off",
+    aiGenerated: !!aiSuccess,
+    aiIntensity: aiSuccess?.intensity ?? "off",
+    warnings: aiSuccess?.warnings ?? [],
+    aiError,
   })
 }
