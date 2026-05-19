@@ -71,40 +71,86 @@ function IntroOverlay({ lang, onReady }: { lang: ReturnType<typeof useLang>[0]; 
 }
 
 // ─── Round situation card ───
+const SEVERITY_COLORS = ["#e8ff40", "#ffb340", "#ff4d3d", "#ff4d3d"] as const
+const SEVERITY_LABELS = ["MEDIUM", "HIGH", "CRITICAL", "CRITICAL"] as const
+
 function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>; lang: ReturnType<typeof useLang>[0] }) {
-  const currentRound = session.currentRound >= 0 ? session.scenario.rounds[session.currentRound] : null
+  const roundIdx = session.currentRound
+  const currentRound = roundIdx >= 0 ? session.scenario.rounds[roundIdx] : null
   const [expanded, setExpanded] = useState(true)
 
   if (!currentRound) return null
 
+  const severityIdx = Math.min(roundIdx, SEVERITY_COLORS.length - 1)
+  const severityColor = SEVERITY_COLORS[severityIdx]
+  const severityLabel = SEVERITY_LABELS[severityIdx]
+
   return (
-    <div className="rounded-xl border border-primary/30 bg-primary/5 overflow-hidden">
+    <div
+      className="border border-[#2a3030] bg-[#111618] overflow-hidden"
+      style={{ borderLeft: `3px solid ${severityColor}` }}
+    >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-5 py-3 hover:bg-primary/10 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2.5 bg-black/25 border-b border-[#2a3030] hover:bg-black/40 transition-colors"
       >
-        <div className="flex items-center gap-2">
-          <Info className="size-3.5 text-primary" />
-          <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
-            {tr(lang, "round")} {session.currentRound + 1} · {currentRound.title}
+        <div className="flex items-center gap-3">
+          <span
+            className="font-mono text-[10px] font-bold tracking-widest shrink-0"
+            style={{ color: severityColor }}
+          >
+            {tr(lang, "round").toUpperCase()} {roundIdx + 1}/{session.scenario.rounds.length}
+          </span>
+          <span className="font-mono text-[10px] text-[#7a9090] truncate">{currentRound.title}</span>
+          <span
+            className="hidden sm:inline font-mono text-[9px] border px-1.5 py-0.5"
+            style={{ color: severityColor, borderColor: `${severityColor}40` }}
+          >
+            {severityLabel}
           </span>
         </div>
-        <ChevronDown className={`size-4 text-primary transition-transform ${expanded ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className="size-4 text-[#7a9090] shrink-0 transition-transform ml-2"
+          style={{ transform: expanded ? "rotate(180deg)" : undefined }}
+        />
       </button>
       {expanded && (
-        <div className="px-5 pb-5 flex flex-col gap-4 border-t border-primary/20">
-          <p className="text-sm leading-relaxed text-foreground pt-3">{currentRound.situation_update}</p>
-          <div className="rounded-lg border border-border bg-background/50 px-4 py-3">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-primary mb-2">{tr(lang, "roundIntro")}</p>
+        <div className="px-4 pb-4 flex flex-col gap-4 pt-4">
+          <p className="font-mono text-xs leading-relaxed text-[#f0fafa] whitespace-pre-wrap">
+            {currentRound.situation_update}
+          </p>
+
+          {currentRound.learningObjectives && currentRound.learningObjectives.length > 0 && (
+            <div className="flex flex-col gap-1.5 border-t border-[#2a3030] pt-3">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">
+                Ronde doelen
+              </span>
+              {currentRound.learningObjectives.map(obj => (
+                <div key={obj.id} className="flex items-start gap-2">
+                  <span className={`font-mono text-[10px] shrink-0 mt-px ${obj.achieved ? "text-[#40ffb3]" : "text-[#2a3030]"}`}>
+                    {obj.achieved ? "✓" : "□"}
+                  </span>
+                  <span className={`font-mono text-[10px] leading-snug ${obj.achieved ? "text-[#40ffb3]" : "text-[#7a9090]"}`}>
+                    {obj.description}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border border-[#2a3030] bg-black/20 px-4 py-3">
+            <p className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090] mb-2">
+              {tr(lang, "roundIntro")}
+            </p>
             <ul className="flex flex-col gap-1.5">
               {[
                 tr(lang, "roundInstruction1"),
                 tr(lang, "roundInstruction2"),
                 tr(lang, "roundInstruction3"),
               ].map((s, i) => (
-                <li key={i} className="flex gap-2 text-xs text-muted-foreground">
-                  <span className="text-primary shrink-0">→</span>
-                  <span>{s}</span>
+                <li key={i} className="flex gap-2">
+                  <span className="font-mono text-[10px] shrink-0" style={{ color: severityColor }}>→</span>
+                  <span className="font-mono text-[10px] text-[#7a9090]">{s}</span>
                 </li>
               ))}
             </ul>
@@ -290,17 +336,20 @@ export function PlayView() {
   const [banner, setBanner] = useState<{ id: number; text: string; type?: string } | null>(null)
   const [feedbackFor, setFeedbackFor] = useState<{ round: number; isFinal: boolean } | null>(null)
   const [specialDismissed, setSpecialDismissed] = useState<Set<string>>(new Set())
-  const [doneFeedbackRounds, setDoneFeedbackRounds] = useState<Set<number>>(new Set())
+  const [doneFeedbackRounds, setDoneFeedbackRounds] = useState<Set<number>>(() => {
+    if (typeof window === 'undefined') return new Set<number>()
+    try {
+      const stored = localStorage.getItem(FEEDBACK_KEY)
+      return stored ? new Set<number>(JSON.parse(stored)) : new Set<number>()
+    } catch { return new Set<number>() }
+  })
   const prevRoundRef = useRef<number>(-1)
+  const sessionIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     try {
       setName(window.localStorage.getItem(NAME_KEY))
       setParticipantId(window.localStorage.getItem(ID_KEY))
-    } catch {}
-    try {
-      const stored = localStorage.getItem(FEEDBACK_KEY)
-      if (stored) setDoneFeedbackRounds(new Set(JSON.parse(stored)))
     } catch {}
   }, [])
 
@@ -321,15 +370,21 @@ export function PlayView() {
   // Detect round transitions → trigger feedback
   useEffect(() => {
     if (!session) return
+    // Reset prevRound tracking when a new session replaces the old one
+    if (session.id !== sessionIdRef.current) {
+      sessionIdRef.current = session.id
+      prevRoundRef.current = -1
+    }
     const idx = session.currentRound
-    if (idx !== prevRoundRef.current && prevRoundRef.current >= 0 && !doneFeedbackRounds.has(prevRoundRef.current)) {
+    // Key stored as prevRoundRef.current + 1 (1-indexed) in handleFeedbackDone
+    if (idx !== prevRoundRef.current && prevRoundRef.current >= 0 && !doneFeedbackRounds.has(prevRoundRef.current + 1)) {
       setFeedbackFor({ round: prevRoundRef.current + 1, isFinal: false })
     }
     if (session.status === "ended" && !doneFeedbackRounds.has(-1)) {
       setFeedbackFor({ round: session.scenario.rounds.length, isFinal: true })
     }
     prevRoundRef.current = idx
-  }, [session?.currentRound, session?.status])
+  }, [session?.currentRound, session?.status, session?.id])
 
   // Derived: find the special assigned to this participant (not dismissed)
   const activeSpecial = useMemo(() => {
