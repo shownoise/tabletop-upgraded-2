@@ -72,13 +72,13 @@ export function DecisionPanel({
 
   if (!participantRole) {
     return (
-      <div className="border border-[#ffb340]/40 bg-[#ffb340]/5 p-4"
-        style={{ borderLeft: "3px solid #ffb340" }}>
+      <div className="border border-tt-warn/40 bg-tt-warn/5 p-4"
+        style={{ borderLeft: "3px solid var(--tt-warn)" }}>
         <div className="flex items-center gap-2 mb-2">
-          <AlertTriangle className="size-4 text-[#ffb340]" />
-          <span className="font-mono text-[10px] uppercase tracking-widest text-[#ffb340]">No Role Assigned</span>
+          <AlertTriangle className="size-4 text-tt-warn" />
+          <span className="font-mono text-[10px] uppercase tracking-widest text-tt-warn">No Role Assigned</span>
         </div>
-        <p className="font-mono text-xs text-[#7a9090]">
+        <p className="font-mono text-xs text-tt-dim">
           You need a role assigned to submit decisions. Contact your facilitator.
         </p>
       </div>
@@ -87,15 +87,15 @@ export function DecisionPanel({
 
   return (
     <div
-      className="border border-[#2a3030] bg-[#111618] overflow-hidden"
-      style={{ borderLeft: "3px solid #e8ff40" }}
+      className="border border-tt-border bg-tt-surface overflow-hidden"
+      style={{ borderLeft: "3px solid var(--tt-accent)" }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-black/25 border-b border-[#2a3030]">
-        <span className="font-mono text-[10px] font-bold tracking-widest text-[#e8ff40]">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-tt-bright/5 border-b border-tt-border">
+        <span className="font-mono text-[10px] font-bold tracking-widest text-tt-accent">
           {tr(lang, "decisionPanel")}
         </span>
-        <span className="font-mono text-[9px] border border-[#e8ff40]/30 px-2 py-0.5 text-[#e8ff40]">
+        <span className="font-mono text-[9px] border border-tt-accent/30 px-2 py-0.5 text-tt-accent">
           {ROLE_META[participantRole].label}
         </span>
       </div>
@@ -104,28 +104,28 @@ export function DecisionPanel({
         {submitted ? (
           <div className="flex flex-col gap-3">
             <div
-              className="flex items-center gap-2 border border-[#40ffb3]/30 bg-[#40ffb3]/5 px-4 py-3"
-              style={{ borderLeft: "3px solid #40ffb3" }}
+              className="flex items-center gap-2 border border-tt-green/30 bg-tt-green/5 px-4 py-3"
+              style={{ borderLeft: "3px solid var(--tt-green)" }}
             >
-              <CheckCircle className="size-4 text-[#40ffb3] shrink-0" />
+              <CheckCircle className="size-4 text-tt-green shrink-0" />
               <div className="flex flex-col gap-0.5">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-[#40ffb3]">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-tt-green">
                   {tr(lang, "decisionSubmitted")}
                 </span>
-                <span className="font-mono text-sm text-[#f0fafa]">{submitted.actionLabel}</span>
+                <span className="font-mono text-sm text-tt-bright">{submitted.actionLabel}</span>
               </div>
             </div>
-            <div className="flex items-center gap-2 border border-[#2a3030] bg-black/20 px-3 py-2.5">
-              <Clock className="size-3.5 text-[#7a9090] shrink-0" />
-              <p className="font-mono text-xs text-[#7a9090]">{tr(lang, "feedbackPending")}</p>
+            <div className="flex items-center gap-2 border border-tt-border bg-tt-bright/5 px-3 py-2.5">
+              <Clock className="size-3.5 text-tt-dim shrink-0" />
+              <p className="font-mono text-xs text-tt-dim">{tr(lang, "feedbackPending")}</p>
             </div>
             {submitted.reasoning && (
-              <p className="font-mono text-xs text-[#7a9090] italic">"{submitted.reasoning}"</p>
+              <p className="font-mono text-xs text-tt-dim italic">"{submitted.reasoning}"</p>
             )}
             <Button
               size="sm"
               variant="outline"
-              className="self-start font-mono text-xs uppercase tracking-widest border-[#2a3030] text-[#7a9090] hover:border-[#e8ff40]/40 hover:text-[#e8ff40]"
+              className="self-start font-mono text-xs uppercase tracking-widest border-tt-border text-tt-dim hover:border-tt-accent/40 hover:text-tt-accent"
               onClick={() => { setSubmitted(null); setSelectedActionId(submitted.actionId); setReasoning(submitted.reasoning) }}
             >
               {tr(lang, "updateDecision")}
@@ -135,7 +135,7 @@ export function DecisionPanel({
           <>
             {/* Action grid — 2 columns */}
             <div className="flex flex-col gap-2">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
                 {tr(lang, "selectAction")}
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -148,32 +148,32 @@ export function DecisionPanel({
                       onClick={() => setSelectedActionId(action.id)}
                       className="text-left border px-4 py-3 transition-all"
                       style={{
-                        borderColor: isSelected ? "#e8ff40" : "#2a3030",
-                        backgroundColor: isSelected ? "rgba(232,255,64,0.05)" : "rgba(0,0,0,0.2)",
-                        borderLeft: isSelected ? "3px solid #e8ff40" : "3px solid #2a3030",
+                        borderColor: isSelected ? "var(--tt-accent)" : "var(--tt-border)",
+                        backgroundColor: isSelected ? "color-mix(in srgb, var(--tt-accent) 5%, transparent)" : "color-mix(in srgb, var(--tt-bright) 4%, transparent)",
+                        borderLeft: isSelected ? "3px solid var(--tt-accent)" : "3px solid var(--tt-border)",
                         opacity: authorized ? 1 : 0.5,
                       }}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-xs font-medium text-[#f0fafa]">
+                            <span className="font-mono text-xs font-medium text-tt-bright">
                               {action.label}
                             </span>
                             {!authorized && (
-                              <span className="font-mono text-[8px] uppercase tracking-widest text-[#7a9090] border border-[#2a3030] px-1">
+                              <span className="font-mono text-[8px] uppercase tracking-widest text-tt-dim border border-tt-border px-1">
                                 {tr(lang, "actionUnauthorized")}
                               </span>
                             )}
                           </div>
                           {action.description && (
-                            <p className="font-mono text-[10px] text-[#7a9090] leading-relaxed">
+                            <p className="font-mono text-[10px] text-tt-dim leading-relaxed">
                               {action.description}
                             </p>
                           )}
                         </div>
                         {isSelected && (
-                          <CheckCircle className="size-3.5 text-[#e8ff40] shrink-0 mt-0.5" />
+                          <CheckCircle className="size-3.5 text-tt-accent shrink-0 mt-0.5" />
                         )}
                       </div>
                     </button>
@@ -184,7 +184,7 @@ export function DecisionPanel({
 
             {/* Reasoning */}
             <div className="flex flex-col gap-1.5">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
                 {tr(lang, "reasoning")}
               </span>
               <Textarea
@@ -192,18 +192,18 @@ export function DecisionPanel({
                 onChange={e => setReasoning(e.target.value)}
                 placeholder={tr(lang, "reasoningPlaceholder")}
                 rows={2}
-                className="resize-none font-mono text-xs bg-black/20 border-[#2a3030] text-[#f0fafa] placeholder:text-[#7a9090] focus:border-[#e8ff40]/40"
+                className="resize-none font-mono text-xs bg-tt-bright/5 border-tt-border text-tt-bright placeholder:text-tt-dim focus:border-tt-accent/40"
               />
             </div>
 
             {error && (
-              <p className="font-mono text-xs text-[#ff4d3d]">{error}</p>
+              <p className="font-mono text-xs text-tt-red">{error}</p>
             )}
 
             <Button
               onClick={onSubmit}
               disabled={submitting || !selectedActionId}
-              className="gap-2 font-mono text-xs uppercase tracking-widest bg-[#e8ff40] text-[#0d0f0f] hover:bg-[#e8ff40]/90 disabled:opacity-40"
+              className="gap-2 font-mono text-xs uppercase tracking-widest bg-tt-accent text-tt-bg hover:bg-tt-accent/90 disabled:opacity-40"
             >
               {submitting ? (
                 <span className="inline-block size-4 border-2 border-current border-t-transparent rounded-full animate-spin" />

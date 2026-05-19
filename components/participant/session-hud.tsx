@@ -10,7 +10,12 @@ import { LangToggle } from "@/components/lang-toggle"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 const ESCALATION_LABELS = ["normal", "elevated", "high", "critical"] as const
-const ESCALATION_COLORS = ["#7a9090", "#ffb340", "#ffb340", "#ff4d3d"]
+const ESCALATION_BADGE = [
+  "border-tt-dim/40 bg-tt-dim/10 text-tt-dim",
+  "border-tt-warn/40 bg-tt-warn/10 text-tt-warn",
+  "border-tt-warn/40 bg-tt-warn/10 text-tt-warn",
+  "border-tt-red/40 bg-tt-red/10 text-tt-red",
+] as const
 
 interface Props {
   session: SessionState
@@ -50,9 +55,9 @@ function RoundDots({ current, total }: { current: number; total: number }) {
           <div
             key={i}
             className={`size-2 transition-all duration-500 ${
-              isDone   ? "bg-[#7a9090]" :
-              isActive ? "bg-[#e8ff40] dot-pulse" :
-                         "bg-[#2a3030]"
+              isDone   ? "bg-tt-dim" :
+              isActive ? "bg-tt-accent dot-pulse" :
+                         "bg-tt-border"
             }`}
           />
         )
@@ -68,19 +73,17 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
   const isActive = status === "active"
   const escalationIndex = Math.min(Math.max(currentIdx, 0), 3)
 
-  const escalationColor = ESCALATION_COLORS[escalationIndex]
-
   return (
-    <header className="sticky top-0 z-40 border-b border-[#2a3030] bg-[#0d0f0f]">
+    <header className="sticky top-0 z-40 border-b border-tt-border bg-tt-bg">
       {/* Top bar */}
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 md:px-8">
         <div className="flex items-center gap-3">
-          <ShieldAlert className="size-3.5 text-[#e8ff40] shrink-0" />
+          <ShieldAlert className="size-3.5 text-tt-accent shrink-0" />
           <div className="flex flex-col">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
               {name ?? "—"}
             </span>
-            <span className="font-mono text-[10px] text-[#f0fafa] truncate max-w-[140px] md:max-w-none">
+            <span className="font-mono text-[10px] text-tt-bright truncate max-w-[140px] md:max-w-none">
               {session.scenario.scenario_title}
             </span>
           </div>
@@ -89,8 +92,8 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
         <div className="flex items-center gap-2">
           {/* Role badge */}
           {participantRole && (
-            <div className="hidden items-center border border-[#e8ff40]/30 bg-[#e8ff40]/5 px-2.5 py-1 md:flex">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-[#e8ff40]">
+            <div className="hidden items-center border border-tt-accent/30 bg-tt-accent/5 px-2.5 py-1 md:flex">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">
                 {ROLE_META[participantRole].label}
               </span>
             </div>
@@ -98,14 +101,8 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
 
           {/* Escalation badge */}
           {isActive && (
-            <div
-              className="hidden items-center border px-2.5 py-1 md:flex"
-              style={{ borderColor: `${escalationColor}40`, backgroundColor: `${escalationColor}10` }}
-            >
-              <span
-                className="font-mono text-[9px] uppercase tracking-widest"
-                style={{ color: escalationColor }}
-              >
+            <div className={`hidden items-center border px-2.5 py-1 md:flex ${ESCALATION_BADGE[escalationIndex]}`}>
+              <span className="font-mono text-[9px] uppercase tracking-widest">
                 {tr(lang, "escalationLevel")}: {tr(lang, `escalation_${ESCALATION_LABELS[escalationIndex]}` as Parameters<typeof tr>[1])}
               </span>
             </div>
@@ -113,8 +110,8 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
 
           {/* Session timer */}
           {session.startedAt && (
-            <div className="hidden items-center gap-1.5 border border-[#2a3030] bg-[#111618] px-2.5 py-1 md:flex">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">
+            <div className="hidden items-center gap-1.5 border border-tt-border bg-tt-surface px-2.5 py-1 md:flex">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
                 {tr(lang, "sessionTimer")}
               </span>
               <SessionTimer startedAt={session.startedAt} />
@@ -122,16 +119,16 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
           )}
 
           {/* Participants count */}
-          <div className="flex items-center gap-1.5 border border-[#2a3030] bg-[#111618] px-2.5 py-1">
-            <Users className="size-3 text-[#7a9090]" />
-            <span className="font-mono text-xs text-[#f0fafa]">{session.participants.length}</span>
+          <div className="flex items-center gap-1.5 border border-tt-border bg-tt-surface px-2.5 py-1">
+            <Users className="size-3 text-tt-dim" />
+            <span className="font-mono text-xs text-tt-bright">{session.participants.length}</span>
           </div>
 
           {/* Connection */}
-          <div className="flex items-center gap-1.5 border border-[#2a3030] bg-[#111618] px-2 py-1">
+          <div className="flex items-center gap-1.5 border border-tt-border bg-tt-surface px-2 py-1">
             {connected
-              ? <Wifi className="size-3 text-[#40ffb3]" />
-              : <WifiOff className="size-3 text-[#ff4d3d]" />
+              ? <Wifi className="size-3 text-tt-green" />
+              : <WifiOff className="size-3 text-tt-red" />
             }
           </div>
 
@@ -144,13 +141,13 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
       {isActive && totalRounds > 0 && (
         <div className="mx-auto max-w-6xl px-4 pb-2 md:px-8">
           <div className="flex items-center gap-3">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090] shrink-0">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim shrink-0">
               {tr(lang, "round")} {currentIdx + 1}/{totalRounds}
             </span>
             <div className="flex-1">
               <RoundDots current={currentIdx} total={totalRounds} />
             </div>
-            <span className="font-mono text-[9px] text-[#7a9090] shrink-0 truncate max-w-[120px]">
+            <span className="font-mono text-[9px] text-tt-dim shrink-0 truncate max-w-[120px]">
               {session.scenario.rounds[currentIdx]?.title ?? ""}
             </span>
           </div>

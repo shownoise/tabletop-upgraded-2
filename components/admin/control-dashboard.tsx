@@ -387,25 +387,25 @@ export function ControlDashboard() {
           const notes = currentRound.facilitatorNotes!
           return (
             <div
-              className="border border-[#2a3030] bg-[#111618] p-5 flex flex-col gap-4"
-              style={{ borderLeft: "3px solid #e8ff40" }}
+              className="border border-tt-border bg-tt-surface p-5 flex flex-col gap-4"
+              style={{ borderLeft: "3px solid var(--tt-accent)" }}
             >
               <div className="flex items-center gap-2">
-                <Flag className="size-3.5 text-[#e8ff40]" />
-                <span className="font-mono text-[9px] uppercase tracking-widest text-[#e8ff40]">Facilitator sturing — ronde {currentIndex + 1}</span>
+                <Flag className="size-3.5 text-tt-accent" />
+                <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">Facilitator sturing — ronde {currentIndex + 1}</span>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="flex flex-col gap-1.5">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-[#e8ff40]">Discussiedoel</span>
-                  <p className="font-mono text-xs text-[#f0fafa] leading-relaxed">{notes.discussionGoal}</p>
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">Discussiedoel</span>
+                  <p className="font-mono text-xs text-tt-bright leading-relaxed">{notes.discussionGoal}</p>
                 </div>
                 {notes.keyQuestions?.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-[#e8ff40]">Stuurvragen</span>
+                    <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">Stuurvragen</span>
                     <ul className="flex flex-col gap-1">
                       {notes.keyQuestions.map((q, i) => (
-                        <li key={i} className="font-mono text-xs text-[#7a9090] flex gap-1.5">
-                          <span className="text-[#e8ff40] shrink-0">?</span>{q}
+                        <li key={i} className="font-mono text-xs text-tt-dim flex gap-1.5">
+                          <span className="text-tt-accent shrink-0">?</span>{q}
                         </li>
                       ))}
                     </ul>
@@ -413,11 +413,11 @@ export function ControlDashboard() {
                 )}
                 {notes.redFlags?.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-[#ff4d3d]">Let op</span>
+                    <span className="font-mono text-[9px] uppercase tracking-widest text-tt-red">Let op</span>
                     <ul className="flex flex-col gap-1">
                       {notes.redFlags.map((f, i) => (
-                        <li key={i} className="font-mono text-xs text-[#7a9090] flex gap-1.5">
-                          <span className="text-[#ff4d3d] shrink-0">⚠</span>{f}
+                        <li key={i} className="font-mono text-xs text-tt-dim flex gap-1.5">
+                          <span className="text-tt-red shrink-0">⚠</span>{f}
                         </li>
                       ))}
                     </ul>
@@ -426,10 +426,10 @@ export function ControlDashboard() {
               </div>
               {notes.hints?.length > 0 && (
                 <div className="flex flex-col gap-1.5 border-t border-[#2a3030] pt-3">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">Tips voor facilitator</span>
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">Tips voor facilitator</span>
                   <ul className="flex flex-wrap gap-2">
                     {notes.hints.map((h, i) => (
-                      <li key={i} className="border border-[#2a3030] bg-black/20 px-2.5 py-1 font-mono text-[10px] text-[#7a9090]">{h}</li>
+                      <li key={i} className="border border-tt-border bg-tt-bright/5 px-2.5 py-1 font-mono text-[10px] text-tt-dim">{h}</li>
                     ))}
                   </ul>
                 </div>

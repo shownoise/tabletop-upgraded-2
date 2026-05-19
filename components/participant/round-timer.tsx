@@ -25,9 +25,9 @@ function useCountdown(roundStartedAt: number | undefined, timerMinutes: number, 
 }
 
 function timerColor(secondsLeft: number): string {
-  if (secondsLeft < 30)  return "#ff4d3d"
-  if (secondsLeft < 120) return "#ffb340"
-  return "#40ffb3"
+  if (secondsLeft < 30)  return "var(--tt-red)"
+  if (secondsLeft < 120) return "var(--tt-warn)"
+  return "var(--tt-green)"
 }
 
 export function RoundTimer({ roundStartedAt, timerMinutes, status, lang }: RoundTimerProps) {
@@ -46,13 +46,12 @@ export function RoundTimer({ roundStartedAt, timerMinutes, status, lang }: Round
     <div className={`flex flex-col items-center gap-2 ${isUrgent ? "animate-pulse" : ""}`}>
       <div className="relative">
         <svg width="88" height="88" className="-rotate-90">
-          <circle cx="44" cy="44" r={r} fill="none" stroke="#2a3030" strokeWidth="4" />
+          <circle cx="44" cy="44" r={r} fill="none" strokeWidth="4" style={{ stroke: "var(--tt-border)" }} />
           <circle
             cx="44" cy="44" r={r} fill="none" strokeWidth="4"
-            stroke={color}
             strokeDasharray={`${circ * frac} ${circ}`}
             strokeLinecap="square"
-            style={{ transition: "stroke-dasharray 1s linear, stroke 0.5s" }}
+            style={{ stroke: color, transition: "stroke-dasharray 1s linear, stroke 0.5s" }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">

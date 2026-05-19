@@ -8,17 +8,17 @@ import { formatTime } from "@/lib/format"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
 
-// ─────────────────── Channel config ───────────────────
+// ─────────────────── Channel config (brand colors stay hardcoded) ───────────────────
 const CHANNEL_CONFIG: Record<string, { label: string; color: string }> = {
   whatsapp:     { label: "WHATSAPP",    color: "#25D366" },
-  slack:        { label: "TEAMS/SLACK", color: "#7b68ee" },
-  email:        { label: "EMAIL",       color: "#40c4ff" },
-  siem_alert:   { label: "SIEM",        color: "#ff4d3d" },
-  phone:        { label: "PHONE",       color: "#40ffb3" },
-  news_ticker:  { label: "BREAKING",    color: "#ff4d3d" },
-  system_alert: { label: "EDR/SYS",     color: "#ffb340" },
+  slack:        { label: "TEAMS/SLACK", color: "var(--tt-purple)" },
+  email:        { label: "EMAIL",       color: "var(--tt-blue)" },
+  siem_alert:   { label: "SIEM",        color: "var(--tt-red)" },
+  phone:        { label: "PHONE",       color: "var(--tt-green)" },
+  news_ticker:  { label: "BREAKING",    color: "var(--tt-red)" },
+  system_alert: { label: "EDR/SYS",     color: "var(--tt-warn)" },
   sms:          { label: "SMS",         color: "#25D366" },
-  raw:          { label: "MEMO",        color: "#7a9090" },
+  raw:          { label: "MEMO",        color: "var(--tt-dim)" },
 }
 
 const CHANNEL_REMAP: Partial<Record<string, InjectChannel>> = {
@@ -50,34 +50,33 @@ function Shell({
   const big = size === "xl"
   return (
     <div
-      className="border border-[#2a3030] bg-[#111618] overflow-hidden"
+      className="border border-tt-border bg-tt-surface overflow-hidden"
       style={{ borderLeft: `3px solid ${cfg.color}` }}
     >
       {/* Channel strip */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-black/25 border-b border-[#2a3030]">
+      <div className="flex items-center gap-3 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
         <span
           className="font-mono text-[10px] font-bold tracking-widest shrink-0"
           style={{ color: cfg.color }}
         >
           {cfg.label}
         </span>
-        <span className="font-mono text-[10px] text-[#7a9090] truncate flex-1 min-w-0">
+        <span className="font-mono text-[10px] text-tt-dim truncate flex-1 min-w-0">
           {inject.senderName ?? inject.source}
           {inject.senderHandle && (
             <span className="ml-1 opacity-50">&lt;{inject.senderHandle}&gt;</span>
           )}
         </span>
-        <span className="font-mono text-[10px] text-[#7a9090] shrink-0">
+        <span className="font-mono text-[10px] text-tt-dim shrink-0">
           {inject.timestamp ?? formatTime(pushedAt)}
         </span>
       </div>
 
-      {/* Optional typed subheader (email subject, alert rule, etc.) */}
       {subheader}
 
       {/* Content */}
       <div
-        className={`px-4 py-4 font-mono whitespace-pre-wrap leading-relaxed text-[#f0fafa] ${
+        className={`px-4 py-4 font-mono whitespace-pre-wrap leading-relaxed text-tt-bright ${
           big ? "text-sm" : "text-xs"
         }`}
       >
@@ -95,9 +94,9 @@ function EmailInject(props: InjectCardProps) {
       {...props}
       subheader={
         props.inject.title ? (
-          <div className="flex items-center gap-3 px-4 py-2 bg-[#0d1520] border-b border-[#2a3030]">
-            <span className="font-mono text-[10px] text-[#7a9090] shrink-0">SUBJECT</span>
-            <span className="font-mono text-xs text-[#40c4ff] truncate">{props.inject.title}</span>
+          <div className="flex items-center gap-3 px-4 py-2 bg-tt-blue/5 border-b border-tt-border">
+            <span className="font-mono text-[10px] text-tt-dim shrink-0">SUBJECT</span>
+            <span className="font-mono text-xs text-tt-blue truncate">{props.inject.title}</span>
           </div>
         ) : undefined
       }
@@ -116,29 +115,29 @@ function WhatsAppInject(props: InjectCardProps) {
   const big = size === "xl"
   return (
     <div
-      className="border border-[#2a3030] bg-[#111618] overflow-hidden"
+      className="border border-tt-border bg-tt-surface overflow-hidden"
       style={{ borderLeft: "3px solid #25D366" }}
     >
-      <div className="flex items-center gap-3 px-4 py-2 bg-black/25 border-b border-[#2a3030]">
+      <div className="flex items-center gap-3 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
         <span className="font-mono text-[10px] font-bold tracking-widest shrink-0 text-[#25D366]">
           WHATSAPP
         </span>
-        <span className="font-mono text-[10px] text-[#7a9090] truncate flex-1">
+        <span className="font-mono text-[10px] text-tt-dim truncate flex-1">
           {inject.senderName ?? inject.source}
         </span>
-        <span className="font-mono text-[10px] text-[#7a9090] shrink-0">
+        <span className="font-mono text-[10px] text-tt-dim shrink-0">
           {inject.timestamp ?? formatTime(pushedAt)}
         </span>
       </div>
       <div className="px-4 py-4">
         <div
-          className={`bg-[#1a3a35]/60 border border-[#25D366]/20 px-4 py-3 max-w-[90%] font-mono leading-relaxed text-[#f0fafa] ${
+          className={`bg-tt-green/8 border border-[#25D366]/20 px-4 py-3 max-w-[90%] font-mono leading-relaxed text-tt-bright ${
             big ? "text-sm" : "text-xs"
           }`}
         >
           {inject.content}
           <div className="mt-1.5 flex items-center justify-end gap-1">
-            <span className="text-[9px] text-[#7a9090]">{inject.timestamp ?? formatTime(pushedAt)}</span>
+            <span className="text-[9px] text-tt-dim">{inject.timestamp ?? formatTime(pushedAt)}</span>
             <span className="text-[9px] text-[#25D366]">✓✓</span>
           </div>
         </div>
@@ -156,14 +155,12 @@ function SiemAlert(props: InjectCardProps) {
       channel="siem_alert"
       {...props}
       subheader={
-        <div className="flex items-center gap-3 px-4 py-2 bg-black/30 border-b border-[#2a3030]">
-          <span className="font-mono text-[10px] text-[#7a9090] shrink-0">RULE</span>
-          <span className="font-mono text-xs text-[#ff4d3d] truncate flex-1">{inject.title}</span>
+        <div className="flex items-center gap-3 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
+          <span className="font-mono text-[10px] text-tt-dim shrink-0">RULE</span>
+          <span className="font-mono text-xs text-tt-red truncate flex-1">{inject.title}</span>
           <span
             className={`font-mono text-[9px] px-2 py-0.5 shrink-0 ${
-              isRed
-                ? "bg-[#ff4d3d]/20 text-[#ff4d3d]"
-                : "bg-[#ffb340]/20 text-[#ffb340]"
+              isRed ? "bg-tt-red/20 text-tt-red" : "bg-tt-warn/20 text-tt-warn"
             }`}
           >
             {inject.urgency.toUpperCase()}
@@ -184,10 +181,10 @@ function SystemAlertInject(props: InjectCardProps) {
       {...props}
       subheader={
         inject.title ? (
-          <div className="flex items-center gap-3 px-4 py-2 bg-black/30 border-b border-[#2a3030]">
+          <div className="flex items-center gap-3 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
             <span
               className={`font-mono text-xs truncate flex-1 ${
-                isRed ? "text-[#ff4d3d]" : "text-[#ffb340]"
+                isRed ? "text-tt-red" : "text-tt-warn"
               }`}
             >
               [{inject.urgency.toUpperCase()}] {inject.title}
@@ -205,23 +202,23 @@ function PhoneCall(props: InjectCardProps) {
   const big = size === "xl"
   return (
     <div
-      className="border border-[#2a3030] bg-[#111618] overflow-hidden"
-      style={{ borderLeft: "3px solid #40ffb3" }}
+      className="border border-tt-border bg-tt-surface overflow-hidden"
+      style={{ borderLeft: "3px solid var(--tt-green)" }}
     >
-      <div className="flex items-center gap-3 px-4 py-2 bg-black/25 border-b border-[#2a3030]">
-        <span className="font-mono text-[10px] font-bold tracking-widest shrink-0 text-[#40ffb3]">
+      <div className="flex items-center gap-3 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
+        <span className="font-mono text-[10px] font-bold tracking-widest shrink-0 text-tt-green">
           📞 PHONE
         </span>
-        <span className="font-mono text-[10px] text-[#7a9090] truncate flex-1">
+        <span className="font-mono text-[10px] text-tt-dim truncate flex-1">
           {inject.senderName ?? inject.source}
           {inject.senderHandle && <span className="ml-1 opacity-50">{inject.senderHandle}</span>}
         </span>
-        <span className="font-mono text-[10px] text-[#7a9090] shrink-0">
+        <span className="font-mono text-[10px] text-tt-dim shrink-0">
           {inject.timestamp ?? formatTime(pushedAt)}
         </span>
       </div>
-      <div className="px-4 py-4 font-mono leading-relaxed text-[#f0fafa] whitespace-pre-wrap">
-        <div className={big ? "text-sm" : "text-xs"}>{inject.content}</div>
+      <div className={`px-4 py-4 font-mono leading-relaxed text-tt-bright whitespace-pre-wrap ${big ? "text-sm" : "text-xs"}`}>
+        {inject.content}
       </div>
     </div>
   )
@@ -233,26 +230,26 @@ function NewsTickerInject(props: InjectCardProps) {
   const big = size === "xl"
   return (
     <div
-      className="border border-[#2a3030] bg-[#111618] overflow-hidden"
-      style={{ borderLeft: "3px solid #ff4d3d" }}
+      className="border border-tt-border bg-tt-surface overflow-hidden"
+      style={{ borderLeft: "3px solid var(--tt-red)" }}
     >
-      <div className="flex items-center gap-3 px-4 py-2 bg-[#ff4d3d]/15 border-b border-[#ff4d3d]/40">
-        <span className="font-mono text-[10px] font-bold tracking-widest shrink-0 text-[#ff4d3d] animate-pulse">
+      <div className="flex items-center gap-3 px-4 py-2 bg-tt-red/10 border-b border-tt-red/40">
+        <span className="font-mono text-[10px] font-bold tracking-widest shrink-0 text-tt-red animate-pulse">
           ● BREAKING
         </span>
-        <span className="font-mono text-[10px] text-[#7a9090] shrink-0">
+        <span className="font-mono text-[10px] text-tt-dim shrink-0">
           {inject.senderName ?? inject.source}
         </span>
-        <span className="font-mono text-[10px] text-[#7a9090] ml-auto shrink-0">
+        <span className="font-mono text-[10px] text-tt-dim ml-auto shrink-0">
           {inject.timestamp ?? formatTime(pushedAt)}
         </span>
       </div>
       {inject.title && (
-        <div className="px-4 pt-4 font-mono text-sm font-bold text-[#ff4d3d]">
+        <div className="px-4 pt-4 font-mono text-sm font-bold text-tt-red">
           {inject.title}
         </div>
       )}
-      <div className={`px-4 py-4 font-mono whitespace-pre-wrap leading-relaxed text-[#f0fafa] ${big ? "text-sm" : "text-xs"}`}>
+      <div className={`px-4 py-4 font-mono whitespace-pre-wrap leading-relaxed text-tt-bright ${big ? "text-sm" : "text-xs"}`}>
         {inject.content}
       </div>
     </div>
@@ -273,8 +270,8 @@ function RawInject(props: InjectCardProps) {
       {...props}
       subheader={
         inject.title ? (
-          <div className="px-4 py-2 border-b border-[#2a3030]">
-            <span className="font-mono text-xs text-[#f0fafa] font-semibold">{inject.title}</span>
+          <div className="px-4 py-2 border-b border-tt-border">
+            <span className="font-mono text-xs text-tt-bright font-semibold">{inject.title}</span>
           </div>
         ) : undefined
       }
@@ -347,15 +344,15 @@ export function InjectFeed({
 
   if (filtered.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-4 border border-[#2a3030] bg-[#111618] px-6 py-16 text-center">
-        <div className="font-mono text-[10px] uppercase tracking-widest text-[#7a9090]">
+      <div className="flex flex-col items-center gap-4 border border-tt-border bg-tt-surface px-6 py-16 text-center">
+        <div className="font-mono text-[10px] uppercase tracking-widest text-tt-dim">
           {tr(lang, "awaitingInjects")}
         </div>
         <div className="flex gap-2 justify-center">
           {[0, 1, 2].map((i) => (
             <span
               key={i}
-              className="size-1.5 bg-[#7a9090] dot-pulse"
+              className="size-1.5 bg-tt-dim dot-pulse"
               style={{ animationDelay: `${i * 0.3}s` }}
             />
           ))}
@@ -367,10 +364,10 @@ export function InjectFeed({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between px-1" ref={topRef}>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-[#7a9090]">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-tt-dim">
           {tr(lang, "incomingIntel")}
         </span>
-        <span className="font-mono text-[10px] text-[#e8ff40] border border-[#e8ff40]/30 px-2 py-0.5">
+        <span className="font-mono text-[10px] text-tt-accent border border-tt-accent/30 px-2 py-0.5">
           {sorted.length}
         </span>
       </div>
@@ -378,10 +375,10 @@ export function InjectFeed({
         {sorted.map((p, i) => {
           const size = getSize(p.inject.urgency, i, p.roundIndex < 0)
           const isSurprise = p.roundIndex < 0
-          const urgencyColor =
-            p.inject.urgency === "critical" ? "#ff4d3d" :
-            p.inject.urgency === "high"     ? "#ffb340" :
-            p.inject.urgency === "medium"   ? "#e8ff40" : "#7a9090"
+          const dotColor =
+            p.inject.urgency === "critical" ? "var(--tt-red)" :
+            p.inject.urgency === "high"     ? "var(--tt-warn)" :
+            p.inject.urgency === "medium"   ? "var(--tt-accent)" : "var(--tt-dim)"
           return (
             <li
               key={`${p.inject.id}-${p.pushedAt}`}
@@ -393,15 +390,15 @@ export function InjectFeed({
                 <span
                   className="size-1.5 shrink-0 dot-pulse"
                   style={{
-                    backgroundColor: urgencyColor,
+                    backgroundColor: dotColor,
                     animationPlayState: p.inject.urgency === "critical" ? "running" : "paused",
                   }}
                 />
-                <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">
+                <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
                   {p.inject.urgency}
                   {isSurprise ? " · SURPRISE" : ""}
                 </span>
-                <span className="ml-auto font-mono text-[9px] text-[#7a9090]">
+                <span className="ml-auto font-mono text-[9px] text-tt-dim">
                   {formatTime(p.pushedAt)}
                 </span>
               </div>

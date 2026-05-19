@@ -4,68 +4,70 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Light theme */
-  --background: oklch(0.975 0.002 260);
-  --foreground: oklch(0.13 0.01 260);
-  --card: oklch(0.955 0.003 260);
-  --card-foreground: oklch(0.13 0.01 260);
-  --popover: oklch(0.955 0.003 260);
-  --popover-foreground: oklch(0.13 0.01 260);
-  --primary: oklch(0.62 0.16 75);
-  --primary-foreground: oklch(0.98 0.005 75);
-  --secondary: oklch(0.92 0.003 260);
-  --secondary-foreground: oklch(0.13 0.01 260);
-  --muted: oklch(0.92 0.003 260);
-  --muted-foreground: oklch(0.50 0.01 260);
-  --accent: oklch(0.90 0.004 260);
-  --accent-foreground: oklch(0.13 0.01 260);
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.98 0.005 260);
-  --border: oklch(0.83 0.005 260);
-  --input: oklch(0.90 0.003 260);
-  --ring: oklch(0.62 0.16 75);
-  --chart-1: oklch(0.62 0.16 75);
-  --chart-2: oklch(0.55 0.22 25);
-  --chart-3: oklch(0.55 0.12 200);
-  --chart-4: oklch(0.45 0.05 260);
-  --chart-5: oklch(0.72 0.08 75);
-  --radius: 0px;
-  --sidebar: oklch(0.945 0.003 260);
-  --sidebar-foreground: oklch(0.13 0.01 260);
-  --sidebar-primary: oklch(0.62 0.16 75);
-  --sidebar-primary-foreground: oklch(0.98 0.005 75);
-  --sidebar-accent: oklch(0.90 0.004 260);
-  --sidebar-accent-foreground: oklch(0.13 0.01 260);
-  --sidebar-border: oklch(0.83 0.005 260);
-  --sidebar-ring: oklch(0.62 0.16 75);
+  /* Light terminal palette */
+  --tt-bg:      #f4f6f6;
+  --tt-surface: #eaeeee;
+  --tt-accent:  #5a7a00;
+  --tt-red:     #c82010;
+  --tt-blue:    #0055aa;
+  --tt-green:   #006644;
+  --tt-warn:    #8a5500;
+  --tt-purple:  #5540aa;
+  --tt-border:  #c8d8d8;
+  --tt-dim:     #607070;
+  --tt-bright:  #0d1414;
 
-  /* Tabletop palette — light-mode variants */
-  --tt-bg: #f8fafa;
-  --tt-accent: #6b8c00;
-  --tt-red: #d93025;
-  --tt-blue: #0066aa;
-  --tt-green: #007744;
-  --tt-warn: #8a5800;
-  --tt-purple: #5540aa;
-  --tt-border: #c0d0d0;
-  --tt-dim: #607070;
-  --tt-bright: #0d1414;
+  /* shadcn semantic vars — light terminal */
+  --background: #f4f6f6;
+  --foreground: #0d1414;
+  --card: #eaeeee;
+  --card-foreground: #0d1414;
+  --popover: #eaeeee;
+  --popover-foreground: #0d1414;
+  --primary: #5a7a00;
+  --primary-foreground: #f4f6f6;
+  --secondary: #dde8e8;
+  --secondary-foreground: #0d1414;
+  --muted: #dde8e8;
+  --muted-foreground: #607070;
+  --accent: #d5e5e5;
+  --accent-foreground: #0d1414;
+  --destructive: #c82010;
+  --destructive-foreground: #f4f6f6;
+  --border: #c8d8d8;
+  --input: #dde8e8;
+  --ring: #5a7a00;
+  --chart-1: #5a7a00;
+  --chart-2: #c82010;
+  --chart-3: #0055aa;
+  --chart-4: #5540aa;
+  --chart-5: #006644;
+  --radius: 0px;
+  --sidebar: #eaeeee;
+  --sidebar-foreground: #0d1414;
+  --sidebar-primary: #5a7a00;
+  --sidebar-primary-foreground: #f4f6f6;
+  --sidebar-accent: #d5e5e5;
+  --sidebar-accent-foreground: #0d1414;
+  --sidebar-border: #c8d8d8;
+  --sidebar-ring: #5a7a00;
 }
 
 .dark {
-  /* Tabletop palette — dark mode */
-  --tt-bg: #0d0f0f;
-  --tt-accent: #e8ff40;
-  --tt-red: #ff4d3d;
-  --tt-blue: #40c4ff;
-  --tt-green: #40ffb3;
-  --tt-warn: #ffb340;
-  --tt-purple: #7b68ee;
-  --tt-border: #2a3030;
-  --tt-dim: #7a9090;
-  --tt-bright: #f0fafa;
+  /* Dark terminal palette */
+  --tt-bg:      #0d0f0f;
+  --tt-surface: #111618;
+  --tt-accent:  #e8ff40;
+  --tt-red:     #ff4d3d;
+  --tt-blue:    #40c4ff;
+  --tt-green:   #40ffb3;
+  --tt-warn:    #ffb340;
+  --tt-purple:  #7b68ee;
+  --tt-border:  #2a3030;
+  --tt-dim:     #7a9090;
+  --tt-bright:  #f0fafa;
 
-  /* shadcn semantic vars remapped to tabletop palette */
+  /* shadcn semantic vars — dark terminal */
   --background: #0d0f0f;
   --foreground: #f0fafa;
   --card: #111618;
@@ -141,16 +143,17 @@
   --color-sidebar-ring: var(--sidebar-ring);
 
   /* Tabletop color tokens */
-  --color-tt-bg: var(--tt-bg);
-  --color-tt-accent: var(--tt-accent);
-  --color-tt-red: var(--tt-red);
-  --color-tt-blue: var(--tt-blue);
-  --color-tt-green: var(--tt-green);
-  --color-tt-warn: var(--tt-warn);
-  --color-tt-purple: var(--tt-purple);
-  --color-tt-border: var(--tt-border);
-  --color-tt-dim: var(--tt-dim);
-  --color-tt-bright: var(--tt-bright);
+  --color-tt-bg:      var(--tt-bg);
+  --color-tt-surface: var(--tt-surface);
+  --color-tt-accent:  var(--tt-accent);
+  --color-tt-red:     var(--tt-red);
+  --color-tt-blue:    var(--tt-blue);
+  --color-tt-green:   var(--tt-green);
+  --color-tt-warn:    var(--tt-warn);
+  --color-tt-purple:  var(--tt-purple);
+  --color-tt-border:  var(--tt-border);
+  --color-tt-dim:     var(--tt-dim);
+  --color-tt-bright:  var(--tt-bright);
 }
 
 @layer base {
@@ -193,8 +196,8 @@
   }
   .grid-bg {
     background-image:
-      linear-gradient(to right, var(--tt-border, oklch(0.28 0.006 260)) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--tt-border, oklch(0.28 0.006 260)) 1px, transparent 1px);
+      linear-gradient(to right, var(--tt-border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--tt-border) 1px, transparent 1px);
     background-size: 40px 40px;
   }
 }

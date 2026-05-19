@@ -34,32 +34,32 @@ function IntroOverlay({
   operationName?: string
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0f0f] px-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-tt-bg px-4">
       <div className="grid-bg pointer-events-none absolute inset-0 opacity-20" aria-hidden />
       <div className="relative z-10 w-full max-w-lg flex flex-col gap-6">
 
         {/* Operation header */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <ShieldAlert className="size-4 text-[#e8ff40]" />
-            <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">CYBER_TABLETOP</span>
+            <ShieldAlert className="size-4 text-tt-accent" />
+            <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">CYBER_TABLETOP</span>
           </div>
           {operationName && (
-            <h1 className="font-mono text-3xl font-bold tracking-tight text-[#e8ff40] leading-tight">
+            <h1 className="font-mono text-3xl font-bold tracking-tight text-tt-accent leading-tight">
               {operationName.toUpperCase()}
             </h1>
           )}
-          <p className="font-mono text-[10px] text-[#7a9090]">
+          <p className="font-mono text-[10px] text-tt-dim">
             {tr(lang, "welcomeSub")}
           </p>
         </div>
 
         {/* Instructions */}
         <div
-          className="flex flex-col gap-3 border border-[#2a3030] bg-[#111618] p-5"
+          className="flex flex-col gap-3 border border-tt-border bg-tt-surface p-5"
           style={{ borderLeft: "3px solid #e8ff40" }}
         >
-          <span className="font-mono text-[9px] uppercase tracking-widest text-[#e8ff40]">
+          <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">
             {tr(lang, "howItWorks")}
           </span>
           {[
@@ -70,12 +70,12 @@ function IntroOverlay({
             tr(lang, "intro5"),
           ].map((s, i) => (
             <div key={i} className="flex gap-3">
-              <span className="font-mono text-[10px] text-[#e8ff40] mt-0.5 shrink-0">{i + 1}.</span>
-              <p className="font-mono text-xs text-[#7a9090] leading-relaxed">{s}</p>
+              <span className="font-mono text-[10px] text-tt-accent mt-0.5 shrink-0">{i + 1}.</span>
+              <p className="font-mono text-xs text-tt-dim leading-relaxed">{s}</p>
             </div>
           ))}
-          <div className="border border-[#2a3030] bg-black/20 px-4 py-2.5 mt-1">
-            <p className="font-mono text-[10px] text-[#7a9090]">{tr(lang, "timerNote")}</p>
+          <div className="border border-tt-border bg-tt-bright/5 px-4 py-2.5 mt-1">
+            <p className="font-mono text-[10px] text-tt-dim">{tr(lang, "timerNote")}</p>
           </div>
         </div>
 
@@ -107,12 +107,12 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
 
   return (
     <div
-      className="border border-[#2a3030] bg-[#111618] overflow-hidden"
+      className="border border-tt-border bg-tt-surface overflow-hidden"
       style={{ borderLeft: `3px solid ${severityColor}` }}
     >
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2.5 bg-black/25 border-b border-[#2a3030] hover:bg-black/40 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2.5 bg-black/25 border-b border-tt-border hover:bg-black/40 transition-colors"
       >
         <div className="flex items-center gap-3">
           <span
@@ -121,7 +121,7 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
           >
             {tr(lang, "round").toUpperCase()} {roundIdx + 1}/{session.scenario.rounds.length}
           </span>
-          <span className="font-mono text-[10px] text-[#7a9090] truncate">{currentRound.title}</span>
+          <span className="font-mono text-[10px] text-tt-dim truncate">{currentRound.title}</span>
           <span
             className="hidden sm:inline font-mono text-[9px] border px-1.5 py-0.5"
             style={{ color: severityColor, borderColor: `${severityColor}40` }}
@@ -130,27 +130,27 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
           </span>
         </div>
         <ChevronDown
-          className="size-4 text-[#7a9090] shrink-0 transition-transform ml-2"
+          className="size-4 text-tt-dim shrink-0 transition-transform ml-2"
           style={{ transform: expanded ? "rotate(180deg)" : undefined }}
         />
       </button>
       {expanded && (
         <div className="px-4 pb-4 flex flex-col gap-4 pt-4">
-          <p className="font-mono text-xs leading-relaxed text-[#f0fafa] whitespace-pre-wrap">
+          <p className="font-mono text-xs leading-relaxed text-tt-bright whitespace-pre-wrap">
             {currentRound.situation_update}
           </p>
 
           {currentRound.learningObjectives && currentRound.learningObjectives.length > 0 && (
-            <div className="flex flex-col gap-1.5 border-t border-[#2a3030] pt-3">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">
+            <div className="flex flex-col gap-1.5 border-t border-tt-border pt-3">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
                 Ronde doelen
               </span>
               {currentRound.learningObjectives.map(obj => (
                 <div key={obj.id} className="flex items-start gap-2">
-                  <span className={`font-mono text-[10px] shrink-0 mt-px ${obj.achieved ? "text-[#40ffb3]" : "text-[#2a3030]"}`}>
+                  <span className={`font-mono text-[10px] shrink-0 mt-px ${obj.achieved ? "text-tt-green" : "text-[#2a3030]"}`}>
                     {obj.achieved ? "✓" : "□"}
                   </span>
-                  <span className={`font-mono text-[10px] leading-snug ${obj.achieved ? "text-[#40ffb3]" : "text-[#7a9090]"}`}>
+                  <span className={`font-mono text-[10px] leading-snug ${obj.achieved ? "text-tt-green" : "text-tt-dim"}`}>
                     {obj.description}
                   </span>
                 </div>
@@ -158,8 +158,8 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
             </div>
           )}
 
-          <div className="border border-[#2a3030] bg-black/20 px-4 py-3">
-            <p className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090] mb-2">
+          <div className="border border-tt-border bg-tt-bright/5 px-4 py-3">
+            <p className="font-mono text-[9px] uppercase tracking-widest text-tt-dim mb-2">
               {tr(lang, "roundIntro")}
             </p>
             <ul className="flex flex-col gap-1.5">
@@ -170,7 +170,7 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
               ].map((s, i) => (
                 <li key={i} className="flex gap-2">
                   <span className="font-mono text-[10px] shrink-0" style={{ color: severityColor }}>→</span>
-                  <span className="font-mono text-[10px] text-[#7a9090]">{s}</span>
+                  <span className="font-mono text-[10px] text-tt-dim">{s}</span>
                 </li>
               ))}
             </ul>

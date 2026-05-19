@@ -18,20 +18,20 @@ export default function LandingPage() {
   const [lang, setLang] = useLang()
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#0d0f0f]">
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-tt-bg">
       {/* Grid background */}
       <div className="grid-bg pointer-events-none absolute inset-0 opacity-30" aria-hidden />
 
       {/* Top nav */}
-      <header className="relative z-10 flex items-center justify-between border-b border-[#2a3030] px-6 py-4 md:px-10">
+      <header className="relative z-10 flex items-center justify-between border-b border-tt-border px-6 py-4 md:px-10">
         <div className="flex items-center gap-3">
-          <ShieldAlert className="size-4 text-[#e8ff40]" />
-          <span className="font-mono text-sm tracking-widest text-[#f0fafa]">CYBER_TABLETOP</span>
+          <ShieldAlert className="size-4 text-tt-accent" />
+          <span className="font-mono text-sm tracking-widest text-tt-bright">CYBER_TABLETOP</span>
         </div>
         <div className="flex items-center gap-3">
           <Link
             href="/templates"
-            className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-[#7a9090] hover:text-[#f0fafa] transition-colors"
+            className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-tt-dim hover:text-tt-bright transition-colors"
           >
             <Library className="size-3" /> Templates
           </Link>
@@ -46,13 +46,13 @@ export default function LandingPage() {
 
           {/* Operation header */}
           <div className="flex flex-col gap-4">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
               {tr(lang, "tagline")}
             </span>
-            <h1 className="font-mono text-5xl md:text-6xl font-bold tracking-tight leading-none text-[#e8ff40]">
+            <h1 className="font-mono text-5xl md:text-6xl font-bold tracking-tight leading-none text-tt-accent">
               INCIDENT<br />RESPONSE
             </h1>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#7a9090]">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-tt-dim">
               AI-GENERATED · REAL-TIME · ROLE-BASED CRISIS EXERCISE
             </p>
           </div>
@@ -61,53 +61,53 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Link
               href="/admin"
-              className="group flex flex-col gap-3 border border-[#2a3030] bg-[#111618] px-6 py-5 transition-colors hover:border-[#e8ff40]/40"
-              style={{ borderLeft: "3px solid #e8ff40" }}
+              className="group flex flex-col gap-3 border border-tt-border bg-tt-surface px-6 py-5 transition-colors hover:border-[#e8ff40]/40"
+              style={{ borderLeft: "3px solid var(--tt-accent)" }}
             >
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-[#e8ff40]">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-tt-accent">
                   {tr(lang, "facilitator")}
                 </span>
-                <ArrowRight className="size-3.5 text-[#7a9090] transition-colors group-hover:text-[#e8ff40]" />
+                <ArrowRight className="size-3.5 text-tt-dim transition-colors group-hover:text-tt-accent" />
               </div>
-              <p className="font-mono text-[10px] leading-relaxed text-[#7a9090]">
+              <p className="font-mono text-[10px] leading-relaxed text-tt-dim">
                 Configure scenario · Push injects · Control timeline
               </p>
-              <span className="font-mono text-[9px] tracking-widest text-[#7a9090]">CONSOLE ACCESS</span>
+              <span className="font-mono text-[9px] tracking-widest text-tt-dim">CONSOLE ACCESS</span>
             </Link>
 
             <Link
               href="/join"
-              className="group flex flex-col gap-3 border border-[#2a3030] bg-[#111618] px-6 py-5 transition-colors hover:border-[#40c4ff]/40"
-              style={{ borderLeft: "3px solid #40c4ff" }}
+              className="group flex flex-col gap-3 border border-tt-border bg-tt-surface px-6 py-5 transition-colors hover:border-[#40c4ff]/40"
+              style={{ borderLeft: "3px solid var(--tt-blue)" }}
             >
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-[#40c4ff]">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-tt-blue">
                   {tr(lang, "participant")}
                 </span>
-                <ArrowRight className="size-3.5 text-[#7a9090] transition-colors group-hover:text-[#40c4ff]" />
+                <ArrowRight className="size-3.5 text-tt-dim transition-colors group-hover:text-tt-blue" />
               </div>
-              <p className="font-mono text-[10px] leading-relaxed text-[#7a9090]">
+              <p className="font-mono text-[10px] leading-relaxed text-tt-dim">
                 Join active exercise · Receive injects · Submit decisions
               </p>
-              <span className="font-mono text-[9px] tracking-widest text-[#7a9090]">JOIN WITH CODE</span>
+              <span className="font-mono text-[9px] tracking-widest text-tt-dim">JOIN WITH CODE</span>
             </Link>
           </div>
 
           {/* Meta-grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#2a3030]">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-tt-border">
             {META.map(({ label, value }) => (
-              <div key={label} className="flex flex-col gap-1 bg-[#111618] px-4 py-3">
-                <span className="font-mono text-[8px] uppercase tracking-widest text-[#7a9090]">{label}</span>
-                <span className="font-mono text-xl text-[#f0fafa]">{value}</span>
+              <div key={label} className="flex flex-col gap-1 bg-tt-surface px-4 py-3">
+                <span className="font-mono text-[8px] uppercase tracking-widest text-tt-dim">{label}</span>
+                <span className="font-mono text-xl text-tt-bright">{value}</span>
               </div>
             ))}
           </div>
         </div>
       </main>
 
-      <footer className="relative z-10 border-t border-[#2a3030] px-6 py-3 md:px-10">
-        <div className="flex items-center justify-between font-mono text-[9px] text-[#7a9090]">
+      <footer className="relative z-10 border-t border-tt-border px-6 py-3 md:px-10">
+        <div className="flex items-center justify-between font-mono text-[9px] text-tt-dim">
           <span>SESSION = ephemeral · in-memory · Vercel KV</span>
           <span>v3.0 · 2 built-in templates</span>
         </div>
