@@ -29,7 +29,7 @@
   --chart-3: oklch(0.55 0.12 200);
   --chart-4: oklch(0.45 0.05 260);
   --chart-5: oklch(0.72 0.08 75);
-  --radius: 0.5rem;
+  --radius: 0px;
   --sidebar: oklch(0.945 0.003 260);
   --sidebar-foreground: oklch(0.13 0.01 260);
   --sidebar-primary: oklch(0.62 0.16 75);
@@ -38,46 +38,71 @@
   --sidebar-accent-foreground: oklch(0.13 0.01 260);
   --sidebar-border: oklch(0.83 0.005 260);
   --sidebar-ring: oklch(0.62 0.16 75);
+
+  /* Tabletop palette — light-mode variants */
+  --tt-bg: #f8fafa;
+  --tt-accent: #6b8c00;
+  --tt-red: #d93025;
+  --tt-blue: #0066aa;
+  --tt-green: #007744;
+  --tt-warn: #8a5800;
+  --tt-purple: #5540aa;
+  --tt-border: #c0d0d0;
+  --tt-dim: #607070;
+  --tt-bright: #0d1414;
 }
 
 .dark {
-  --background: oklch(0.145 0.005 260);
-  --foreground: oklch(0.96 0.005 260);
-  --card: oklch(0.19 0.006 260);
-  --card-foreground: oklch(0.96 0.005 260);
-  --popover: oklch(0.19 0.006 260);
-  --popover-foreground: oklch(0.96 0.005 260);
-  --primary: oklch(0.78 0.16 75);
-  --primary-foreground: oklch(0.18 0.02 75);
-  --secondary: oklch(0.24 0.006 260);
-  --secondary-foreground: oklch(0.96 0.005 260);
-  --muted: oklch(0.22 0.006 260);
-  --muted-foreground: oklch(0.66 0.01 260);
-  --accent: oklch(0.26 0.008 260);
-  --accent-foreground: oklch(0.96 0.005 260);
-  --destructive: oklch(0.62 0.22 25);
-  --destructive-foreground: oklch(0.98 0.005 260);
-  --border: oklch(0.28 0.006 260);
-  --input: oklch(0.24 0.006 260);
-  --ring: oklch(0.78 0.16 75);
-  --chart-1: oklch(0.78 0.16 75);
-  --chart-2: oklch(0.62 0.22 25);
-  --chart-3: oklch(0.7 0.12 200);
-  --chart-4: oklch(0.55 0.05 260);
-  --chart-5: oklch(0.85 0.08 75);
-  --sidebar: oklch(0.17 0.005 260);
-  --sidebar-foreground: oklch(0.96 0.005 260);
-  --sidebar-primary: oklch(0.78 0.16 75);
-  --sidebar-primary-foreground: oklch(0.18 0.02 75);
-  --sidebar-accent: oklch(0.24 0.006 260);
-  --sidebar-accent-foreground: oklch(0.96 0.005 260);
-  --sidebar-border: oklch(0.28 0.006 260);
-  --sidebar-ring: oklch(0.78 0.16 75);
+  /* Tabletop palette — dark mode */
+  --tt-bg: #0d0f0f;
+  --tt-accent: #e8ff40;
+  --tt-red: #ff4d3d;
+  --tt-blue: #40c4ff;
+  --tt-green: #40ffb3;
+  --tt-warn: #ffb340;
+  --tt-purple: #7b68ee;
+  --tt-border: #2a3030;
+  --tt-dim: #7a9090;
+  --tt-bright: #f0fafa;
+
+  /* shadcn semantic vars remapped to tabletop palette */
+  --background: #0d0f0f;
+  --foreground: #f0fafa;
+  --card: #111618;
+  --card-foreground: #f0fafa;
+  --popover: #111618;
+  --popover-foreground: #f0fafa;
+  --primary: #e8ff40;
+  --primary-foreground: #0d0f0f;
+  --secondary: #1a2424;
+  --secondary-foreground: #f0fafa;
+  --muted: #1a2424;
+  --muted-foreground: #7a9090;
+  --accent: #1e2c2c;
+  --accent-foreground: #f0fafa;
+  --destructive: #ff4d3d;
+  --destructive-foreground: #f0fafa;
+  --border: #2a3030;
+  --input: #1a2424;
+  --ring: #e8ff40;
+  --chart-1: #e8ff40;
+  --chart-2: #ff4d3d;
+  --chart-3: #40c4ff;
+  --chart-4: #7b68ee;
+  --chart-5: #40ffb3;
+  --sidebar: #0a0c0c;
+  --sidebar-foreground: #f0fafa;
+  --sidebar-primary: #e8ff40;
+  --sidebar-primary-foreground: #0d0f0f;
+  --sidebar-accent: #1a2424;
+  --sidebar-accent-foreground: #f0fafa;
+  --sidebar-border: #2a3030;
+  --sidebar-ring: #e8ff40;
 }
 
 @theme inline {
-  --font-sans: 'Geist', 'Geist Fallback';
-  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --font-sans: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -114,6 +139,18 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Tabletop color tokens */
+  --color-tt-bg: var(--tt-bg);
+  --color-tt-accent: var(--tt-accent);
+  --color-tt-red: var(--tt-red);
+  --color-tt-blue: var(--tt-blue);
+  --color-tt-green: var(--tt-green);
+  --color-tt-warn: var(--tt-warn);
+  --color-tt-purple: var(--tt-purple);
+  --color-tt-border: var(--tt-border);
+  --color-tt-dim: var(--tt-dim);
+  --color-tt-bright: var(--tt-bright);
 }
 
 @layer base {
@@ -147,10 +184,18 @@
   .animate-fade-in {
     animation: fade-in 200ms ease-out;
   }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .dot-pulse {
+    animation: dot-pulse 1.2s ease-in-out infinite;
+  }
   .grid-bg {
     background-image:
-      linear-gradient(to right, oklch(0.28 0.006 260 / 0.4) 1px, transparent 1px),
-      linear-gradient(to bottom, oklch(0.28 0.006 260 / 0.4) 1px, transparent 1px);
+      linear-gradient(to right, var(--tt-border, oklch(0.28 0.006 260)) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--tt-border, oklch(0.28 0.006 260)) 1px, transparent 1px);
     background-size: 40px 40px;
+    opacity: 0.4;
   }
 }
