@@ -1,71 +1,115 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, ShieldAlert, Library } from "lucide-react"
+import { ArrowRight, Library, ShieldAlert } from "lucide-react"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
 import { ThemeToggle } from "@/components/theme-toggle"
 
+const META = [
+  { label: "SCENARIO TYPES", value: "4" },
+  { label: "ROLES",          value: "9" },
+  { label: "AI MODE",        value: "SONNET" },
+  { label: "INJECT CHANNELS", value: "8+" },
+] as const
+
 export default function LandingPage() {
   const [lang, setLang] = useLang()
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden">
-      <div className="grid-bg pointer-events-none absolute inset-0 opacity-25" aria-hidden />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" aria-hidden />
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#0d0f0f]">
+      {/* Grid background */}
+      <div className="grid-bg pointer-events-none absolute inset-0 opacity-30" aria-hidden />
 
-      <header className="relative z-10 flex items-center justify-between px-6 py-5 md:px-10">
+      {/* Top nav */}
+      <header className="relative z-10 flex items-center justify-between border-b border-[#2a3030] px-6 py-4 md:px-10">
         <div className="flex items-center gap-3">
-          <div className="flex size-8 items-center justify-center rounded-md border border-primary/40 bg-primary/10">
-            <ShieldAlert className="size-4 text-primary" />
-          </div>
-          <span className="font-mono text-sm tracking-wider text-foreground">CYBER_TABLETOP</span>
+          <ShieldAlert className="size-4 text-[#e8ff40]" />
+          <span className="font-mono text-sm tracking-widest text-[#f0fafa]">CYBER_TABLETOP</span>
         </div>
         <div className="flex items-center gap-3">
-          <ThemeToggle />
-          <LangToggle lang={lang} setLang={setLang} />
-          <Link href="/templates" className="flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
-            <Library className="size-3.5" /> Templates
+          <Link
+            href="/templates"
+            className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-[#7a9090] hover:text-[#f0fafa] transition-colors"
+          >
+            <Library className="size-3" /> Templates
           </Link>
+          <LangToggle lang={lang} setLang={setLang} />
+          <ThemeToggle />
         </div>
       </header>
 
+      {/* Main content */}
       <main className="relative z-10 flex flex-1 items-center justify-center px-6 py-12 md:px-10">
-        <div className="flex w-full max-w-md flex-col gap-8">
-          <div className="flex flex-col gap-3">
-            <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "tagline")}</span>
-            <h1 className="text-balance text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
-              {tr(lang, "selectRole")}
+        <div className="flex w-full max-w-2xl flex-col gap-10">
+
+          {/* Operation header */}
+          <div className="flex flex-col gap-4">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">
+              {tr(lang, "tagline")}
+            </span>
+            <h1 className="font-mono text-5xl md:text-6xl font-bold tracking-tight leading-none text-[#e8ff40]">
+              INCIDENT<br />RESPONSE
             </h1>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#7a9090]">
+              AI-GENERATED · REAL-TIME · ROLE-BASED CRISIS EXERCISE
+            </p>
           </div>
-          <div className="flex flex-col gap-3">
-            <Link href="/admin" className="flex h-16 items-center justify-between rounded-xl border border-primary/40 bg-primary/10 px-6 font-mono text-sm uppercase tracking-wider text-foreground transition-all hover:bg-primary/20 hover:border-primary/60">
-              <span>{tr(lang, "facilitator")}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">CONSOLE ACCESS</span>
-                <ArrowRight className="size-4" />
+
+          {/* Role selector cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Link
+              href="/admin"
+              className="group flex flex-col gap-3 border border-[#2a3030] bg-[#111618] px-6 py-5 transition-colors hover:border-[#e8ff40]/40"
+              style={{ borderLeft: "3px solid #e8ff40" }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-[#e8ff40]">
+                  {tr(lang, "facilitator")}
+                </span>
+                <ArrowRight className="size-3.5 text-[#7a9090] transition-colors group-hover:text-[#e8ff40]" />
               </div>
+              <p className="font-mono text-[10px] leading-relaxed text-[#7a9090]">
+                Configure scenario · Push injects · Control timeline
+              </p>
+              <span className="font-mono text-[9px] tracking-widest text-[#7a9090]">CONSOLE ACCESS</span>
             </Link>
-            <Link href="/join" className="flex h-16 items-center justify-between rounded-xl border border-border bg-card px-6 font-mono text-sm uppercase tracking-wider text-foreground transition-all hover:bg-accent">
-              <span>{tr(lang, "participant")}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">JOIN WITH CODE</span>
-                <ArrowRight className="size-4" />
+
+            <Link
+              href="/join"
+              className="group flex flex-col gap-3 border border-[#2a3030] bg-[#111618] px-6 py-5 transition-colors hover:border-[#40c4ff]/40"
+              style={{ borderLeft: "3px solid #40c4ff" }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-[#40c4ff]">
+                  {tr(lang, "participant")}
+                </span>
+                <ArrowRight className="size-3.5 text-[#7a9090] transition-colors group-hover:text-[#40c4ff]" />
               </div>
+              <p className="font-mono text-[10px] leading-relaxed text-[#7a9090]">
+                Join active exercise · Receive injects · Submit decisions
+              </p>
+              <span className="font-mono text-[9px] tracking-widest text-[#7a9090]">JOIN WITH CODE</span>
             </Link>
-            <Link href="/templates" className="flex h-12 items-center justify-between rounded-xl border border-border bg-background px-6 font-mono text-xs uppercase tracking-wider text-muted-foreground transition-all hover:text-foreground hover:border-border/80">
-              <span className="flex items-center gap-2"><Library className="size-3.5" /> Template library</span>
-              <ArrowRight className="size-3.5" />
-            </Link>
+          </div>
+
+          {/* Meta-grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#2a3030]">
+            {META.map(({ label, value }) => (
+              <div key={label} className="flex flex-col gap-1 bg-[#111618] px-4 py-3">
+                <span className="font-mono text-[8px] uppercase tracking-widest text-[#7a9090]">{label}</span>
+                <span className="font-mono text-xl text-[#f0fafa]">{value}</span>
+              </div>
+            ))}
           </div>
         </div>
       </main>
 
-      <footer className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-6 md:px-10">
-        <div className="border-t border-border pt-4 font-mono text-xs text-muted-foreground flex items-center justify-between">
-          <span>SESSION = in-memory · single active · ephemeral</span>
-          <span>2 builtin templates · v3.0</span>
+      <footer className="relative z-10 border-t border-[#2a3030] px-6 py-3 md:px-10">
+        <div className="flex items-center justify-between font-mono text-[9px] text-[#7a9090]">
+          <span>SESSION = ephemeral · in-memory · Vercel KV</span>
+          <span>v3.0 · 2 built-in templates</span>
         </div>
       </footer>
     </div>

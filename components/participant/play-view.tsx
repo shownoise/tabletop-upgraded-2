@@ -24,24 +24,44 @@ const ROLE_KEY = "ctt:role"
 const FEEDBACK_KEY = "ctt:feedback_rounds"
 
 // ─── Intro overlay ───
-function IntroOverlay({ lang, onReady }: { lang: ReturnType<typeof useLang>[0]; onReady: () => void }) {
+function IntroOverlay({
+  lang,
+  onReady,
+  operationName,
+}: {
+  lang: ReturnType<typeof useLang>[0]
+  onReady: () => void
+  operationName?: string
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background px-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0d0f0f] px-4">
       <div className="grid-bg pointer-events-none absolute inset-0 opacity-20" aria-hidden />
       <div className="relative z-10 w-full max-w-lg flex flex-col gap-6">
+
+        {/* Operation header */}
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="flex size-8 items-center justify-center rounded border border-primary/40 bg-primary/10">
-              <ShieldAlert className="size-4 text-primary" />
-            </div>
-            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">CYBER_TABLETOP</span>
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="size-4 text-[#e8ff40]" />
+            <span className="font-mono text-[9px] uppercase tracking-widest text-[#7a9090]">CYBER_TABLETOP</span>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">{tr(lang, "welcomeTitle")}</h1>
-          <p className="text-muted-foreground text-sm">{tr(lang, "welcomeSub")}</p>
+          {operationName && (
+            <h1 className="font-mono text-3xl font-bold tracking-tight text-[#e8ff40] leading-tight">
+              {operationName.toUpperCase()}
+            </h1>
+          )}
+          <p className="font-mono text-[10px] text-[#7a9090]">
+            {tr(lang, "welcomeSub")}
+          </p>
         </div>
 
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-primary">{tr(lang, "howItWorks")}</span>
+        {/* Instructions */}
+        <div
+          className="flex flex-col gap-3 border border-[#2a3030] bg-[#111618] p-5"
+          style={{ borderLeft: "3px solid #e8ff40" }}
+        >
+          <span className="font-mono text-[9px] uppercase tracking-widest text-[#e8ff40]">
+            {tr(lang, "howItWorks")}
+          </span>
           {[
             tr(lang, "intro1"),
             tr(lang, "intro2"),
@@ -50,18 +70,18 @@ function IntroOverlay({ lang, onReady }: { lang: ReturnType<typeof useLang>[0]; 
             tr(lang, "intro5"),
           ].map((s, i) => (
             <div key={i} className="flex gap-3">
-              <span className="font-mono text-xs text-primary mt-0.5 shrink-0">{i + 1}.</span>
-              <p className="text-sm text-muted-foreground leading-relaxed">{s}</p>
+              <span className="font-mono text-[10px] text-[#e8ff40] mt-0.5 shrink-0">{i + 1}.</span>
+              <p className="font-mono text-xs text-[#7a9090] leading-relaxed">{s}</p>
             </div>
           ))}
-          <div className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-4 py-2.5">
-            <p className="font-mono text-xs text-primary">{tr(lang, "timerNote")}</p>
+          <div className="border border-[#2a3030] bg-black/20 px-4 py-2.5 mt-1">
+            <p className="font-mono text-[10px] text-[#7a9090]">{tr(lang, "timerNote")}</p>
           </div>
         </div>
 
         <button
           onClick={onReady}
-          className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 font-mono text-sm uppercase tracking-wider text-primary-foreground hover:bg-primary/90 transition-colors"
+          className="flex items-center justify-center gap-2 bg-[#e8ff40] px-6 py-4 font-mono text-sm uppercase tracking-widest text-[#0d0f0f] hover:bg-[#e8ff40]/90 transition-colors"
         >
           {tr(lang, "readyBtn")}
         </button>
@@ -456,7 +476,7 @@ export function PlayView() {
     <div className="min-h-screen bg-background">
       {/* Intro overlay */}
       {showIntro && session.status === "lobby" && (
-        <IntroOverlay lang={lang} onReady={() => setShowIntro(false)} />
+        <IntroOverlay lang={lang} onReady={() => setShowIntro(false)} operationName={session.scenario.scenario_title} />
       )}
 
       {/* Special event modal */}
