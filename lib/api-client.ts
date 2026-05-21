@@ -1,24 +1,39 @@
 import type { ExerciseConfig, InjectType, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, Urgency } from "./types"
+import type { AssessmentDimensionId, SessionAssessment } from "./engine/types"
 
 async function post<T = unknown>(url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  } catch (networkErr) {
+    console.error(`[api] POST ${url} network error:`, networkErr)
+    throw networkErr
+  }
   const json = (await res.json()) as T
   if (!res.ok) {
     const err = (json as { error?: string }).error ?? "Request failed"
+    console.error(`[api] POST ${url} ${res.status}:`, err)
     throw new Error(err)
   }
   return json
 }
 
 async function get<T = unknown>(url: string): Promise<T> {
-  const res = await fetch(url, { method: "GET" })
+  let res: Response
+  try {
+    res = await fetch(url, { method: "GET" })
+  } catch (networkErr) {
+    console.error(`[api] GET ${url} network error:`, networkErr)
+    throw networkErr
+  }
   const json = (await res.json()) as T
   if (!res.ok) {
     const err = (json as { error?: string }).error ?? "Request failed"
+    console.error(`[api] GET ${url} ${res.status}:`, err)
     throw new Error(err)
   }
   return json
@@ -55,4 +70,14 @@ export const api = {
     post<{ ok: true }>("/api/session/special/form", input),
   completeSpecial: (specialId: string) =>
     post<{ ok: true }>("/api/session/special/complete", { specialId }),
+  scoreRound: (roundIndex: number, score: -1 | 0 | 1) =>
+    post<{ ok: true }>("/api/session/score-round", { roundIndex, score }),
+  logAssessmentEvent: (input: { dimensionId: AssessmentDimensionId; roundNumber: number; value: number; note?: string }) =>
+    post<{ ok: boolean }>("/api/session/assessment", { ...input, source: "facilitator" }),
+  getDebrief: () =>
+    post<{ assessment: SessionAssessment }>("/api/session/debrief"),
+  setDiscussionPhase: (input: { roundNumber: number; phaseIndex: number; action?: 'set' | 'extend' }) =>
+    post<{ ok: true }>("/api/session/discussion-phase", input),
+  markReady: (participantId: string) =>
+    post<{ ok: true }>("/api/session/ready", { participantId }),
 }

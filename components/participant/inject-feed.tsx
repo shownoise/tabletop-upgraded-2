@@ -1,24 +1,40 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import type { PushedInject, InjectChannel, Urgency } from "@/lib/types"
+import {
+  Mail, MessageSquare, MessageCircle, AlertTriangle, Phone,
+  Newspaper, Shield, Smartphone, FileText, ShieldAlert,
+} from "lucide-react"
+import type { PushedInject, InjectChannel, InjectType, Urgency } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import type { Role } from "@/lib/types"
 import { formatTime } from "@/lib/format"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
+import { stripMarkdown } from "@/lib/render-markdown"
 
 // ─────────────────── Channel config (brand colors stay hardcoded) ───────────────────
-const CHANNEL_CONFIG: Record<string, { label: string; color: string }> = {
-  whatsapp:     { label: "WHATSAPP",    color: "#25D366" },
-  slack:        { label: "TEAMS/SLACK", color: "var(--tt-purple)" },
-  email:        { label: "EMAIL",       color: "var(--tt-blue)" },
-  siem_alert:   { label: "SIEM",        color: "var(--tt-red)" },
-  phone:        { label: "PHONE",       color: "var(--tt-green)" },
-  news_ticker:  { label: "BREAKING",    color: "var(--tt-red)" },
-  system_alert: { label: "EDR/SYS",     color: "var(--tt-warn)" },
-  sms:          { label: "SMS",         color: "#25D366" },
-  raw:          { label: "MEMO",        color: "var(--tt-dim)" },
+const CHANNEL_CONFIG: Record<string, { label: string; color: string; Icon: React.FC<{ className?: string; style?: React.CSSProperties }> }> = {
+  whatsapp:     { label: "WHATSAPP",    color: "#25D366",             Icon: MessageCircle },
+  slack:        { label: "TEAMS/SLACK", color: "var(--tt-purple)",    Icon: MessageSquare },
+  email:        { label: "EMAIL",       color: "var(--tt-blue)",      Icon: Mail },
+  siem_alert:   { label: "SIEM ALERT",  color: "var(--tt-red)",       Icon: AlertTriangle },
+  phone:        { label: "PHONE",       color: "var(--tt-green)",     Icon: Phone },
+  news_ticker:  { label: "BREAKING",    color: "var(--tt-red)",       Icon: Newspaper },
+  system_alert: { label: "EDR/SYSTEM",  color: "var(--tt-warn)",      Icon: Shield },
+  sms:          { label: "SMS",         color: "#25D366",             Icon: Smartphone },
+  raw:          { label: "MEMO",        color: "var(--tt-dim)",       Icon: FileText },
+}
+
+const INJECT_TYPE_LABELS: Partial<Record<InjectType, string>> = {
+  alert:      "ALERT",
+  intel:      "INTEL",
+  media:      "MEDIA",
+  executive:  "EXECUTIVE",
+  technical:  "TECHNICAL",
+  regulatory: "REGULATORY",
+  social:     "SOCIAL",
+  internal:   "INTERNAL",
 }
 
 const CHANNEL_REMAP: Partial<Record<string, InjectChannel>> = {
@@ -47,20 +63,40 @@ function Shell({
   subheader,
 }: InjectCardProps & { channel: string; subheader?: React.ReactNode }) {
   const cfg = CHANNEL_CONFIG[channel] ?? CHANNEL_CONFIG.raw
+  const { Icon } = cfg
   const big = size === "xl"
+  const typeLabel = inject.type ? INJECT_TYPE_LABELS[inject.type] : undefined
+  const showTeamBadge = inject.targetTeam && inject.targetTeam !== "all"
   return (
     <div
       className="border border-tt-border bg-tt-surface overflow-hidden"
       style={{ borderLeft: `3px solid ${cfg.color}` }}
     >
       {/* Channel strip */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
+      <div className="flex items-center gap-2 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
+        <Icon className="size-3 shrink-0" style={{ color: cfg.color }} />
         <span
           className="font-mono text-[10px] font-bold tracking-widest shrink-0"
           style={{ color: cfg.color }}
         >
           {cfg.label}
         </span>
+        {typeLabel && (
+          <span className="font-mono text-[8px] uppercase tracking-widest text-tt-dim border border-tt-border px-1 py-px shrink-0">
+            {typeLabel}
+          </span>
+        )}
+        {inject.nis2Relevant && (
+          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border px-1 py-px"
+            style={{ color: "var(--tt-blue)", borderColor: "color-mix(in srgb, var(--tt-blue) 40%, transparent)" }}>
+            NIS2
+          </span>
+        )}
+        {showTeamBadge && (
+          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-tt-accent/30 px-1 py-px text-tt-accent">
+            {inject.targetTeam === "technical_it" ? "IT" : "CRISIS"}
+          </span>
+        )}
         <span className="font-mono text-[10px] text-tt-dim truncate flex-1 min-w-0">
           {inject.senderName ?? inject.source}
           {inject.senderHandle && (
@@ -80,7 +116,7 @@ function Shell({
           big ? "text-sm" : "text-xs"
         }`}
       >
-        {inject.content}
+        {stripMarkdown(inject.content)}
       </div>
     </div>
   )
@@ -118,10 +154,17 @@ function WhatsAppInject(props: InjectCardProps) {
       className="border border-tt-border bg-tt-surface overflow-hidden"
       style={{ borderLeft: "3px solid #25D366" }}
     >
-      <div className="flex items-center gap-3 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
+      <div className="flex items-center gap-2 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
+        <MessageCircle className="size-3 shrink-0 text-[#25D366]" />
         <span className="font-mono text-[10px] font-bold tracking-widest shrink-0 text-[#25D366]">
           WHATSAPP
         </span>
+        {inject.nis2Relevant && (
+          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border px-1 py-px"
+            style={{ color: "var(--tt-blue)", borderColor: "color-mix(in srgb, var(--tt-blue) 40%, transparent)" }}>
+            NIS2
+          </span>
+        )}
         <span className="font-mono text-[10px] text-tt-dim truncate flex-1">
           {inject.senderName ?? inject.source}
         </span>
@@ -135,7 +178,7 @@ function WhatsAppInject(props: InjectCardProps) {
             big ? "text-sm" : "text-xs"
           }`}
         >
-          {inject.content}
+          {stripMarkdown(inject.content)}
           <div className="mt-1.5 flex items-center justify-end gap-1">
             <span className="text-[9px] text-tt-dim">{inject.timestamp ?? formatTime(pushedAt)}</span>
             <span className="text-[9px] text-[#25D366]">✓✓</span>
@@ -205,9 +248,10 @@ function PhoneCall(props: InjectCardProps) {
       className="border border-tt-border bg-tt-surface overflow-hidden"
       style={{ borderLeft: "3px solid var(--tt-green)" }}
     >
-      <div className="flex items-center gap-3 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
+      <div className="flex items-center gap-2 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
+        <Phone className="size-3 shrink-0 text-tt-green" />
         <span className="font-mono text-[10px] font-bold tracking-widest shrink-0 text-tt-green">
-          📞 PHONE
+          PHONE
         </span>
         <span className="font-mono text-[10px] text-tt-dim truncate flex-1">
           {inject.senderName ?? inject.source}
@@ -217,8 +261,11 @@ function PhoneCall(props: InjectCardProps) {
           {inject.timestamp ?? formatTime(pushedAt)}
         </span>
       </div>
+      <div className="px-3 py-2 border-b border-tt-border">
+        <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">Inkomend gesprek — transcript</span>
+      </div>
       <div className={`px-4 py-4 font-mono leading-relaxed text-tt-bright whitespace-pre-wrap ${big ? "text-sm" : "text-xs"}`}>
-        {inject.content}
+        {stripMarkdown(inject.content)}
       </div>
     </div>
   )
@@ -233,10 +280,17 @@ function NewsTickerInject(props: InjectCardProps) {
       className="border border-tt-border bg-tt-surface overflow-hidden"
       style={{ borderLeft: "3px solid var(--tt-red)" }}
     >
-      <div className="flex items-center gap-3 px-4 py-2 bg-tt-red/10 border-b border-tt-red/40">
+      <div className="flex items-center gap-2 px-4 py-2 bg-tt-red/10 border-b border-tt-red/40">
+        <Newspaper className="size-3 shrink-0 text-tt-red" />
         <span className="font-mono text-[10px] font-bold tracking-widest shrink-0 text-tt-red animate-pulse">
-          ● BREAKING
+          BREAKING
         </span>
+        {inject.nis2Relevant && (
+          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border px-1 py-px"
+            style={{ color: "var(--tt-blue)", borderColor: "color-mix(in srgb, var(--tt-blue) 40%, transparent)" }}>
+            NIS2
+          </span>
+        )}
         <span className="font-mono text-[10px] text-tt-dim shrink-0">
           {inject.senderName ?? inject.source}
         </span>
@@ -250,7 +304,7 @@ function NewsTickerInject(props: InjectCardProps) {
         </div>
       )}
       <div className={`px-4 py-4 font-mono whitespace-pre-wrap leading-relaxed text-tt-bright ${big ? "text-sm" : "text-xs"}`}>
-        {inject.content}
+        {stripMarkdown(inject.content)}
       </div>
     </div>
   )
@@ -325,9 +379,16 @@ export function InjectFeed({
   const myRoleLabel = participantRole ? ROLE_META[participantRole]?.label : undefined
 
   const filtered = pushed.filter((p) => {
-    const target = p.inject.targetTeam
+    const inject = p.inject
+    // Role-level targeting takes precedence over team-level
+    if (inject.targetRoles && inject.targetRoles.length > 0) {
+      if (!participantRole) return false
+      return inject.targetRoles.includes(participantRole)
+    }
+    // Existing team-level filter
+    const target = inject.targetTeam
     if (target && target !== "all" && participantTeam && target !== participantTeam) return false
-    if (myRoleLabel && isSelfReferential(p.inject.senderName, myRoleLabel)) return false
+    if (myRoleLabel && isSelfReferential(inject.senderName, myRoleLabel)) return false
     return true
   })
 
@@ -337,26 +398,35 @@ export function InjectFeed({
   const prevCount = useRef(pushed.length)
   useEffect(() => {
     if (pushed.length > prevCount.current) {
-      topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      try {
+        topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      } catch {
+        const parent = topRef.current?.parentElement
+        if (parent) parent.scrollTop = 0
+      }
     }
     prevCount.current = pushed.length
   }, [pushed.length])
 
   if (filtered.length === 0) {
+    // Distinguish: injects exist but none match this role vs truly nothing pushed yet
+    const roleFiltered = pushed.length > 0 && filtered.length === 0
     return (
       <div className="flex flex-col items-center gap-4 border border-tt-border bg-tt-surface px-6 py-16 text-center">
         <div className="font-mono text-[10px] uppercase tracking-widest text-tt-dim">
-          {tr(lang, "awaitingInjects")}
+          {roleFiltered ? "Geen injects voor jouw rol in deze ronde" : tr(lang, "awaitingInjects")}
         </div>
-        <div className="flex gap-2 justify-center">
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="size-1.5 bg-tt-dim dot-pulse"
-              style={{ animationDelay: `${i * 0.3}s` }}
-            />
-          ))}
-        </div>
+        {!roleFiltered && (
+          <div className="flex gap-2 justify-center">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="size-1.5 bg-tt-dim dot-pulse"
+                style={{ animationDelay: `${i * 0.3}s` }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     )
   }

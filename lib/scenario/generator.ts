@@ -1,4 +1,5 @@
-import type { ExerciseConfig, Scenario, ScenarioType, DecisionFramework, ModuleId, InjectChannel } from "../types"
+import type { ExerciseConfig, Scenario, ScenarioType, DecisionFramework, ModuleId, InjectChannel, Role } from "../types"
+import { ROLE_META } from "../types"
 import type {
   ScenarioInstance,
   ScenarioSkeleton,
@@ -218,24 +219,33 @@ async function callAI(
   model: string,
   maxTokens: number,
 ): Promise<ScenarioInstance> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      system: SCENARIO_GENERATOR_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    }),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 90_000)
+
+  let res: Response
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        system: SCENARIO_GENERATOR_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userMessage }],
+      }),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeoutId)
+  }
 
   if (!res.ok) {
     const err = await res.text()
-    throw new Error(`Anthropic API error ${res.status}: ${err}`)
+    throw new Error(`Anthropic API error ${res.status}: ${err.slice(0, 200)}`)
   }
 
   const data = await res.json() as { content: Array<{ type: string; text: string }> }
@@ -327,10 +337,23 @@ export async function generateLeanScenario(
   const typeGuidance = buildTypeGuidance(scenarioType)
   const frameworkGuidance = FRAMEWORK_INSTRUCTIONS[framework] ?? FRAMEWORK_INSTRUCTIONS.free
 
-  const crownNote = config.crownJewels ? `Crown jewels (noem bij naam in injects): ${config.crownJewels}.` : ''
-  const systemsNote = config.criticalSystems ? `Kritieke systemen (noem bij naam): ${config.criticalSystems}.` : ''
+  // Lean path: only sector + scenario type — crown jewels / critical systems / company size
+  // are intentionally omitted to keep token count low and avoid truncation.
   const sectorNote = config.sector ? `Sector: ${config.sector}.` : ''
-  const sizeNote = config.companySize ? `Organisatiegrootte: ${config.companySize} medewerkers.` : ''
+
+  // Include selected roles so allowedRoles only references actual participants
+  const selectedRoles = (config.selectedRoles ?? []) as Role[]
+  const roleList = selectedRoles.length
+    ? selectedRoles.map(r => `${r} (${ROLE_META[r].label})`).join(', ')
+    : 'ceo, ciso, cfo, legal, head_of_comms'
+  const roleConstraint = selectedRoles.length
+    ? `KRITISCH: allowedRoles mag ALLEEN waarden bevatten uit: [${selectedRoles.join(', ')}]. Elke deelnemende rol moet minimaal één actie per ronde hebben.`
+    : ''
+
+  // Build two example roleAction entries using the first two actual roles for specificity
+  const exRole1 = selectedRoles[0] ?? 'ciso'
+  const exRole2 = selectedRoles[1] ?? 'ceo'
+  const exRole3 = selectedRoles[2] ?? 'legal'
 
   const roundAnchors = anchorPhases.map((p, i) =>
     `Ronde ${i + 1} is verankerd in aanvalsfase "${p.id}" (${p.t_offset}): ${p.technique}. Detecteerbaarheid: ${p.detectability ?? 'laag'}.`
@@ -341,15 +364,17 @@ export async function generateLeanScenario(
 ${frameworkGuidance}
 
 Organisatieprofiel:
-${sectorNote} ${sizeNote} ${crownNote} ${systemsNote}
+${sectorNote}
+Deelnemende rollen: ${roleList}
+${roleConstraint}
 
 Aanvalsfases per ronde (gebruik deze als inhoudelijke basis — verwijs ernaar in injects):
 ${roundAnchors}
 
-Genereer een ${roundCount}-ronde tabletop scenario. Zorg dat elke ronde inhoudelijk verschilt: andere injects, andere beslissingen, oplopende urgentie.
+Genereer een ${roundCount}-ronde tabletop scenario. Zorg dat elke ronde inhoudelijk verschilt: andere injects, andere beslissingen, oplopende urgentie. Elke ronde heeft minimaal één roleAction per deelnemende rol.
 
 Geef ALLEEN geldige JSON terug (geen markdown):
-{"scenario_title":"...","scenario_summary":"2 zinnen","rounds":[{"round_number":1,"title":"...","situation_update":"3-4 zinnen die de situatie beschrijven vanuit het perspectief van de spelers","timerMinutes":${timerPerRound},"injects":[{"id":"r1-i1","type":"technical","channel":"siem","title":"...","content":"Realistische inject-tekst met echte tijdstempels en namen","urgency":"medium","senderName":"...","senderHandle":"...","timestamp":"HH:MM","targetTeam":"all"},{"id":"r1-i2","type":"internal","channel":"whatsapp","title":"...","content":"...","urgency":"high","senderName":"...","timestamp":"HH:MM","targetTeam":"crisis_management"}],"roleActions":[{"id":"r1-a1","label":"...","description":"...","allowedRoles":["ciso","it_manager"],"isRecommended":true,"irPlanAligned":true,"consequence":"..."},{"id":"r1-a2","label":"...","description":"...","allowedRoles":["ceo","cfo"],"isRecommended":false,"irPlanAligned":true,"consequence":"..."},{"id":"r1-a3","label":"...","description":"...","allowedRoles":["legal"],"isRecommended":false,"irPlanAligned":false,"consequence":"..."},{"id":"r1-do-nothing","label":"Wacht af en verzamel meer informatie","description":"Geen actie ondernemen totdat het beeld completer is.","allowedRoles":[],"irPlanAligned":true,"consequence":"..."}],"facilitatorNotes":{"discussionGoal":"...","keyQuestions":["...","..."],"hints":["..."],"expectedDecisions":["..."],"redFlags":["..."]}}]}`
+{"scenario_title":"...","scenario_summary":"2 zinnen","rounds":[{"round_number":1,"title":"...","situation_update":"3-4 zinnen die de situatie beschrijven vanuit het perspectief van de spelers","timerMinutes":${timerPerRound},"injects":[{"id":"r1-i1","type":"technical","channel":"siem","title":"...","content":"Realistische inject-tekst met echte tijdstempels en namen","urgency":"medium","senderName":"...","senderHandle":"...","timestamp":"HH:MM","targetTeam":"all"},{"id":"r1-i2","type":"internal","channel":"whatsapp","title":"...","content":"...","urgency":"high","senderName":"...","timestamp":"HH:MM","targetTeam":"crisis_management"}],"roleActions":[{"id":"r1-a1","label":"...","description":"Concrete actie vanuit perspectief ${exRole1}","allowedRoles":["${exRole1}"],"isRecommended":true,"irPlanAligned":true,"consequence":"..."},{"id":"r1-a2","label":"...","description":"Concrete actie vanuit perspectief ${exRole2}","allowedRoles":["${exRole2}"],"isRecommended":false,"irPlanAligned":true,"consequence":"..."},{"id":"r1-a3","label":"...","description":"Concrete actie vanuit perspectief ${exRole3}","allowedRoles":["${exRole3}"],"isRecommended":false,"irPlanAligned":false,"consequence":"..."},{"id":"r1-do-nothing","label":"Wacht af en verzamel meer informatie","description":"Geen actie ondernemen totdat het beeld completer is.","allowedRoles":[],"irPlanAligned":true,"consequence":"..."}],"facilitatorNotes":{"discussionGoal":"...","keyQuestions":["...","..."],"hints":["..."],"expectedDecisions":["..."],"redFlags":["..."]}}]}`
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',

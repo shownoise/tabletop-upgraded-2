@@ -60,6 +60,10 @@ function labelFor(ev: TimelineEvent): string {
       return "Inject pushed"
     case "surprise_inject":
       return "Surprise inject"
+    case "special_triggered":
+      return "Special event"
+    case "special_completed":
+      return "Special completed"
   }
 }
 
@@ -80,5 +84,9 @@ function descFor(ev: TimelineEvent): string {
       const inj = ev.data.inject as { title?: string } | undefined
       return inj?.title ?? "Inject delivered"
     }
+    case "special_triggered":
+      return `${ev.data.specialType ?? "Special"} triggered`
+    case "special_completed":
+      return `${ev.data.specialType ?? "Special"} completed`
   }
 }

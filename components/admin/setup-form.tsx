@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Sparkles, Upload, X, FileText } from "lucide-react"
+import { Loader2, Sparkles, Upload, X, FileText, Plus, Trash2, ChevronUp, ChevronDown, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -17,8 +17,46 @@ import { ROLE_META } from "@/lib/types"
 import type {
   ExerciseConfig, SimulationMode, AiIntensity, SpecialsMode,
   ITMaturity, SecurityCapability, TeamStructure,
-  ExerciseGoal, DifficultyLevel, Role,
+  DifficultyLevel, Role, ScenarioType, DecisionFramework, ModuleId, GoalId,
 } from "@/lib/types"
+import type { TemplateModuleSlot } from "@/lib/types/scenario-instance"
+import { DEFAULT_MODULE_SETS } from "@/lib/modules/defaults"
+import { MODULE_DEFINITIONS } from "@/lib/modules/definitions"
+import { getAllGoals } from "@/lib/goals/registry"
+
+// Mapping van UI-scenario-strings naar ScenarioType voor module-defaults
+const SCENARIO_TYPE_MAP: Record<string, ScenarioType> = {
+  "Ransomware":                   "ransomware_double_extortion",
+  "Supply Chain Compromise":      "supply_chain_compromise",
+  "Insider Threat":               "insider_threat",
+  "Business Email Compromise":    "bec_cfo_fraud",
+  "Data Exfiltration":            "ransomware_double_extortion",
+  "DDoS / Extortion":             "ransomware_double_extortion",
+  "Cloud Account Takeover":       "ransomware_double_extortion",
+}
+
+const DECISION_FRAMEWORKS: { id: DecisionFramework; label: string; desc: string }[] = [
+  { id: "bob",     label: "BOB",     desc: "Beeldvorming–Oordeelsvorming–Besluitvorming. NL standaard, goed voor onervaren CMT's." },
+  { id: "ooda",    label: "OODA",    desc: "Observe–Orient–Decide–Act. Snel, iteratief. Goed bij hoge tijdsdruk." },
+  { id: "dair",    label: "DAIR",    desc: "Detect–Assess–Inform–Respond. IR-community standaard." },
+  { id: "nist_ir", label: "NIST-IR", desc: "NIST SP 800-61 cyclus. Goed voor volwassen IR-programma's." },
+  { id: "free",    label: "Vrij",    desc: "Geen vast framework. Open vragen. Goed voor beginners of korte oefeningen." },
+]
+
+const MODULE_LABELS: Record<ModuleId, string> = {
+  detection_sensemaking: "Detection & Sensemaking",
+  triage_containment:    "Triage & Containment",
+  business_continuity:   "Business Continuity",
+  crisis_communication:  "Crisis Communication",
+  legal_regulatory:      "Legal & Regulatory",
+  ransom_negotiation:    "Ransom Negotiation",
+  recovery_lessons:      "Recovery & Lessons Learned",
+  insider_investigation: "Insider Investigation",
+  supply_chain_response: "Supply Chain Response",
+  forensic_attribution:  "Forensic & Attribution",
+}
+
+const ALL_MODULE_IDS = Object.keys(MODULE_LABELS) as ModuleId[]
 
 const sectors = [
   "Financial Services", "Healthcare", "Energy & Utilities", "Manufacturing",
@@ -30,6 +68,20 @@ const scenarios = [
   "Supply Chain Compromise", "DDoS / Extortion", "Cloud Account Takeover",
 ]
 const durations = ["60 minutes", "90 minutes", "2 hours", "Half day"]
+
+// Smart defaults per total duration: [roundCount, timerPerRound]
+const DURATION_DEFAULTS: Record<string, [number, number]> = {
+  "60 minutes":  [3, 15],  // 45 min play + 15 min overhead
+  "90 minutes":  [4, 15],  // 60 min play + 30 min overhead
+  "2 hours":     [4, 20],  // 80 min play + 40 min overhead
+  "Half day":    [5, 30],  // 150 min play + discussion time
+}
+const DURATION_MINUTES: Record<string, number> = {
+  "60 minutes": 60,
+  "90 minutes": 90,
+  "2 hours":    120,
+  "Half day":   240,
+}
 
 const ALL_ROLES = Object.keys(ROLE_META) as Role[]
 const CRISIS_ROLES = ALL_ROLES.filter(r => ROLE_META[r].team === "crisis_management")
@@ -52,6 +104,7 @@ const defaults: ExerciseConfig = {
   difficulty: "intermediate",
   existingPlans: [],
   selectedRoles: CRISIS_ROLES,
+  goalId: "decision_making",
 }
 
 const IT_MATURITY_OPTIONS: { id: ITMaturity; label: string }[] = [
@@ -89,11 +142,26 @@ export function SetupForm() {
   const [specialsMode, setSpecialsMode] = useState<SpecialsMode>("static")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ pct: number; label: string } | null>(null)
   const [irFileName, setIrFileName] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // New: decision framework and module slots
+  const [decisionFramework, setDecisionFramework] = useState<DecisionFramework>("bob")
+  const [moduleSlots, setModuleSlots] = useState<TemplateModuleSlot[]>(() => {
+    const type = SCENARIO_TYPE_MAP[defaults.scenarioType] ?? "ransomware_double_extortion"
+    return DEFAULT_MODULE_SETS[type] ?? []
+  })
+  const [expandedModule, setExpandedModule] = useState<string | null>(null)
+  const [showAddModule, setShowAddModule] = useState(false)
+
   function update<K extends keyof ExerciseConfig>(key: K, value: ExerciseConfig[K]) {
     setConfig((c) => ({ ...c, [key]: value }))
+  }
+
+  function handleDurationChange(dur: string) {
+    const [rounds, timer] = DURATION_DEFAULTS[dur] ?? [4, 15]
+    setConfig(c => ({ ...c, duration: dur, roundCount: rounds, timerPerRound: timer }))
   }
 
   function handleTeamStructureChange(ts: TeamStructure) {
@@ -121,6 +189,38 @@ export function SetupForm() {
     }
   }
 
+  function handleScenarioTypeChange(v: string) {
+    update("scenarioType", v)
+    const type = SCENARIO_TYPE_MAP[v] ?? "ransomware_double_extortion"
+    setModuleSlots(DEFAULT_MODULE_SETS[type] ?? [])
+    setExpandedModule(null)
+  }
+
+  function moveModule(index: number, dir: -1 | 1) {
+    const next = [...moduleSlots]
+    const target = index + dir
+    if (target < 0 || target >= next.length) return
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setModuleSlots(next)
+  }
+
+  function removeModule(index: number) {
+    if (moduleSlots.length <= 1) return
+    setModuleSlots(moduleSlots.filter((_, i) => i !== index))
+    setExpandedModule(null)
+  }
+
+  function addModule(moduleId: ModuleId) {
+    setModuleSlots([...moduleSlots, { module_id: moduleId }])
+    setShowAddModule(false)
+  }
+
+  function updateModuleSlot(index: number, patch: Partial<TemplateModuleSlot>) {
+    const next = [...moduleSlots]
+    next[index] = { ...next[index], ...patch }
+    setModuleSlots(next)
+  }
+
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -131,25 +231,98 @@ export function SetupForm() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitting) return
     setSubmitting(true)
     setError(null)
+    setProgress(null)
     try {
       const res = await fetch("/api/session/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...config, mode, aiIntensity, specialsMode }),
+        body: JSON.stringify({
+          ...config,
+          mode,
+          aiIntensity,
+          specialsMode,
+          decisionFramework,
+          moduleSlots,
+        }),
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? "Failed to create session")
-      router.push("/admin/dashboard")
+      if (!res.body) throw new Error("Geen response stream ontvangen")
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() ?? ""
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue
+          const event = JSON.parse(line.slice(6)) as { stage: string; pct?: number; label?: string; message?: string }
+          if (event.stage === "error") throw new Error(event.message ?? "Aanmaken mislukt")
+          if (event.stage === "done") {
+            router.push("/admin/prepare")
+            return
+          }
+          if (event.pct !== undefined && event.label) {
+            setProgress({ pct: event.pct, label: event.label })
+          }
+        }
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create session")
+      setError(err instanceof Error ? err.message : "Aanmaken mislukt")
       setSubmitting(false)
+      setProgress(null)
     }
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-8">
+      {/* Step 1 — Exercise goal */}
+      <div className="flex flex-col gap-4">
+        <SectionHeader label="What do you want to exercise?" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {getAllGoals().map(goal => {
+            const isActive = goal.status === "active"
+            const isSelected = config.goalId === goal.id
+            return (
+              <button
+                key={goal.id}
+                type="button"
+                disabled={!isActive}
+                tabIndex={isActive ? 0 : -1}
+                title={!isActive ? "This will be available in a future update" : undefined}
+                onClick={() => isActive && update("goalId", goal.id as GoalId)}
+                className={`relative flex flex-col gap-2 rounded-lg border px-4 py-3 text-left transition-all ${
+                  !isActive
+                    ? "cursor-not-allowed border-border bg-card opacity-50 select-none"
+                    : isSelected
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-card hover:border-primary/40"
+                }`}
+              >
+                {!isActive && (
+                  <span className="absolute top-2 right-2 font-mono text-[8px] uppercase tracking-widest text-muted-foreground border border-border/60 rounded px-1 py-0.5 leading-none">
+                    Soon
+                  </span>
+                )}
+                <span className={`font-mono text-sm font-medium pr-8 ${isSelected && isActive ? "text-primary" : "text-foreground"}`}>
+                  {goal.name}
+                </span>
+                <span className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                  {goal.description}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Simulation mode selector */}
       <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 p-5">
         <span className="font-mono text-xs uppercase tracking-wider text-primary">Simulation mode</span>
@@ -188,12 +361,14 @@ export function SetupForm() {
           </Select>
         </FieldRow>
 
-        <FieldRow label="Company size" hint="Headcount band">
-          <Select value={config.companySize} onValueChange={(v) => update("companySize", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{sizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-          </Select>
-        </FieldRow>
+        <div className={aiIntensity === "lean" ? "opacity-40 pointer-events-none select-none" : ""}>
+          <FieldRow label="Company size" hint={aiIntensity === "lean" ? "Niet gebruikt bij Smart mode" : "Headcount band"}>
+            <Select value={config.companySize} onValueChange={(v) => update("companySize", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{sizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </FieldRow>
+        </div>
 
         <FieldRow label="IT maturity" hint="Self-assessed IT capability level">
           <div className="grid grid-cols-3 gap-2">
@@ -225,26 +400,33 @@ export function SetupForm() {
       {/* Section 2 — Exercise setup */}
       <SectionHeader label="Exercise setup" />
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <FieldRow label="Exercise goal" hint="Primary learning objective">
-          <Select value={config.exerciseGoal ?? ""} onValueChange={(v) => update("exerciseGoal", v as ExerciseGoal)}>
-            <SelectTrigger><SelectValue placeholder="Select goal…" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="nis2_readiness">NIS2 Readiness</SelectItem>
-              <SelectItem value="board_decisions">Board Decision-Making</SelectItem>
-              <SelectItem value="crisis_comms">Crisis Communication</SelectItem>
-              <SelectItem value="ransomware_tabletop">Ransomware Tabletop</SelectItem>
-              <SelectItem value="technical_containment">Technical Containment</SelectItem>
-              <SelectItem value="supplier_incident">Supplier Incident</SelectItem>
-              <SelectItem value="data_breach">Data Breach</SelectItem>
-            </SelectContent>
-          </Select>
-        </FieldRow>
-
         <FieldRow label="Scenario type" hint="The primary attack pattern to simulate">
-          <Select value={config.scenarioType} onValueChange={(v) => update("scenarioType", v)}>
+          <Select value={config.scenarioType} onValueChange={handleScenarioTypeChange}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>{scenarios.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
           </Select>
+        </FieldRow>
+
+        <FieldRow label="Decision framework" hint="Conversation structure used throughout the exercise">
+          <div className="grid grid-cols-1 gap-2">
+            {DECISION_FRAMEWORKS.map(fw => (
+              <button
+                key={fw.id}
+                type="button"
+                onClick={() => setDecisionFramework(fw.id)}
+                className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
+                  decisionFramework === fw.id
+                    ? "border-primary bg-primary/10"
+                    : "border-border bg-card hover:border-primary/40"
+                }`}
+              >
+                <span className={`font-mono text-sm font-bold w-16 shrink-0 pt-0.5 ${decisionFramework === fw.id ? "text-primary" : "text-foreground"}`}>
+                  {fw.label}
+                </span>
+                <span className="text-xs text-muted-foreground leading-relaxed">{fw.desc}</span>
+              </button>
+            ))}
+          </div>
         </FieldRow>
 
         <FieldRow label="Difficulty" hint="Scenario complexity and decision pressure">
@@ -261,7 +443,162 @@ export function SetupForm() {
         </FieldRow>
       </div>
 
-      {/* Section 3 — Structure */}
+      {/* Section 3 — Module sequence */}
+      <SectionHeader label="Module sequence" />
+      <div className="flex flex-col gap-3">
+        <p className="text-xs text-muted-foreground">
+          Voeg modules toe, verwijder ze, of herorden ze. Elk module is een coherent tijdvenster met één leerdoel.
+          Per module kun je duur, lens en framework overschrijven.
+        </p>
+
+        <div className="flex flex-col gap-2">
+          {moduleSlots.map((slot, index) => {
+            const def = MODULE_DEFINITIONS.find(d => d.id === slot.module_id)
+            const isExpanded = expandedModule === `${slot.module_id}-${index}`
+            const toggleExpand = () => setExpandedModule(isExpanded ? null : `${slot.module_id}-${index}`)
+
+            return (
+              <div key={`${slot.module_id}-${index}`} className="rounded-lg border border-border bg-card overflow-hidden">
+                {/* Module header row */}
+                <div className="flex items-center gap-2 px-3 py-2.5">
+                  <span className="font-mono text-xs text-muted-foreground w-5 shrink-0 text-center">{index + 1}</span>
+                  <span className="font-mono text-sm flex-1 truncate">{MODULE_LABELS[slot.module_id]}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground hidden sm:block">
+                    {slot.duration_minutes ?? def?.default_duration_minutes ?? 40}m
+                  </span>
+                  {def && (
+                    <span className="font-mono text-[10px] text-primary/60 hidden sm:block">
+                      {slot.custom_lens ?? def.default_lens}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button type="button" onClick={() => moveModule(index, -1)} disabled={index === 0}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-20">
+                      <ChevronUp className="size-3.5" />
+                    </button>
+                    <button type="button" onClick={() => moveModule(index, 1)} disabled={index === moduleSlots.length - 1}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-20">
+                      <ChevronDown className="size-3.5" />
+                    </button>
+                    <button type="button" onClick={toggleExpand}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground">
+                      <ChevronRight className={`size-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                    </button>
+                    <button type="button" onClick={() => removeModule(index)} disabled={moduleSlots.length <= 1}
+                      className="p-1 rounded text-muted-foreground hover:text-destructive disabled:opacity-20">
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded overrides */}
+                {isExpanded && def && (
+                  <div className="border-t border-border px-4 py-3 grid grid-cols-1 gap-3 sm:grid-cols-3 bg-card/50">
+                    <div className="flex flex-col gap-1">
+                      <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Duur (min)</label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[20, 30, 40, 50].map(n => (
+                          <button key={n} type="button"
+                            onClick={() => updateModuleSlot(index, { duration_minutes: n })}
+                            className={`rounded border px-2 py-1.5 font-mono text-xs transition-all ${
+                              (slot.duration_minutes ?? def.default_duration_minutes) === n
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-background hover:border-primary/40"
+                            }`}>
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Observation lens</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {(["symptoms", "impact", "external_reactions", "attacker_voice"] as const).map(lens => (
+                          <button key={lens} type="button"
+                            onClick={() => updateModuleSlot(index, { custom_lens: lens })}
+                            className={`rounded border px-2 py-1.5 font-mono text-[10px] transition-all truncate ${
+                              (slot.custom_lens ?? def.default_lens) === lens
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-background hover:border-primary/40"
+                            }`}>
+                            {lens}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Framework (override)</label>
+                      <div className="grid grid-cols-1 gap-1">
+                        <select
+                          value={slot.decision_framework ?? ""}
+                          onChange={e => updateModuleSlot(index, {
+                            decision_framework: e.target.value ? e.target.value as DecisionFramework : undefined
+                          })}
+                          className="rounded border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground"
+                        >
+                          <option value="">Gebruik oefening-standaard ({decisionFramework.toUpperCase()})</option>
+                          {DECISION_FRAMEWORKS.map(fw => (
+                            <option key={fw.id} value={fw.id}>{fw.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {def.learning_goal && (
+                      <p className="sm:col-span-3 text-[11px] text-muted-foreground italic">{def.learning_goal}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Add module */}
+        <div className="flex flex-col gap-2">
+          {showAddModule ? (
+            <div className="rounded-lg border border-border bg-card p-3 flex flex-col gap-2">
+              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Kies module om toe te voegen</span>
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {ALL_MODULE_IDS
+                  .filter(id => !moduleSlots.some(s => s.module_id === id))
+                  .map(id => (
+                    <button key={id} type="button" onClick={() => addModule(id)}
+                      className="flex items-center gap-2 rounded border border-border bg-background hover:border-primary/40 px-3 py-2 text-left text-sm transition-all">
+                      <Plus className="size-3.5 text-primary shrink-0" />
+                      <span className="font-mono text-xs">{MODULE_LABELS[id]}</span>
+                    </button>
+                  ))}
+              </div>
+              <button type="button" onClick={() => setShowAddModule(false)}
+                className="text-xs text-muted-foreground hover:text-foreground mt-1">
+                Annuleren
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setShowAddModule(true)}
+                className="flex items-center gap-2 rounded-lg border border-dashed border-border hover:border-primary/40 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground transition-all">
+                <Plus className="size-3.5" />
+                <span className="font-mono text-xs">Module toevoegen</span>
+              </button>
+              <button type="button"
+                onClick={() => {
+                  const type = SCENARIO_TYPE_MAP[config.scenarioType] ?? "ransomware_double_extortion"
+                  setModuleSlots(DEFAULT_MODULE_SETS[type] ?? [])
+                  setExpandedModule(null)
+                }}
+                className="font-mono text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+                Reset naar standaard
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Section 4 — Structure */}
       <SectionHeader label="Structure" />
       <div className="grid grid-cols-1 gap-5">
         <FieldRow label="Team structure" hint="Which teams participate in this exercise">
@@ -351,12 +688,41 @@ export function SetupForm() {
           </FieldRow>
 
           <FieldRow label="Total duration" hint="Overall exercise duration target">
-            <Select value={config.duration} onValueChange={(v) => update("duration", v)}>
+            <Select value={config.duration} onValueChange={handleDurationChange}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{durations.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </FieldRow>
         </div>
+
+        {/* Duration sanity check */}
+        {(() => {
+          const rounds = config.roundCount ?? 4
+          const timer = config.timerPerRound ?? 15
+          const playMin = rounds * timer
+          const totalMin = DURATION_MINUTES[config.duration] ?? 90
+          const overheadMin = totalMin - playMin
+          const tight = overheadMin < rounds * 5   // minder dan 5 min overhead per ronde
+          const impossible = playMin > totalMin
+          return (
+            <div className={`rounded-md border px-4 py-2.5 font-mono text-xs flex items-center gap-2 ${
+              impossible ? "border-destructive/50 bg-destructive/10 text-destructive"
+              : tight    ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
+              :            "border-border bg-card text-muted-foreground"
+            }`}>
+              <span className="shrink-0 text-sm">{impossible ? "⚠" : tight ? "⚡" : "✓"}</span>
+              <span>
+                {rounds} rondes × {timer}m = <strong>{playMin}m</strong> speeltijd
+                {impossible
+                  ? ` — timer (${playMin}m) overschrijdt totale duur (${totalMin}m)`
+                  : tight
+                  ? ` — weinig ruimte voor discussie (${overheadMin}m over voor ${rounds} rondes)`
+                  : ` — ${overheadMin}m beschikbaar voor discussie en overgangen`
+                }
+              </span>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Section 4 — Existing plans */}
@@ -389,11 +755,19 @@ export function SetupForm() {
 
       {/* Section 5 — Scenario context */}
       <SectionHeader label="Scenario context" />
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <FieldRow label="Critical systems" hint="Systems whose disruption would materially affect operations">
+      {aiIntensity === "lean" && (
+        <div className="rounded-lg border border-border bg-card px-4 py-3">
+          <p className="font-mono text-[10px] text-muted-foreground">
+            <span className="text-primary font-bold">Smart mode</span> — Crown jewels en kritieke systemen worden niet meegestuurd naar het AI-model.
+            Schakel over naar <span className="font-bold">Full</span> om deze contextvelden te gebruiken.
+          </p>
+        </div>
+      )}
+      <div className={`grid grid-cols-1 gap-5 md:grid-cols-2 ${aiIntensity === "lean" ? "opacity-40 pointer-events-none select-none" : ""}`}>
+        <FieldRow label="Critical systems" hint={aiIntensity === "lean" ? "Niet gebruikt bij Smart mode" : "Systems whose disruption would materially affect operations"}>
           <Textarea value={config.criticalSystems} onChange={(e) => update("criticalSystems", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
         </FieldRow>
-        <FieldRow label="Crown jewels" hint="Most sensitive data or assets to protect">
+        <FieldRow label="Crown jewels" hint={aiIntensity === "lean" ? "Niet gebruikt bij Smart mode" : "Most sensitive data or assets to protect"}>
           <Textarea value={config.crownJewels} onChange={(e) => update("crownJewels", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
         </FieldRow>
       </div>
@@ -513,13 +887,36 @@ export function SetupForm() {
         <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
           {aiIntensity === "off" ? "Template mode — no AI, no API cost." : aiIntensity === "lean" ? `Smart mode (Haiku) — ~€0.002/session${config.irTemplateText ? " · IR plan loaded" : ""}` : `Full mode (Sonnet) — ~€0.05/session${config.irTemplateText ? " · IR plan loaded" : ""}`}
         </p>
-        <Button type="submit" size="lg" disabled={submitting} className="gap-2 font-mono uppercase tracking-wider">
-          {submitting ? (
-            <><Loader2 className="size-4 animate-spin" />Generating</>
-          ) : (
-            <><Sparkles className="size-4" />Generate exercise</>
+        <div className="flex flex-col gap-3">
+          <Button type="submit" size="lg" disabled={submitting} className="gap-2 font-mono uppercase tracking-wider">
+            {submitting ? (
+              <><Loader2 className="size-4 animate-spin" />Genereren…</>
+            ) : (
+              <><Sparkles className="size-4" />Generate exercise</>
+            )}
+          </Button>
+          {submitting && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {progress?.label ?? "Verbinden..."}
+                </span>
+                <span className="font-mono text-[10px] text-primary">{progress?.pct ?? 0}%</span>
+              </div>
+              <div className="h-1 w-full bg-border overflow-hidden rounded-full">
+                <div
+                  className="h-full bg-primary transition-all duration-500"
+                  style={{ width: `${progress?.pct ?? 0}%` }}
+                />
+              </div>
+              {(progress?.pct ?? 0) >= 30 && (progress?.pct ?? 0) < 75 && (
+                <p className="font-mono text-[9px] text-muted-foreground">
+                  Dit duurt 20-40 seconden bij smart model. Sluit dit venster niet.
+                </p>
+              )}
+            </div>
           )}
-        </Button>
+        </div>
       </div>
     </form>
   )

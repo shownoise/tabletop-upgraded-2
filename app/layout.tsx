@@ -8,10 +8,18 @@ const ibmPlexSans = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "
 const ibmPlexMono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono" })
 
 export const metadata: Metadata = {
-  title: "Cyber Tabletop // Incident Response Exercise",
+  title: {
+    default: "Cyber Tabletop — AI Incident Response Exercise",
+    template: "%s | Cyber Tabletop",
+  },
   description:
     "Run live, AI-generated cyber incident tabletop exercises. Facilitate, inject, and observe team response in real time.",
-  generator: "v0.app",
+  robots: { index: false, follow: false },
+  openGraph: {
+    title: "Cyber Tabletop — AI Incident Response Exercise",
+    description: "Live, AI-generated cyber incident tabletop exercises for crisis teams.",
+    type: "website",
+  },
 }
 
 export const viewport: Viewport = {

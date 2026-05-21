@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
 import { ROLE_META } from "@/lib/types"
-import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario, SpecialsMode, RoleAction, Role } from "@/lib/types"
+import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario, SpecialsMode, RoleAction, Role, GoalId } from "@/lib/types"
+import { getGoal } from "@/lib/goals/registry"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 export const maxDuration = 300
@@ -35,6 +35,9 @@ function buildContext(c: ExerciseConfig): string {
 
 function buildScenarioDirectives(c: ExerciseConfig, mode?: string): string {
   const d: string[] = []
+
+  // Language — always first
+  d.push("TAAL: Genereer alle scenario-inhoud in het Nederlands (NL). Injects, roleAction labels en descriptions, facilitatorNotes, learningObjectives — alles in het Nederlands. Uitzondering: technische termen (IP-adressen, productnamen, protocollen) mogen in het Engels blijven.")
 
   // Simulation mode
   if (mode === "event") d.push(
@@ -84,13 +87,25 @@ function buildScenarioDirectives(c: ExerciseConfig, mode?: string): string {
   }
   if (c.exerciseGoal && goalDirectives[c.exerciseGoal]) d.push(goalDirectives[c.exerciseGoal])
 
+  // Platform goal directive (new goal registry)
+  if (c.goalId) {
+    try {
+      const goal = getGoal(c.goalId as GoalId)
+      if (goal.status === 'active') {
+        d.push(
+          `PLATFORM GOAL — ${goal.name.toUpperCase()}: ${goal.description} Assessment dimensions to surface in facilitator notes: ${goal.assessmentDimensions.join(', ')}. Every round must include at least one moment that tests mandate clarity (who has authority to decide?) and one that tests escalation timing (when is the right moment to involve the next level?).`
+        )
+      }
+    } catch { /* unknown goalId — skip */ }
+  }
+
   // Security capability — affects what detection sources are realistic
   const capDirectives: Record<string, string> = {
     no_soc: "SECURITY CAPABILITY — NO SOC: This organisation has NO monitoring tools, no SIEM, no EDR. Do NOT generate any SIEM alerts or automated detection injects. Detection in round 1 MUST come from: a user complaint, a client tip-off, an external party notification, or accidental discovery. The absence of monitoring is itself a theme — facilitator notes should reference it as a gap.",
     small_it: "SECURITY CAPABILITY — SMALL IT TEAM (1–3 people): Technical alerts should come from basic tools (firewall log, antivirus, helpdesk ticket). The IT team is reactive, not proactive. Include at least one inject where the IT team is overwhelmed or slow to respond due to capacity constraints.",
     outsourced_it: "SECURITY CAPABILITY — OUTSOURCED IT: All technical actions go through an external MSP. Injects from IT should reference the MSP. There is no internal IT expertise. Include realistic friction: the MSP has their own escalation process, their response time adds 30–60 minutes to any technical action, and they may have limited context on business priorities.",
     it_mssp: "SECURITY CAPABILITY — IT + MSSP: The MSSP provides monitoring and sends alerts. Include MSSP-sourced injects (they notice the anomaly before internal IT does in round 1). The MSSP is a key actor but decisions and authorisations rest with the internal team. Include an MSSP escalation call or report in round 1.",
-    it_ir_retainer: "SECURITY CAPABILITY — IT + IR RETAINER: The organisation has a contracted IR firm. Reference the IR retainer from round 2 onwards — they join the call, provide forensic analysis, and give recommendations. Their input should feature in facilitator notes (e.g. 'IR retainer recommends X'). The internal team's role is decision-making and stakeholder management, not forensics.",
+    it_ir_retainer: "SECURITY CAPABILITY — IT + SOC/IR RETAINER: The organisation has an internal IT team, a contracted IR firm (retainer), and optional SOC monitoring. In round 1 the SOC or IT signals the anomaly. From round 2 the IR retainer joins — they provide forensic context and recommendations, but all decisions and authority remain with the internal team. Include at least one inject where the IR retainer's recommendation conflicts with the CEO/CFO's instinct, forcing a real authority-vs-expertise tension. The internal team's role is decision-making and stakeholder management, not forensics.",
   }
   if (c.securityCapability && capDirectives[c.securityCapability]) d.push(capDirectives[c.securityCapability])
 
@@ -138,6 +153,11 @@ function buildScenarioDirectives(c: ExerciseConfig, mode?: string): string {
     "TEAM STRUCTURE — FULL TEAM: Both crisis management and technical IT roles are participating. Generate injects and roleActions for both tracks. Include handoff moments where technical findings must be translated into management decisions, and where management decisions require technical execution."
   )
 
+  // Business decision framing — always applicable for crisis roles
+  d.push(
+    "BESLUITVORMING: Elke roleAction voor een crisis-managementrol (CEO, CFO, Legal, Head of Comms, HR Lead, Ops Manager) moet een zakelijke beslissing zijn — geen IT-operationele actie. Formuleer altijd als: 'Autoriseer...', 'Stel vast...', 'Informeer...', 'Besluit of...', 'Geef opdracht tot...'. De kernvraag is altijd: wie heeft de bevoegdheid en wat zijn de zakelijke consequenties van deze keuze?"
+  )
+
   // Existing plans
   if (c.existingPlans?.includes("none") || !c.existingPlans?.length) d.push(
     "EXISTING PLANS — NONE: This organisation has no documented IR plan, crisis comms plan, or backup procedure. Do not assume any formal process exists. Decisions will be ad hoc. This is itself a red flag — facilitator notes should reference the absence of a plan as a gap when relevant."
@@ -163,10 +183,20 @@ function buildScenarioDirectives(c: ExerciseConfig, mode?: string): string {
     `LEARNING OBJECTIVES: Every round MUST include 1–2 learningObjectives in this JSON format: { "id": "unique-string", "description": "max 15 words, action-oriented, Dutch", "module": "<one of the ModuleId values>", "measuredBy": "decision|special|manual", "triggerActionIds": ["roleAction id that fulfils this"] }. ${c.exerciseGoal && objectivesByGoal[c.exerciseGoal] ? objectivesByGoal[c.exerciseGoal] : 'Base objectives on the scenario type and exercise goal.'}`
   )
 
+  // Role-specific inject targeting
+  d.push(
+    `INJECT ROLE TARGETING: For injects that are only relevant to specific roles, set "targetRoles": ["ciso"] or ["it_manager", "system_admin"] etc. Use this for: IR/SOC technical briefings → targetRoles: ["ciso", "it_manager"]; Financial impact updates → targetRoles: ["cfo"]; Legal/regulatory alerts → targetRoles: ["legal"]; Internal HR communications → targetRoles: ["hr_lead"]; General crisis updates, ransom notes, media coverage → targetTeam: "all" (no targetRoles). The targetRoles field overrides targetTeam when both are present. Only set targetRoles when the inject content is genuinely role-specific — most injects should use targetTeam only.`
+  )
+
+  // Inject ↔ roleAction coupling — critical for realism
+  d.push(
+    `INJECT-ACTIE KOPPELING: Elke roleAction in een ronde moet een directe reactie zijn op één of meer injects in diezelfde ronde. De inject triggert de situatie — de roleAction is de teamreactie. Regels: (1) Noem in de roleAction description expliciet waar de inject over gaat (bijv. "Naar aanleiding van de melding van de IR-retainer: autoriseer isolatie van het productiesysteem"). (2) De verantwoordelijke rol voor een roleAction moet aansluiten op de inhoud van de inject: een juridische inject → allowedRoles bevat 'legal' of 'ciso'; een communicatiedruk → 'head_of_comms'; een financieel besluit → 'cfo' of 'ceo'. (3) Elke inject van het type 'executive', 'regulatory' of 'media' moet minstens één bijbehorende roleAction hebben voor de verantwoordelijke crisismanagementrol.`
+  )
+
   // BOB framework directive (Task 7)
   if (c.decisionFramework === 'bob') {
     d.push(
-      `DECISION FRAMEWORK — BOB: Structure every round's facilitatorNotes along BOB phases. discussionGoal must name the BOB phase (Rounds 1–2: Beeldvorming; Round 3: Oordeelvorming; Round 4: Besluitvorming). keyQuestions must include at least one question per applicable BOB phase. hints must include a BOB failure pattern (e.g. "springt naar besluit vóór volledig beeld is gevormd"). Each roleAction description must start with the BOB phase label: "[Beeldvorming]", "[Oordeelvorming]", or "[Besluit]".`
+      `DECISION FRAMEWORK — BOB: Structure every round's facilitatorNotes along BOB phases. discussionGoal must name the BOB phase (Rounds 1–2: Beeldvorming; Round 3: Oordeelvorming; Round 4: Besluitvorming). keyQuestions must include at least one question per applicable BOB phase. hints must include a BOB failure pattern (e.g. "springt naar besluit vóór volledig beeld is gevormd"). Do NOT add any BOB phase prefix to roleAction labels or descriptions — keep action text clean and action-oriented.`
     )
   }
 
@@ -306,6 +336,7 @@ Return ONLY valid JSON:
       "senderHandle": "...",
       "timestamp": "HH:MM",
       "targetTeam": "all|crisis_management|technical_it",
+      "targetRoles": ["ciso"],
       "nis2Relevant": false
     }],
     "roleActions": [{
@@ -365,16 +396,17 @@ async function generateWithAI(
 
     if (intensity === "lean") {
       const { generateLeanScenario } = await import("@/lib/scenario/generator")
-      const scenario = await generateLeanScenario(config, apiKey, "claude-haiku-4-5-20251001", 16000)
+      const scenario = await generateLeanScenario(config, apiKey, "claude-haiku-4-5-20251001", 8000)
       return { scenario, intensity: "lean" as const, warnings: [] }
     }
 
     const { instance, warnings } = await generateScenarioInstance(config, apiKey, {
       model: "claude-sonnet-4-6",
-      maxTokens: 32000,
+      maxTokens: 12000,
       moduleSlots,
       framework,
-      maxRetries: 0,
+      maxRetries: 2,
+      maxModules: 4,
     })
     return { scenario: scenarioInstanceToScenario(instance), intensity: "full" as const, warnings }
   } catch (err) {
@@ -410,36 +442,82 @@ export async function POST(req: Request) {
     realism: body.realism,
     dynamicBranching: typeof body.dynamicBranching === "boolean" ? body.dynamicBranching : undefined,
     selectedRoles: Array.isArray(body.selectedRoles) ? body.selectedRoles as Role[] : undefined,
+    goalId: typeof body.goalId === "string" ? body.goalId as GoalId : undefined,
   }
   const mode: SimulationMode = body.mode === "event" ? "event" : "training"
 
-  const aiResult = await generateWithAI(config, mode, {
-    moduleSlots: body.moduleSlots,
-    decisionFramework: body.decisionFramework,
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      function send(obj: object) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
+      }
+      try {
+        send({ stage: "building_prompt", pct: 10, label: "Scenario opbouwen..." })
+
+        const intensity = config.aiIntensity ?? "off"
+        if (intensity !== "off") {
+          send({ stage: "calling_ai", pct: 30, label: "AI genereert scenario..." })
+        }
+
+        const aiResult = await generateWithAI(config, mode, {
+          moduleSlots: body.moduleSlots,
+          decisionFramework: body.decisionFramework,
+        })
+
+        const aiError = aiResult && 'aiError' in aiResult ? aiResult.aiError : undefined
+        const aiSuccess = aiResult && 'scenario' in aiResult ? aiResult : null
+
+        if (aiError) {
+          send({ stage: "error", message: aiError })
+          return
+        }
+
+        send({ stage: "parsing", pct: 75, label: "Resultaat verwerken..." })
+
+        let scenario = aiSuccess?.scenario ?? null
+        if (!scenario) {
+          try {
+            const { generateScenario } = await import("@/lib/scenario-generator")
+            scenario = generateScenario(config)
+          } catch (fallbackErr) {
+            const msg = fallbackErr instanceof Error ? fallbackErr.message : "Fallback generation failed"
+            console.error("[create] fallback scenario error:", msg)
+            send({ stage: "error", message: `Scenario generatie mislukt: ${msg}` })
+            return
+          }
+        }
+
+        send({ stage: "saving", pct: 90, label: "Sessie opslaan..." })
+
+        const { generateDocuments } = await import("@/lib/document-generator")
+        const documents = generateDocuments(config)
+
+        const { createSession } = await import("@/lib/session-store")
+        const session = await createSession(config, scenario, mode, documents)
+
+        send({
+          stage: "done",
+          pct: 100,
+          sessionId: session.id,
+          joinCode: session.joinCode,
+          aiGenerated: !!aiSuccess,
+          aiIntensity: aiSuccess?.intensity ?? "off",
+          warnings: aiSuccess?.warnings ?? [],
+        })
+      } catch (err) {
+        send({ stage: "error", message: err instanceof Error ? err.message : String(err) })
+      } finally {
+        controller.close()
+      }
+    },
   })
-  const aiError = aiResult && 'aiError' in aiResult ? aiResult.aiError : undefined
-  const aiSuccess = aiResult && 'scenario' in aiResult ? aiResult : null
-  let scenario = aiSuccess?.scenario ?? null
-  if (!scenario) {
-    if (aiError) {
-      return NextResponse.json({ error: aiError }, { status: 500 })
-    }
-    const { generateScenario } = await import("@/lib/scenario-generator")
-    scenario = generateScenario(config)
-  }
 
-  const { generateDocuments } = await import("@/lib/document-generator")
-  const documents = generateDocuments(config)
-
-  const { createSession } = await import("@/lib/session-store")
-  const session = await createSession(config, scenario, mode, documents)
-  return NextResponse.json({
-    ok: true,
-    sessionId: session.id,
-    joinCode: session.joinCode,
-    aiGenerated: !!aiSuccess,
-    aiIntensity: aiSuccess?.intensity ?? "off",
-    warnings: aiSuccess?.warnings ?? [],
-    aiError,
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
   })
 }

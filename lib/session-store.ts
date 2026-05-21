@@ -7,11 +7,13 @@ import { randomBytes } from "crypto"
 import { generateScenario } from "./scenario-generator"
 import { dbGetSession, dbSetSession } from "./db"
 import type {
-  ExerciseConfig, GovernanceFlag, Inject, InjectType, LiveEvent, LiveEventName,
-  Participant, PublicState, Role, RoleAction, RoleDocument, RoundPhase, Scenario, SessionState,
-  SimulationMode, SpecialEvent, SpecialMessage, SpecialType, StreamMessage, SubmittedDecision,
-  TimelineEvent, TimelineEventType, Urgency,
+  ActivePhaseState, ExerciseConfig, FacilitatorRoundScore, GovernanceFlag, Inject, InjectType,
+  LearningObjective, LiveEvent, LiveEventName, Participant, PublicState, Role, RoleAction,
+  RoleDocument, RoundPhase, Scenario, SessionState, SimulationMode, SpecialEvent, SpecialMessage,
+  SpecialScore, SpecialType, StreamMessage, SubmittedDecision, TimelineEvent, TimelineEventType, Urgency,
 } from "./types"
+import type { AssessmentEvent } from "./engine/types"
+import { BOB_PHASES, OODA_PHASES } from "./engine/facilitator-support"
 
 // ─── SSE listeners (always in-memory — per-process) ───────────
 
@@ -74,8 +76,9 @@ export function toParticipantState(session: SessionState): SessionState {
             label: action.label,
             description: action.description,
             allowedRoles: action.allowedRoles,
-            irPlanAligned: true,  // neutral placeholder — real value is server-side only
+            irPlanAligned: true,
           })),
+          learningObjectives: round.learningObjectives?.map(({ triggerActionIds: _a, triggerSpecialType: _s, ...safe }) => safe),
         }
       }),
     },
@@ -91,6 +94,12 @@ export function toParticipantState(session: SessionState): SessionState {
     specialEvents: session.specialEvents ?? [],
     // All documents included — filtered by role in the participant's own UI
     documents: session.documents ?? [],
+    // Strip facilitator-only phase state; expose only the participant-safe prompt + index
+    activeDiscussionPhase: undefined,
+    currentDiscussionPrompt: session.activeDiscussionPhase
+      ? (session.config.decisionFramework === 'ooda' ? OODA_PHASES : BOB_PHASES)[session.activeDiscussionPhase.phaseIndex]?.participantPrompt
+      : undefined,
+    currentDiscussionPhaseIndex: session.activeDiscussionPhase?.phaseIndex,
   }
 }
 
@@ -103,7 +112,11 @@ export function subscribe(listener: Listener): () => void {
 }
 
 export function subscribeParticipant(listener: Listener): () => void {
+  // Guard: if a broadcast arrives before the initial dbGetSession() resolves,
+  // skip the db-fetch result to avoid the client receiving two conflicting states.
+  let initialSent = false
   const wrapped: Listener = (msg) => {
+    initialSent = true
     if (msg.type === "state" && msg.data.session) {
       listener({ type: "state", data: { session: toParticipantState(msg.data.session) } })
     } else {
@@ -112,6 +125,7 @@ export function subscribeParticipant(listener: Listener): () => void {
   }
   listeners.add(wrapped)
   dbGetSession().then(s => {
+    if (initialSent) return
     const safe = s ? toParticipantState(s) : null
     wrapped({ type: "state", data: { session: safe } })
   })
@@ -226,7 +240,15 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
 
   if (session.currentRound < session.scenario.rounds.length - 1) {
     const nextIdx = session.currentRound + 1
-    let updated: SessionState = { ...session, currentRound: nextIdx, roundStartedAt: Date.now(), roundPhase: "inject" as RoundPhase }
+    let updated: SessionState = {
+      ...session,
+      currentRound: nextIdx,
+      roundStartedAt: Date.now(),
+      roundPhase: "inject" as RoundPhase,
+      activeDiscussionPhase: undefined,
+      currentDiscussionPrompt: undefined,
+      currentDiscussionPhaseIndex: undefined,
+    }
     updated = pushTimeline(updated, "round_changed", { roundIndex: nextIdx })
     await dbSetSession(updated)
     broadcastState(updated)
@@ -307,6 +329,26 @@ export async function pushSurpriseInject(input: {
 
 export async function setPhase(phase: RoundPhase): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(s => {
+    // Auto-initialize BOB/OODA phase 0 when switching to discussion so participants
+    // immediately see a prompt instead of a blank screen.
+    if (phase === 'discussion' && !s.activeDiscussionPhase) {
+      const phases = s.config.decisionFramework === 'ooda' ? OODA_PHASES : BOB_PHASES
+      const firstPhase = phases[0]
+      if (firstPhase) {
+        const active: ActivePhaseState = {
+          roundNumber: s.currentRound,
+          phaseIndex: 0,
+          phaseStartedAt: Date.now(),
+          extended: false,
+        }
+        return {
+          ...s,
+          roundPhase: phase,
+          activeDiscussionPhase: active,
+          currentDiscussionPrompt: firstPhase.participantPrompt,
+        }
+      }
+    }
     return { ...s, roundPhase: phase }
   })
   if (result.ok) emit("phase_changed", { phase })
@@ -406,11 +448,45 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     })
   }
 
-  const updated = {
+  // Check learning objectives triggered by this decision
+  const updatedRounds = session.scenario.rounds.map((r, ri) => {
+    if (ri !== input.roundIndex || !r.learningObjectives) return r
+    const updatedObjectives = r.learningObjectives.map(obj => {
+      if (obj.achieved || obj.measuredBy !== 'decision') return obj
+      if (obj.triggerActionIds?.includes(input.actionId)) {
+        return { ...obj, achieved: true, achievedAt: new Date().toISOString() }
+      }
+      return obj
+    })
+    return { ...r, learningObjectives: updatedObjectives }
+  })
+
+  let updated: SessionState = {
     ...session,
+    scenario: { ...session.scenario, rounds: updatedRounds },
     submittedDecisions: [...existingDecisions, decision],
     governanceFlags: [...existingFlags, ...newFlags],
   }
+
+  // Auto-score decision_speed on the first decision per round
+  if (session.config.goalId && session.roundStartedAt) {
+    const alreadyScored = (session.assessmentEvents ?? []).some(
+      e => e.dimensionId === 'decision_speed' && e.roundNumber === input.roundIndex
+    )
+    if (!alreadyScored) {
+      const deltaMin = (Date.now() - session.roundStartedAt) / 60000
+      const speedValue = deltaMin < 5 ? 100 : deltaMin < 10 ? 75 : deltaMin < 15 ? 50 : deltaMin < 20 ? 25 : 10
+      const speedEvent: AssessmentEvent = {
+        dimensionId: 'decision_speed',
+        roundNumber: input.roundIndex,
+        value: speedValue,
+        source: 'system',
+        timestamp: Date.now(),
+      }
+      updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), speedEvent] }
+    }
+  }
+
   await dbSetSession(updated)
   broadcastState(updated)
   emit("decision_submitted", { participantId: input.participantId, roundIndex: input.roundIndex })
@@ -730,6 +806,7 @@ export async function submitSpecialChoice(input: {
 
   let updated: SessionState = { ...session, specialEvents: updatedSpecials }
   if (isCompleted) {
+    updated = applySpecialCompletion(updated, updatedSpecials[specialIdx])
     updated = pushTimeline(updated, "special_completed", { specialId: input.specialId, type: special.type })
   }
   await dbSetSession(updated)
@@ -806,11 +883,39 @@ export async function submitApForm(input: {
   updatedSpecials[specialIdx] = { ...special, formData: input.formData, status: "completed", completedAt: Date.now() }
 
   let updated: SessionState = { ...session, specialEvents: updatedSpecials }
+  updated = applySpecialCompletion(updated, updatedSpecials[specialIdx])
   updated = pushTimeline(updated, "special_completed", { specialId: input.specialId, type: special.type })
   await dbSetSession(updated)
   broadcastState(updated)
   emit("special_completed", { specialId: input.specialId, type: special.type })
   return { ok: true }
+}
+
+function applySpecialCompletion(session: SessionState, completedSpecial: SpecialEvent): SessionState {
+  const entry: SpecialScore = {
+    type: completedSpecial.type,
+    score: completedSpecial.totalScore ?? 0,
+    completedAt: new Date().toISOString(),
+  }
+  // Check objectives with measuredBy='special'
+  const updatedRounds = session.scenario.rounds.map(r => {
+    if (!r.learningObjectives) return r
+    return {
+      ...r,
+      learningObjectives: r.learningObjectives.map((obj: LearningObjective) => {
+        if (obj.achieved || obj.measuredBy !== 'special') return obj
+        if (obj.triggerSpecialType === completedSpecial.type && (completedSpecial.totalScore ?? 0) >= 0) {
+          return { ...obj, achieved: true, achievedAt: new Date().toISOString() }
+        }
+        return obj
+      }),
+    }
+  })
+  return {
+    ...session,
+    scenario: { ...session.scenario, rounds: updatedRounds },
+    specialScores: [...(session.specialScores ?? []), entry],
+  }
 }
 
 export async function completeSpecial(specialId: string): Promise<{ ok: boolean; error?: string }> {
@@ -825,9 +930,95 @@ export async function completeSpecial(specialId: string): Promise<{ ok: boolean;
   updatedSpecials[specialIdx] = { ...special, status: "completed", completedAt: Date.now() }
 
   let updated: SessionState = { ...session, specialEvents: updatedSpecials }
+  updated = applySpecialCompletion(updated, updatedSpecials[specialIdx])
   updated = pushTimeline(updated, "special_completed", { specialId, type: special.type })
   await dbSetSession(updated)
   broadcastState(updated)
   emit("special_completed", { specialId, type: special.type })
+  return { ok: true }
+}
+
+export async function addAssessmentEvent(
+  event: Omit<AssessmentEvent, 'timestamp'>,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  const newEvent: AssessmentEvent = { ...event, timestamp: Date.now() }
+  const updated: SessionState = {
+    ...session,
+    assessmentEvents: [...(session.assessmentEvents ?? []), newEvent],
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true }
+}
+
+export async function setDiscussionPhase(
+  roundNumber: number,
+  phaseIndex: number,
+  action: 'set' | 'extend' = 'set',
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: 'No active session.' }
+
+  const phases = session.config.decisionFramework === 'ooda' ? OODA_PHASES : BOB_PHASES
+  if (phaseIndex < 0 || phaseIndex >= phases.length) {
+    return { ok: false, error: 'Invalid phase index.' }
+  }
+  const phase = phases[phaseIndex]
+
+  let phaseStartedAt: number
+  let extended: boolean
+
+  if (action === 'extend' && session.activeDiscussionPhase?.phaseIndex === phaseIndex) {
+    // Shift phaseStartedAt forward by 2 minutes — increases remaining time
+    phaseStartedAt = (session.activeDiscussionPhase.phaseStartedAt) + 120_000
+    extended = true
+  } else {
+    phaseStartedAt = Date.now()
+    extended = false
+  }
+
+  const activeDiscussionPhase: ActivePhaseState = { roundNumber, phaseIndex, phaseStartedAt, extended }
+  const updated: SessionState = {
+    ...session,
+    activeDiscussionPhase,
+    currentDiscussionPrompt: phase.participantPrompt,
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  emit('discussion_phase_changed', {
+    phaseName: phase.name,
+    participantPrompt: phase.participantPrompt,
+    phaseIndex,
+    totalPhases: phases.length,
+    roundNumber,
+  })
+  return { ok: true }
+}
+
+export async function markParticipantReady(participantId: string): Promise<{ ok: boolean; error?: string }> {
+  const result = await mutate(session => {
+    const participants = session.participants.map(p =>
+      p.id === participantId ? { ...p, readyAt: Date.now() } : p
+    )
+    return { ...session, participants }
+  })
+  if (result.ok) emit('participant_ready', { participantId })
+  return result
+}
+
+export async function submitFacilitatorRoundScore(
+  roundIndex: number,
+  score: -1 | 0 | 1,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+
+  const existing = (session.facilitatorRoundScores ?? []).filter(s => s.roundIndex !== roundIndex)
+  const entry: FacilitatorRoundScore = { roundIndex, score, scoredAt: new Date().toISOString() }
+  const updated: SessionState = { ...session, facilitatorRoundScores: [...existing, entry] }
+  await dbSetSession(updated)
+  broadcastState(updated)
   return { ok: true }
 }

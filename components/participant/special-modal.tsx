@@ -138,11 +138,8 @@ function ScriptedChoices({
           key={choice.id}
           onClick={() => onChoose(choice)}
           disabled={sending || lastChoiceId !== null}
-          className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed ${QUALITY_STYLE[choice.quality]}`}
+          className="flex items-start gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left text-sm transition-all hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <span className={`mt-0.5 shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${QUALITY_BADGE[choice.quality]}`}>
-            {QUALITY_LABEL[choice.quality]}
-          </span>
           <span className="leading-relaxed">{choice.label}</span>
           {sending && lastChoiceId === choice.id && <Loader2 className="size-3.5 animate-spin shrink-0 ml-auto mt-0.5" />}
         </button>

@@ -1,3 +1,6 @@
+import type { GoalId, AssessmentEvent } from "@/lib/engine/types"
+export type { GoalId }
+
 export type Role =
   | 'it_manager'
   | 'ciso'
@@ -163,6 +166,29 @@ export interface GovernanceFlag {
   flaggedAt: string
 }
 
+export interface LearningObjective {
+  id: string
+  description: string
+  module: ModuleId
+  measuredBy: 'decision' | 'timing' | 'special' | 'manual'
+  triggerActionIds?: string[]
+  triggerSpecialType?: SpecialType
+  achieved?: boolean
+  achievedAt?: string
+}
+
+export interface FacilitatorRoundScore {
+  roundIndex: number
+  score: -1 | 0 | 1
+  scoredAt: string
+}
+
+export interface SpecialScore {
+  type: SpecialType
+  score: number
+  completedAt: string
+}
+
 export interface SessionReport {
   sessionId: string
   generatedAt: string
@@ -170,18 +196,30 @@ export interface SessionReport {
   totalRounds: number
   totalDecisions: number
   scores: {
-    decisionQuality: number      // % recommended decisions
-    processAdherence: number     // % IR-plan aligned decisions
-    roleCompliance: number       // % decisions by authorized role
+    decisionQuality: number
+    processAdherence: number
+    roleCompliance: number
+    facilitatorScore: number
+    objectivesAchieved: number
+    objectivesTotal: number
   }
   perRound: Array<{
     roundIndex: number
     roundTitle: string
     decisions: SubmittedDecision[]
     flags: GovernanceFlag[]
+    facilitatorScore?: -1 | 0 | 1
+  }>
+  perObjective: Array<{
+    roundIndex: number
+    objective: LearningObjective
+    achieved: boolean
+    achievedAt?: string
   }>
   topFlags: GovernanceFlag[]
   recommendations: string[]
+  facilitatorRoundScores?: FacilitatorRoundScore[]
+  specialScores?: SpecialScore[]
 }
 
 export type Urgency = "low" | "medium" | "high" | "critical"
@@ -197,15 +235,63 @@ export type InjectType =
   | "internal"
 
 export type InjectChannel =
+  // Legacy channels (render layer supports both sets)
   | "whatsapp"
   | "slack"
-  | "email"
   | "siem_alert"
-  | "sms"
-  | "phone"
   | "news_ticker"
   | "system_alert"
   | "raw"
+  // New scenario channels
+  | "email"
+  | "sms"
+  | "phone"
+  | "teams"
+  | "siem"
+  | "edr"
+  | "news"
+  | "memo"
+  | "ransom_note"
+
+// ─── New scenario-architecture types ───
+
+export type ScenarioType =
+  | 'ransomware_double_extortion'
+  | 'insider_threat'
+  | 'bec_cfo_fraud'
+  | 'supply_chain_compromise'
+
+export type DecisionFramework =
+  | 'bob'
+  | 'ooda'
+  | 'dair'
+  | 'nist_ir'
+  | 'free'
+
+export type ObservationLens =
+  | 'symptoms'
+  | 'impact'
+  | 'external_reactions'
+  | 'attacker_voice'
+
+export type ModuleId =
+  | 'detection_sensemaking'
+  | 'triage_containment'
+  | 'business_continuity'
+  | 'crisis_communication'
+  | 'legal_regulatory'
+  | 'ransom_negotiation'
+  | 'recovery_lessons'
+  | 'insider_investigation'
+  | 'supply_chain_response'
+  | 'forensic_attribution'
+
+export type EmotionalTone =
+  | 'clinical'
+  | 'urgent'
+  | 'panicked'
+  | 'menacing'
+  | 'professional'
 
 export interface Inject {
   id: string
@@ -219,6 +305,7 @@ export interface Inject {
   senderHandle?: string
   timestamp?: string
   targetTeam?: 'all' | 'crisis_management' | 'technical_it'
+  targetRoles?: Role[]   // if set, ONLY these roles see this inject (overrides targetTeam)
   nis2Relevant?: boolean
 }
 
@@ -238,6 +325,7 @@ export interface Round {
   timerMinutes?: number
   facilitatorNotes?: FacilitatorNotes
   roleActions?: RoleAction[]
+  learningObjectives?: LearningObjective[]
 }
 
 export interface Scenario {
@@ -336,6 +424,8 @@ export interface ExerciseConfig {
   realism?: RealismLevel
   dynamicBranching?: boolean
   selectedRoles?: Role[]
+  decisionFramework?: DecisionFramework
+  goalId?: GoalId
 }
 
 export interface Participant {
@@ -344,6 +434,14 @@ export interface Participant {
   team?: string
   role?: Role
   joinedAt: number
+  readyAt?: number
+}
+
+export interface ActivePhaseState {
+  roundNumber: number
+  phaseIndex: number
+  phaseStartedAt: number   // unix ms — extending shifts this forward by +120000
+  extended: boolean
 }
 
 export interface PushedInject {
@@ -399,6 +497,12 @@ export interface SessionState {
   governanceFlags?: GovernanceFlag[]
   specialEvents?: SpecialEvent[]
   documents?: RoleDocument[]
+  facilitatorRoundScores?: FacilitatorRoundScore[]
+  specialScores?: SpecialScore[]
+  assessmentEvents?: AssessmentEvent[]
+  activeDiscussionPhase?: ActivePhaseState
+  currentDiscussionPrompt?: string
+  currentDiscussionPhaseIndex?: number
 }
 
 export interface PublicState {
@@ -420,6 +524,8 @@ export type LiveEventName =
   | "special_triggered"
   | "special_message"
   | "special_completed"
+  | "discussion_phase_changed"
+  | "participant_ready"
 
 export interface LiveEvent {
   name: LiveEventName

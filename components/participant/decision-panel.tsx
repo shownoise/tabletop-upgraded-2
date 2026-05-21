@@ -9,6 +9,16 @@ import { ROLE_META } from "@/lib/types"
 import { api } from "@/lib/api-client"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
+import { stripMarkdown } from "@/lib/render-markdown"
+
+function stripBobLabel(text: string): string {
+  return text
+    // [Beeldvorming], [Beeldvorming]: …
+    .replace(/^\[(Beeldvorming|Oordeelvorming|Besluit(?:vorming)?)\][:\s]*/i, "")
+    // Beeldvorming: …  /  Beeldvorming — …  /  Beeldvorming - …
+    .replace(/^(Beeldvorming|Oordeelvorming|Besluit(?:vorming)?)\s*[:\-–—]\s*/i, "")
+    .trim()
+}
 
 interface Props {
   roundIndex: number
@@ -36,7 +46,7 @@ export function DecisionPanel({
   const [error, setError] = useState<string | null>(null)
 
   async function onSubmit() {
-    if (!selectedActionId) { setError("Please select an action."); return }
+    if (!selectedActionId) { setError("Selecteer een actie."); return }
     setError(null)
     setSubmitting(true)
     try {
@@ -64,7 +74,7 @@ export function DecisionPanel({
         isIrDeviation: action ? !action.irPlanAligned : false,
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit")
+      setError(err instanceof Error ? err.message : "Indienen mislukt")
     } finally {
       setSubmitting(false)
     }
@@ -76,10 +86,10 @@ export function DecisionPanel({
         style={{ borderLeft: "3px solid var(--tt-warn)" }}>
         <div className="flex items-center gap-2 mb-2">
           <AlertTriangle className="size-4 text-tt-warn" />
-          <span className="font-mono text-[10px] uppercase tracking-widest text-tt-warn">No Role Assigned</span>
+          <span className="font-mono text-[10px] uppercase tracking-widest text-tt-warn">Geen rol toegewezen</span>
         </div>
         <p className="font-mono text-xs text-tt-dim">
-          You need a role assigned to submit decisions. Contact your facilitator.
+          Je hebt een rol nodig om beslissingen in te dienen. Neem contact op met de facilitator.
         </p>
       </div>
     )
@@ -112,7 +122,7 @@ export function DecisionPanel({
                 <span className="font-mono text-[10px] uppercase tracking-widest text-tt-green">
                   {tr(lang, "decisionSubmitted")}
                 </span>
-                <span className="font-mono text-sm text-tt-bright">{submitted.actionLabel}</span>
+                <span className="font-mono text-sm text-tt-bright">{stripMarkdown(submitted.actionLabel)}</span>
               </div>
             </div>
             <div className="flex items-center gap-2 border border-tt-border bg-tt-bright/5 px-3 py-2.5">
@@ -133,54 +143,78 @@ export function DecisionPanel({
           </div>
         ) : (
           <>
-            {/* Action grid — 2 columns */}
-            <div className="flex flex-col gap-2">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
-                {tr(lang, "selectAction")}
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {roundActions.map(action => {
-                  const authorized = action.allowedRoles.length === 0 || action.allowedRoles.includes(participantRole)
-                  const isSelected = selectedActionId === action.id
-                  return (
-                    <button
-                      key={action.id}
-                      onClick={() => setSelectedActionId(action.id)}
-                      className="text-left border px-4 py-3 transition-all"
-                      style={{
-                        borderColor: isSelected ? "var(--tt-accent)" : "var(--tt-border)",
-                        backgroundColor: isSelected ? "color-mix(in srgb, var(--tt-accent) 5%, transparent)" : "color-mix(in srgb, var(--tt-bright) 4%, transparent)",
-                        borderLeft: isSelected ? "3px solid var(--tt-accent)" : "3px solid var(--tt-border)",
-                        opacity: authorized ? 1 : 0.5,
-                      }}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-xs font-medium text-tt-bright">
-                              {action.label}
+            {/* Action grid — split by role authorization */}
+            {(() => {
+              const role = participantRole // narrowed to Role (not undefined — guarded above)
+              const myActions = roundActions.filter(a => a.allowedRoles.length === 0 || a.allowedRoles.includes(role))
+
+              function ActionButton({ action }: { action: typeof roundActions[number] }) {
+                const isSelected = selectedActionId === action.id
+                const authorized = action.allowedRoles.length === 0 || action.allowedRoles.includes(role)
+                const ownerLabel = !authorized && action.allowedRoles.length > 0
+                  ? action.allowedRoles.slice(0, 2).map(r => ROLE_META[r]?.label ?? r).join(" / ")
+                  : null
+                return (
+                  <button
+                    key={action.id}
+                    onClick={() => setSelectedActionId(action.id)}
+                    className="text-left border px-4 py-3 transition-all"
+                    style={{
+                      borderColor: isSelected ? "var(--tt-accent)" : authorized ? "var(--tt-border)" : "var(--tt-border)",
+                      backgroundColor: isSelected
+                        ? "color-mix(in srgb, var(--tt-accent) 5%, transparent)"
+                        : authorized
+                          ? "color-mix(in srgb, var(--tt-bright) 4%, transparent)"
+                          : "transparent",
+                      borderLeft: isSelected ? "3px solid var(--tt-accent)" : authorized ? "3px solid var(--tt-border)" : "3px solid transparent",
+                      opacity: authorized ? 1 : 0.45,
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`font-mono text-xs font-medium ${authorized ? "text-tt-bright" : "text-tt-dim"}`}>
+                            {stripMarkdown(stripBobLabel(action.label))}
+                          </span>
+                          {ownerLabel && (
+                            <span className="font-mono text-[8px] uppercase tracking-widest text-tt-dim border border-tt-border px-1">
+                              → {ownerLabel}
                             </span>
-                            {!authorized && (
-                              <span className="font-mono text-[8px] uppercase tracking-widest text-tt-dim border border-tt-border px-1">
-                                {tr(lang, "actionUnauthorized")}
-                              </span>
-                            )}
-                          </div>
-                          {action.description && (
-                            <p className="font-mono text-[10px] text-tt-dim leading-relaxed">
-                              {action.description}
-                            </p>
                           )}
                         </div>
-                        {isSelected && (
-                          <CheckCircle className="size-3.5 text-tt-accent shrink-0 mt-0.5" />
+                        {action.description && (
+                          <p className="font-mono text-[10px] text-tt-dim leading-relaxed">
+                            {stripMarkdown(stripBobLabel(action.description))}
+                          </p>
                         )}
                       </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+                      {isSelected && (
+                        <CheckCircle className="size-3.5 text-tt-accent shrink-0 mt-0.5" />
+                      )}
+                    </div>
+                  </button>
+                )
+              }
+
+              return (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-2">
+                    <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
+                      {tr(lang, "selectAction")} — {ROLE_META[role].label}
+                    </span>
+                    {myActions.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {myActions.map(action => <ActionButton key={action.id} action={action} />)}
+                      </div>
+                    ) : (
+                      <p className="font-mono text-xs text-tt-dim">
+                        Er zijn geen acties voor jouw rol in deze ronde. Draag bij via de discussie.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Reasoning */}
             <div className="flex flex-col gap-1.5">

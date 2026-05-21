@@ -26,7 +26,6 @@ import { Badge } from "@/components/ui/badge"
 import type { Inject, InjectType, SessionState, Urgency } from "@/lib/types"
 import { api } from "@/lib/api-client"
 import { injectTypeLabel, urgencyClasses, urgencyLabel, channelLabel, channelIcon } from "@/lib/format"
-import { FacilitatorNotesPanel } from "./facilitator-notes"
 
 const INJECT_TYPES: InjectType[] = ["alert","intel","media","executive","technical","regulatory","social","internal"]
 const URGENCIES: Urgency[] = ["low", "medium", "high", "critical"]
@@ -68,15 +67,6 @@ export function InjectControls({ session, disabled, lang = "en" }: { session: Se
           <div className="rounded-md border border-border bg-background/50 p-4">
             <p className="text-sm leading-relaxed text-muted-foreground">{round.situation_update}</p>
           </div>
-
-          {/* Facilitator notes */}
-          {round.facilitatorNotes && (
-            <FacilitatorNotesPanel
-              notes={round.facilitatorNotes}
-              roundTitle={round.title}
-              roundNumber={round.round_number}
-            />
-          )}
 
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">

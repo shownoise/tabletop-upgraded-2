@@ -502,6 +502,15 @@ export const RANSOMWARE_TEMPLATE: ScenarioTemplate = {
       "If you could change one thing starting tomorrow — what is it?",
     ],
   },
+  // ─── New scenario-architecture fields ───
+  scenario_type: "ransomware_double_extortion",
+  decision_framework: "bob",
+  modules: [
+    { module_id: "detection_sensemaking" },
+    { module_id: "business_continuity" },
+    { module_id: "crisis_communication" },
+    { module_id: "ransom_negotiation" },
+  ],
 }
 
 export const BEC_TEMPLATE: ScenarioTemplate = {
@@ -641,6 +650,14 @@ export const BEC_TEMPLATE: ScenarioTemplate = {
     bad: ["Wire transfer executed — funds likely unrecoverable", "Verification procedure not followed under pressure", "Mailbox compromise scope not assessed"],
     debriefQuestions: ["Do all finance staff know your wire transfer verification procedure?", "How would you have detected the mailbox compromise without this exercise?", "What MFA and phishing controls do you have — and are they enough?"],
   },
+  // ─── New scenario-architecture fields ───
+  scenario_type: "bec_cfo_fraud",
+  decision_framework: "bob",
+  modules: [
+    { module_id: "detection_sensemaking" },
+    { module_id: "legal_regulatory" },
+    { module_id: "crisis_communication" },
+  ],
 }
 
 export const BUILTIN_TEMPLATES: ScenarioTemplate[] = [

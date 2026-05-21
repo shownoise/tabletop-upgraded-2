@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
 
@@ -74,8 +74,17 @@ export function RoundTimer({ roundStartedAt, timerMinutes, status, lang }: Round
 }
 
 // Compact inline version used in the sticky timer bar
-export function RoundTimerCompact({ roundStartedAt, timerMinutes, status, lang }: RoundTimerProps) {
-  const secondsLeft = useCountdown(roundStartedAt, timerMinutes, status)
+export function RoundTimerCompact({
+  roundStartedAt, timerMinutes, status, lang, paused, onTogglePause,
+}: RoundTimerProps & { paused?: boolean; onTogglePause?: () => void }) {
+  const live = useCountdown(roundStartedAt, timerMinutes, status)
+  const frozenRef = useRef<number | null>(null)
+
+  // Freeze display when paused
+  if (paused && live !== null && frozenRef.current === null) frozenRef.current = live
+  if (!paused) frozenRef.current = null
+
+  const secondsLeft = paused ? (frozenRef.current ?? live) : live
   if (secondsLeft === null) return null
 
   const mins  = Math.floor(secondsLeft / 60)
@@ -108,6 +117,16 @@ export function RoundTimerCompact({ roundStartedAt, timerMinutes, status, lang }
       >
         {String(mins).padStart(2, "0")}:{String(secs).padStart(2, "0")}
       </span>
+      {onTogglePause && (
+        <button
+          onClick={onTogglePause}
+          className="ml-1 font-mono text-[9px] uppercase tracking-widest opacity-50 hover:opacity-100 transition-opacity"
+          style={{ color }}
+          title={paused ? "Timer hervatten" : "Timer pauzeren"}
+        >
+          {paused ? "▶" : "⏸"}
+        </button>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import type { ExerciseConfig, Scenario, Round, Inject, FacilitatorNotes, RoleAction, Role } from "./types"
+import type { ExerciseConfig, Scenario, Round, Inject, FacilitatorNotes, RoleAction, Role, LearningObjective } from "./types"
 
 let counter = 0
 function id(prefix: string) {
@@ -107,7 +107,11 @@ function ransomwareR1(sector: string, systems: string, sel?: Role[], config?: Ex
     { id: "gen-r1-a4", label: "Notify board immediately", description: "Send immediate notification to the board before facts are established.", allowedRoles: ["ceo", "ciso"], irPlanAligned: false, consequence: "Premature escalation may cause panic before the scope is known." },
     { id: "gen-r1-do-nothing", label: "Do nothing / wait for more information", description: "Hold until more facts are available before escalating.", allowedRoles: [], irPlanAligned: true, consequence: "Reasonable if signals are ambiguous; risky if detection was already clear." },
   ], sel)
-  return { round_number: 1, title: "Initial Detection", situation_update: "It is 09:00. Overnight monitoring has produced low- and medium-severity alerts. Nothing critical has tripped, but the pattern is unusual. The on-call analyst has paged the incident commander.", timerMinutes: 15, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-r1-1", description: "Team escaleert incident naar CISO en opent crisisoverleg", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["gen-r1-a2", "gen-r1-a3"], achieved: false },
+    { id: "obj-r1-2", description: "Formeel incident gedeclareert en logbewijs veiliggesteld", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["gen-r1-a1", "gen-r1-a2"], achieved: false },
+  ]
+  return { round_number: 1, title: "Initial Detection", situation_update: "It is 09:00. Overnight monitoring has produced low- and medium-severity alerts. Nothing critical has tripped, but the pattern is unusual. The on-call analyst has paged the incident commander.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 function ransomwareR2(crown: string, systems: string, sel?: Role[]): Round {
@@ -151,7 +155,11 @@ function ransomwareR2(crown: string, systems: string, sel?: Role[]): Round {
     { id: "gen-r2-a4", label: "Advise on insurance notification", description: "Contact cyber insurer to initiate the claim process and get coverage guidance.", allowedRoles: ["cfo", "legal"], isRecommended: true, irPlanAligned: true, consequence: "Preserves insurance coverage; some policies require notification within hours." },
     { id: "gen-r2-do-nothing", label: "Do nothing / wait for IR retainer", description: "Hold all decisions until the external IR firm is on-call.", allowedRoles: [], irPlanAligned: false, consequence: "Encryption continues while waiting; valuable response time lost." },
   ], sel)
-  return { round_number: 2, title: "Containment & Investigation", situation_update: "It is 10:30. The picture is sharpening: this is not noise. Decisions about isolation, communication, and authority must be made under pressure, with incomplete information.", timerMinutes: 20, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-r2-1", description: "Gecompromitteerd admin-account uitgeschakeld en IR-retainer ingeschakeld", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["gen-r2-a1", "gen-r2-a2"], achieved: false },
+    { id: "obj-r2-2", description: "CEO geïnformeerd met feitelijke briefing", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["gen-r2-a3"], achieved: false },
+  ]
+  return { round_number: 2, title: "Containment & Investigation", situation_update: "It is 10:30. The picture is sharpening: this is not noise. Decisions about isolation, communication, and authority must be made under pressure, with incomplete information.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 function ransomwareR3(sector: string, sel?: Role[]): Round {
@@ -195,7 +203,11 @@ function ransomwareR3(sector: string, sel?: Role[]): Round {
     { id: "gen-r3-a4", label: "Authorise ransom payment without board approval", description: "Approve the ransom payment immediately without board sign-off.", allowedRoles: ["ceo", "cfo"], irPlanAligned: false, consequence: "Financially and legally risky; no guarantee of decryption. Board must be consulted." },
     { id: "gen-r3-do-nothing", label: "Maintain silence on all fronts", description: "Issue no statement and take no regulatory action pending further information.", allowedRoles: [], irPlanAligned: false, consequence: "Regulatory clock is running; silence may worsen both public and legal exposure." },
   ], sel)
-  return { round_number: 3, title: "Escalation & Public Pressure", situation_update: "It is 14:00. The incident is no longer contained to IT. Communications, Legal, and the executive team are now fully engaged. External pressure is mounting.", timerMinutes: 20, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-r3-1", description: "Holding statement goedgekeurd en NIS2-melding in gang gezet", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["gen-r3-a1", "gen-r3-a2"], achieved: false },
+    { id: "obj-r3-2", description: "Ransomware-onderhandelingspositie bepaald voor CEO", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["gen-r3-a3"], achieved: false },
+  ]
+  return { round_number: 3, title: "Escalation & Public Pressure", situation_update: "It is 14:00. The incident is no longer contained to IT. Communications, Legal, and the executive team are now fully engaged. External pressure is mounting.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 function ransomwareR4(sector: string, crown: string, sel?: Role[]): Round {
@@ -239,7 +251,11 @@ function ransomwareR4(sector: string, crown: string, sel?: Role[]): Round {
     { id: "gen-r4-a4", label: "Resume all systems without full forensics", description: "Restore all systems immediately to minimise downtime before root cause is confirmed.", allowedRoles: ["it_manager"], irPlanAligned: false, consequence: "Risk of reinfection if the initial access vector is still open." },
     { id: "gen-r4-do-nothing", label: "Defer all decisions pending legal review", description: "Hold all recovery and notification decisions until legal confirms the position.", allowedRoles: [], irPlanAligned: false, consequence: "Delays recovery and may breach notification deadlines." },
   ], sel)
-  return { round_number: 4, title: "Recovery & Communications", situation_update: "It is 18:30. The acute phase is winding down. Strategic decisions about payment, recovery sequencing, customer notification, and post-incident learning now define how the organisation comes out of this.", timerMinutes: 15, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-r4-1", description: "Herstel vanuit schone backup geautoriseerd", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["gen-r4-a1"], achieved: false },
+    { id: "obj-r4-2", description: "Klantnotificatie en NIS2-melding ingediend", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["gen-r4-a2", "gen-r4-a3"], achieved: false },
+  ]
+  return { round_number: 4, title: "Recovery & Communications", situation_update: "It is 18:30. The acute phase is winding down. Strategic decisions about payment, recovery sequencing, customer notification, and post-incident learning now define how the organisation comes out of this.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 // ─── INSIDER THREAT ────────────────────────────────────────────────────────────
@@ -319,7 +335,11 @@ function insiderR1(sector: string, systems: string, sel?: Role[], config?: Exerc
     { id: "ins-r1-a4", label: "Confront the employee immediately", description: "Call J. Bakker in for an impromptu meeting and ask directly about the data transfers.", allowedRoles: [], irPlanAligned: false, consequence: "Destroys evidence, triggers legal exposure, and may cause data destruction or further exfiltration." },
     { id: "ins-r1-do-nothing", label: "Continue passive monitoring before escalating", description: "Allow the employee to continue activity while IT monitors in real time.", allowedRoles: [], irPlanAligned: true, consequence: "Buys investigation time but risk of further exfiltration grows daily." },
   ], sel)
-  return { round_number: 1, title: "Suspicious Activity Detected", situation_update: "It is 09:00. A cluster of signals — some behavioural, some technical — are pointing at a single employee. Nothing is confirmed yet. The investigation must be handled carefully to preserve evidence and stay within employment law.", timerMinutes: 15, injects: slicedInjects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-ins-r1-1", description: "Legal betrokken vóór investigatiestappen", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["ins-r1-a1"], achieved: false },
+    { id: "obj-ins-r1-2", description: "Digitaal bewijs veiliggesteld zonder medewerker te alarmeren", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["ins-r1-a2"], achieved: false },
+  ]
+  return { round_number: 1, title: "Suspicious Activity Detected", situation_update: "It is 09:00. A cluster of signals — some behavioural, some technical — are pointing at a single employee. Nothing is confirmed yet. The investigation must be handled carefully to preserve evidence and stay within employment law.", timerMinutes: 15, injects: slicedInjects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 function insiderR2(crown: string, sel?: Role[]): Round {
@@ -363,7 +383,11 @@ function insiderR2(crown: string, sel?: Role[]): Round {
     { id: "ins-r2-a4", label: "File police report immediately", description: "Report J. Bakker to the police for computer fraud and IP theft before placing on leave.", allowedRoles: ["ceo", "legal"], irPlanAligned: true, consequence: "Legally possible but may complicate the employment law process. Timing matters." },
     { id: "ins-r2-do-nothing", label: "Continue monitoring while preparing the case", description: "Hold off on all action for another 24 hours to complete the evidence picture.", allowedRoles: [], irPlanAligned: false, consequence: "The competitor meeting tomorrow makes this very risky — data may leave the country." },
   ], sel)
-  return { round_number: 2, title: "Confirmed Exfiltration", situation_update: "It is 11:00. Forensics has confirmed systematic, intentional exfiltration. The employee is currently in the building and actively accessing files. Legal is advising caution. A decision on administrative leave must be made now — or the window closes.", timerMinutes: 20, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-ins-r2-1", description: "Medewerker op non-actief met Legal-akkoord", module: "insider_investigation", measuredBy: "decision", triggerActionIds: ["ins-r2-a1"], achieved: false },
+    { id: "obj-ins-r2-2", description: "Systeemtoegang ingetrokken gelijktijdig met non-actiefstelling", module: "insider_investigation", measuredBy: "decision", triggerActionIds: ["ins-r2-a2"], achieved: false },
+  ]
+  return { round_number: 2, title: "Confirmed Exfiltration", situation_update: "It is 11:00. Forensics has confirmed systematic, intentional exfiltration. The employee is currently in the building and actively accessing files. Legal is advising caution. A decision on administrative leave must be made now — or the window closes.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 function insiderR3(sector: string, sel?: Role[]): Round {
@@ -407,7 +431,11 @@ function insiderR3(sector: string, sel?: Role[]): Round {
     { id: "ins-r3-a4", label: "Brief board formally", description: "CEO provides board with a written update on the incident scope, legal exposure, and response steps taken.", allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true, consequence: "Board duty of care; protects CEO from being blindsided at next board meeting." },
     { id: "ins-r3-do-nothing", label: "Wait for legal proceedings to determine next steps", description: "Hold all communications and notifications until the employment court position is clear.", allowedRoles: [], irPlanAligned: false, consequence: "AP notification deadline passes; media runs the story without your input." },
   ], sel)
-  return { round_number: 3, title: "Legal Complexity & External Pressure", situation_update: "It is 14:00. The employee has now engaged a lawyer citing whistleblower protection. GDPR requires an AP notification within 72 hours. A journalist is asking questions. The board wants answers. Multiple simultaneous pressure tracks must be managed without contradiction.", timerMinutes: 20, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-ins-r3-1", description: "AP-melding ingediend binnen 72u na ontdekking", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["ins-r3-a2"], achieved: false },
+    { id: "obj-ins-r3-2", description: "Klokkenluidersclaim juridisch beoordeeld vóór verdere actie", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["ins-r3-a1"], achieved: false },
+  ]
+  return { round_number: 3, title: "Legal Complexity & External Pressure", situation_update: "It is 14:00. The employee has now engaged a lawyer citing whistleblower protection. GDPR requires an AP notification within 72 hours. A journalist is asking questions. The board wants answers. Multiple simultaneous pressure tracks must be managed without contradiction.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 function insiderR4(crown: string, sel?: Role[]): Round {
@@ -451,7 +479,11 @@ function insiderR4(crown: string, sel?: Role[]): Round {
     { id: "ins-r4-a4", label: "Update insider threat detection procedures", description: "HR Lead and CISO commit to updated offboarding checklist, access revocation SLA, and DLP escalation policy effective next quarter.", allowedRoles: ["hr_lead", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "Prevents recurrence. Makes the AP follow-up response credible." },
     { id: "ins-r4-do-nothing", label: "Defer all decisions to next board meeting", description: "Hold all final decisions until the board formally convenes in two weeks.", allowedRoles: [], irPlanAligned: false, consequence: "AP follow-up deadline and customer notification obligations will be missed." },
   ], sel)
-  return { round_number: 4, title: "Resolution & Lessons Learned", situation_update: "It is 17:00. Forensics confirms competitor involvement. The AP has acknowledged the breach notification. A settlement offer is on the table. The board is waiting. Decisions on legal strategy, customer notification, and systemic improvements must be made today.", timerMinutes: 15, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-ins-r4-1", description: "CEO/CFO neemt beslissing schikking of strafrechtelijk vervolgen", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["ins-r4-a1", "ins-r4-a2"], achieved: false },
+    { id: "obj-ins-r4-2", description: "Klantnotificatie goedgekeurd en eigenaar AP-follow-up aangewezen", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["ins-r4-a3"], achieved: false },
+  ]
+  return { round_number: 4, title: "Resolution & Lessons Learned", situation_update: "It is 17:00. Forensics confirms competitor involvement. The AP has acknowledged the breach notification. A settlement offer is on the table. The board is waiting. Decisions on legal strategy, customer notification, and systemic improvements must be made today.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 // ─── BUSINESS EMAIL COMPROMISE ─────────────────────────────────────────────────
@@ -514,7 +546,11 @@ function becR1(sector: string, sel?: Role[]): Round {
     { id: "bec-r1-a4", label: "Process the transfer — CEO urgency justifies it", description: "Approve and execute the €185k wire transfer based on the email request.", allowedRoles: ["cfo"], irPlanAligned: false, consequence: "Sends €185,000 to a fraudulent account. Recovery is extremely difficult after SWIFT settlement." },
     { id: "bec-r1-do-nothing", label: "Escalate to CEO's EA to confirm without calling CEO", description: "Ask the CEO's executive assistant to verify the request on your behalf.", allowedRoles: [], irPlanAligned: true, consequence: "Reasonable if EA has direct access. Slower than a direct call but acceptable." },
   ], sel)
-  return { round_number: 1, title: "Suspicious Transfer Request", situation_update: "It is 10:00. A Finance Manager has received what appears to be a CEO-authorised wire transfer request. The urgency framing and secrecy request are unusual. The CFO has been alerted. No transfer has been made yet.", timerMinutes: 15, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-bec-r1-1", description: "Betaalverzoek on hold gezet en CEO telefonisch geverifieerd", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["bec-r1-a1", "bec-r1-a3"], achieved: false },
+    { id: "obj-bec-r1-2", description: "E-mailheaders onderzocht op domeinvervalsing", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["bec-r1-a2"], achieved: false },
+  ]
+  return { round_number: 1, title: "Suspicious Transfer Request", situation_update: "It is 10:00. A Finance Manager has received what appears to be a CEO-authorised wire transfer request. The urgency framing and secrecy request are unusual. The CFO has been alerted. No transfer has been made yet.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 function becR2(sel?: Role[]): Round {
@@ -558,7 +594,11 @@ function becR2(sel?: Role[]): Round {
     { id: "bec-r2-a4", label: "HR: Conduct due process with Finance employee", description: "HR Lead ensures the junior Finance employee is treated fairly — fact-finding interview before any disciplinary consideration.", allowedRoles: ["hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Protects the organisation legally; the employee may be a victim of a social engineering chain." },
     { id: "bec-r2-do-nothing", label: "Wait for IT forensics before involving the bank", description: "Hold bank notification until IT has completed its full forensic picture.", allowedRoles: [], irPlanAligned: false, consequence: "The recall window closes. €185,000 is unrecoverable. This is the single worst decision in this incident." },
   ], sel)
-  return { round_number: 2, title: "Transfer Processed — Attacker Had Inbox Access", situation_update: "It is 11:00. The wire transfer has been processed. The bank has a 2-hour recall window. IT confirms the CEO's email was compromised for 72 hours. The attacker has read sensitive deal information. A second wave of fraudulent transfers was prepared but not yet sent.", timerMinutes: 20, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-bec-r2-1", description: "SWIFT-recall ingediend binnen 2-uur-window", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["bec-r2-a1"], achieved: false },
+    { id: "obj-bec-r2-2", description: "CEO-account gereset en MFA ingeschakeld", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["bec-r2-a2"], achieved: false },
+  ]
+  return { round_number: 2, title: "Transfer Processed — Attacker Had Inbox Access", situation_update: "It is 11:00. The wire transfer has been processed. The bank has a 2-hour recall window. IT confirms the CEO's email was compromised for 72 hours. The attacker has read sensitive deal information. A second wave of fraudulent transfers was prepared but not yet sent.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 function becR3(sector: string, sel?: Role[]): Round {
@@ -602,7 +642,11 @@ function becR3(sector: string, sel?: Role[]): Round {
     { id: "bec-r3-a4", label: "File police report for cyber fraud", description: "Legal files a formal police report for computer fraud and wire fraud to support both the criminal investigation and the insurance claim.", allowedRoles: ["legal", "ceo"], isRecommended: true, irPlanAligned: true, consequence: "Supports the bank's criminal investigation. Required for most insurance fraud claims." },
     { id: "bec-r3-do-nothing", label: "Hold all communications until legal review is complete", description: "Issue no statement and provide no information to board or press until the full legal picture is clear.", allowedRoles: [], irPlanAligned: false, consequence: "Board chair will escalate. Media will fill the silence. Insurer may interpret silence as non-cooperation." },
   ], sel)
-  return { round_number: 3, title: "Recovery & External Pressure", situation_update: "It is 13:00. €143,000 is unrecoverable. The insurer has a 48-hour claim window. The board wants answers. A journalist is calling. Legal, Finance, and Communications all need to act — without contradicting each other.", timerMinutes: 20, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-bec-r3-1", description: "Board geïnformeerd en verzekeraarsdossier opgestart", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["bec-r3-a1", "bec-r3-a2"], achieved: false },
+    { id: "obj-bec-r3-2", description: "Holding statement uitgegeven en aangifte gedaan", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["bec-r3-a3", "bec-r3-a4"], achieved: false },
+  ]
+  return { round_number: 3, title: "Recovery & External Pressure", situation_update: "It is 13:00. €143,000 is unrecoverable. The insurer has a 48-hour claim window. The board wants answers. A journalist is calling. Legal, Finance, and Communications all need to act — without contradicting each other.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 function becR4(sel?: Role[]): Round {
@@ -646,7 +690,11 @@ function becR4(sel?: Role[]): Round {
     { id: "bec-r4-a4", label: "Complete insurer claim documentation", description: "Legal submits the full forensic report and control remediation plan to the insurer to finalise the €143k claim.", allowedRoles: ["legal", "cfo"], isRecommended: true, irPlanAligned: true, consequence: "Maximises claim recovery. Forensics confirms single-account compromise which strengthens the claim." },
     { id: "bec-r4-do-nothing", label: "Defer control improvements to next quarter's budget cycle", description: "Table the proposed controls for the next quarterly planning session.", allowedRoles: [], irPlanAligned: false, consequence: "Organisation remains exposed to the same attack. Insurer may challenge the claim if controls are delayed." },
   ], sel)
-  return { round_number: 4, title: "Controls & Accountability", situation_update: "It is 16:00. Forensics confirms the breach was limited to the CEO's email. The insurer is processing the claim. HR has completed its review of the junior Finance employee. A clear set of control gaps has been identified. Decisions on controls, accountability, and the insurer's remediation requirement must be made today.", timerMinutes: 15, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-bec-r4-1", description: "Verbeterde financiële controls geautoriseerd door CFO", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["bec-r4-a1"], achieved: false },
+    { id: "obj-bec-r4-2", description: "MFA ingeschakeld op alle executive-accounts", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["bec-r4-a2"], achieved: false },
+  ]
+  return { round_number: 4, title: "Controls & Accountability", situation_update: "It is 16:00. Forensics confirms the breach was limited to the CEO's email. The insurer is processing the claim. HR has completed its review of the junior Finance employee. A clear set of control gaps has been identified. Decisions on controls, accountability, and the insurer's remediation requirement must be made today.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 // ─── DATA EXFILTRATION (EXTERNAL) ──────────────────────────────────────────────
@@ -711,7 +759,11 @@ function exfilR1(sector: string, systems: string, sel?: Role[]): Round {
     { id: "exf-r1-a4", label: "Contact the analytics vendor directly", description: "CISO or IT calls the third-party analytics vendor to investigate whether their systems were compromised.", allowedRoles: ["ciso", "it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Vendor may have broader intelligence on the attack. Also a contractual obligation under GDPR processor agreements." },
     { id: "exf-r1-do-nothing", label: "Wait for CERT-NL to issue further guidance", description: "Hold all internal actions and await the next CERT-NL advisory update.", allowedRoles: [], irPlanAligned: false, consequence: "Exfiltration continues. Client notification window closes. Passive response in an active breach." },
   ], sel)
-  return { round_number: 1, title: "Silent Breach Discovered", situation_update: "It is 09:00. A client complaint and an anomalous API alert are pointing at an ongoing, silent data exfiltration through a third-party integration. The breach may have been active for six weeks. Nothing is confirmed yet — but the clock is running.", timerMinutes: 15, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-exf-r1-1", description: "Exfiltratiescope bepaald vóór actie op vendor", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["exf-r1-a1"], achieved: false },
+    { id: "obj-exf-r1-2", description: "Juridische clientnotificatieplicht beoordeeld", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["exf-r1-a3"], achieved: false },
+  ]
+  return { round_number: 1, title: "Silent Breach Discovered", situation_update: "It is 09:00. A client complaint and an anomalous API alert are pointing at an ongoing, silent data exfiltration through a third-party integration. The breach may have been active for six weeks. Nothing is confirmed yet — but the clock is running.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
 
 function exfilR2(crown: string, sel?: Role[]): Round {
@@ -755,5 +807,9 @@ function exfilR2(crown: string, sel?: Role[]): Round {
     { id: "exf-r2-a4", label: "Coordinate with vendor on joint AP notification", description: "CISO and Legal coordinate with the vendor to ensure AP notifications are consistent and do not contradict each other.", allowedRoles: ["ciso", "legal"], isRecommended: true, irPlanAligned: true, consequence: "Prevents contradictory regulatory submissions. Vendor is a GDPR processor — coordination is expected." },
     { id: "exf-r2-do-nothing", label: "Wait for vendor to file first and follow their lead", description: "Hold your own AP notification until the vendor's notification is submitted and reviewed.", allowedRoles: [], irPlanAligned: false, consequence: "You are the data controller. The vendor's notification does not substitute yours. Clock continues." },
   ], sel)
-  return { round_number: 2, title: "Breach Confirmed — Regulatory Clock Running", situation_update: "It is 11:00. 340,000 customer records were systematically exfiltrated. The GDPR 72-hour AP notification clock has 61 hours remaining. An affected client is demanding a formal response today. The vendor has confirmed their own compromise.", timerMinutes: 20, injects, facilitatorNotes, roleActions }
+  const learningObjectives: LearningObjective[] = [
+    { id: "obj-exf-r2-1", description: "AP Art.33-melding ingediend binnen 72u", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["exf-r2-a1"], achieved: false },
+    { id: "obj-exf-r2-2", description: "Formele schriftelijke notificatie verstuurd naar getroffen client", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["exf-r2-a2"], achieved: false },
+  ]
+  return { round_number: 2, title: "Breach Confirmed — Regulatory Clock Running", situation_update: "It is 11:00. 340,000 customer records were systematically exfiltrated. The GDPR 72-hour AP notification clock has 61 hours remaining. An affected client is demanding a formal response today. The vendor has confirmed their own compromise.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }

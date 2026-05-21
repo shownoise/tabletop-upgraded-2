@@ -3,6 +3,11 @@
  * Templates can be fully static, semi-dynamic (AI fills content), or hybrid.
  */
 
+import type { ScenarioType, DecisionFramework } from "./types"
+import type { TemplateModuleSlot } from "./types/scenario-instance"
+
+export type { TemplateModuleSlot }
+
 export type TemplateTag =
   | "ransomware" | "insider-threat" | "supply-chain" | "bec" | "ddos"
   | "cloud-breach" | "data-exfil" | "ot-ics" | "tabletop" | "technical"
@@ -113,6 +118,11 @@ export interface ScenarioTemplate {
   }
   // For hybrid/AI mode: system prompt additions
   aiSystemPromptAddition?: string
+  // ─── New scenario-architecture fields (upgrade) ───
+  // When set, runtime uses the three-layer generator instead of rounds[]
+  scenario_type?: ScenarioType
+  decision_framework?: DecisionFramework
+  modules?: TemplateModuleSlot[]
 }
 
 // ─── Template library store ───

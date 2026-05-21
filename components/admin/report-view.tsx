@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { FileText, AlertTriangle, AlertCircle, CheckCircle, TrendingUp, Clock, BookOpen, Wrench } from "lucide-react"
+import { FileText, AlertTriangle, AlertCircle, CheckCircle, TrendingUp, Clock, BookOpen, Wrench, Target } from "lucide-react"
 import type { SessionReport, GovernanceFlag, TimelineEvent } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import { api } from "@/lib/api-client"
@@ -207,6 +207,40 @@ export function ReportView({ lang }: Props) {
           <p className="text-xs text-muted-foreground">% of decisions by authorized role</p>
         </div>
       </section>
+
+      {/* Learning Objectives */}
+      {(report.perObjective?.length ?? 0) > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Target className="size-4 text-primary" />
+            <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Leerdoelen</h2>
+            <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-primary">
+              {report.scores.objectivesAchieved}/{report.scores.objectivesTotal} behaald
+            </span>
+          </div>
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <div className="flex flex-col divide-y divide-border">
+              {report.perObjective.map((item, i) => (
+                <div key={i} className="flex items-start gap-3 px-5 py-3">
+                  <span className="font-mono text-[10px] text-muted-foreground shrink-0 mt-0.5 min-w-[24px]">R{item.roundIndex + 1}</span>
+                  {item.achieved ? (
+                    <CheckCircle className="size-4 text-primary shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="size-4 text-destructive shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                    <span className="text-sm text-foreground">{item.objective.description}</span>
+                    <span className={`font-mono text-[10px] uppercase tracking-wider ${item.achieved ? "text-primary" : "text-destructive"}`}>
+                      {item.achieved ? "Behaald" : "Niet behaald"}
+                      {item.achievedAt && ` — ${new Date(item.achievedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Timeline */}
       {sortedTimeline.length > 0 && (

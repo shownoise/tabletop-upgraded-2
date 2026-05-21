@@ -1,0 +1,17 @@
+import { NextResponse } from "next/server"
+
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
+
+export async function POST(req: Request) {
+  const body = await req.json() as { participantId: string }
+
+  if (!body.participantId) {
+    return NextResponse.json({ error: "participantId is required" }, { status: 400 })
+  }
+
+  const { markParticipantReady } = await import("@/lib/session-store")
+  const result = await markParticipantReady(body.participantId)
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
+  return NextResponse.json({ ok: true })
+}
