@@ -12,7 +12,7 @@ function buildRoleContext(config: ExerciseConfig): string {
     const m = ROLE_META[r]
     return `- ${m.label} (${r}): ${m.description}\n  Authorities: ${m.authorities.join("; ")}`
   })
-  return `\nRoles participating in this exercise (ONLY generate roleActions and injects for these roles):\n${lines.join("\n")}\nCRITICAL: In every roleActions entry, allowedRoles must ONLY contain values from this list: [${roles.join(", ")}]. Never include roles not in this list. Generate injects specifically relevant to what these roles need to act on.`
+  return `\nRoles participating in this exercise:\n${lines.join("\n")}\n\nPER-ROLE DECISIONS: Generate a dedicated set of 3-4 options for EACH participating role, where allowedRoles contains EXACTLY ONE role. Never put multiple roles on a single action (except the universal do-nothing option which uses allowedRoles: []). In every roleActions entry, allowedRoles must ONLY contain values from this list: [${roles.join(", ")}]. For absent roles, assign their decisions to the closest participating role:\n- Communications → head_of_comms, else ceo\n- Financial → cfo, else ceo\n- Legal/regulatory → legal, else ciso\n- Technical → ciso or it_manager\n- Operational → ops_manager, else cfo or ceo\nGenerate injects for all relevant crisis domains even if a domain's primary role is absent.`
 }
 
 function buildContext(c: ExerciseConfig): string {

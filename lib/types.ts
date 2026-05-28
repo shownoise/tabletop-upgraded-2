@@ -129,6 +129,18 @@ export const ROLE_META: Record<Role, {
   },
 }
 
+export const ROLE_FALLBACK: Partial<Record<Role, Role[]>> = {
+  head_of_comms: ["ceo", "ciso"],
+  ops_manager:   ["cfo", "ceo"],
+  hr_lead:       ["legal", "ceo"],
+  legal:         ["ciso", "ceo"],
+  cfo:           ["ceo"],
+  it_manager:    ["ciso", "system_admin"],
+  system_admin:  ["it_manager", "ciso"],
+  ciso:          ["it_manager", "ceo"],
+  ceo:           ["ciso", "cfo"],
+}
+
 export type SimulationMode = 'event' | 'training'
 export type RoundPhase = 'inject' | 'discussion' | 'decision' | 'review'
 

@@ -12,8 +12,39 @@ import type {
   RoleDocument, RoundPhase, Scenario, SessionState, SimulationMode, SpecialEvent, SpecialMessage,
   SpecialScore, SpecialType, StreamMessage, SubmittedDecision, TimelineEvent, TimelineEventType, Urgency,
 } from "./types"
+import { ROLE_FALLBACK } from "./types"
 import type { AssessmentEvent } from "./engine/types"
 import { BOB_PHASES, OODA_PHASES } from "./engine/facilitator-support"
+
+function remapMissingRoles(scenario: Scenario, selectedRoles: Role[]): Scenario {
+  const active = new Set(selectedRoles)
+
+  function resolveRole(role: Role): Role | null {
+    if (active.has(role)) return role
+    return (ROLE_FALLBACK[role] ?? []).find(r => active.has(r)) ?? null
+  }
+
+  return {
+    ...scenario,
+    rounds: scenario.rounds.map(round => ({
+      ...round,
+      injects: round.injects.map(inject => {
+        if (!inject.targetRoles?.length) return inject
+        const remapped = [...new Set(
+          inject.targetRoles.map(r => resolveRole(r)).filter(Boolean) as Role[]
+        )]
+        return { ...inject, targetRoles: remapped.length > 0 ? remapped : undefined }
+      }),
+      roleActions: round.roleActions?.map(action => {
+        if (action.allowedRoles.length === 0) return action
+        const remapped = [...new Set(
+          action.allowedRoles.map(r => resolveRole(r)).filter(Boolean) as Role[]
+        )]
+        return { ...action, allowedRoles: remapped.length > 0 ? remapped : [] }
+      }),
+    })),
+  }
+}
 
 // ─── SSE listeners (always in-memory — per-process) ───────────
 
@@ -141,7 +172,10 @@ export async function getSession(): Promise<SessionState | null> {
 }
 
 export async function createSession(config: ExerciseConfig, scenario?: Scenario, mode?: SimulationMode, documents?: RoleDocument[]): Promise<SessionState> {
-  const resolvedScenario = scenario ?? generateScenario(config)
+  const raw = scenario ?? generateScenario(config)
+  const resolvedScenario = config.selectedRoles?.length
+    ? remapMissingRoles(raw, config.selectedRoles)
+    : raw
   const session: SessionState = {
     id: genId("ses"),
     joinCode: genJoinCode(),

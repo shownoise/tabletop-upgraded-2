@@ -24,7 +24,18 @@ consistente content.
    in de module-skelet, maar je mag varieren. Drie injects vanuit hetzelfde kanaal
    (drie emails) is fout.
 
-4. IR-RETAINER SCOPE
+4. PER-ROL BESLISSINGEN
+   Elke options-entry in een decisions-blok moet allowedRoles bevatten met EXACT ÉÉN
+   rol — dezelfde als de "role" van het parent decisions-object.
+   Uitzondering: de universele "niets doen"-optie heeft altijd allowedRoles: [].
+   Genereer per deelnemende rol 3-4 opties per module:
+   - 1 best-practice optie (recommended: true)
+   - 1 acceptabele-maar-suboptimale optie
+   - 1 veelgemaakte fout (recommended: false, consequence toont het risico)
+   - Optioneel: 1 "escaleer omhoog zonder zelf te beslissen"-optie
+   Nooit meerdere rollen in één allowedRoles-array (behalve [] voor universeel).
+
+5. IR-RETAINER SCOPE
    Wij doen forensisch onderzoek, EDR-isolatie, log preservation, malware analyse,
    attribution, en threat intel. Genereer GEEN decisions die deze categorieën
    raken. WEL: governance, business continuity, communicatie, juridisch, strategie.
@@ -154,8 +165,8 @@ De volledige JSON-shape:
           "options": [
             {
               "label": "Actie A — korte omschrijving",
-              "description": "Uitleg wat deze keuze inhoudt",
-              "allowedRoles": ["ciso", "it_manager"],
+              "description": "Uitleg wat deze keuze inhoudt — verwijs naar de inject die deze actie triggert",
+              "allowedRoles": ["ciso"],
               "recommended": true,
               "consequence": "Neutraal gevolg van deze keuze"
             },

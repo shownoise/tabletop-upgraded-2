@@ -1,4 +1,5 @@
 import type { ExerciseConfig, Scenario, Round, Inject, FacilitatorNotes, RoleAction, Role, LearningObjective } from "./types"
+import { ROLE_FALLBACK } from "./types"
 
 let counter = 0
 function id(prefix: string) {
@@ -8,7 +9,23 @@ function id(prefix: string) {
 
 function filterActions(actions: RoleAction[], selectedRoles?: Role[]): RoleAction[] {
   if (!selectedRoles?.length) return actions
-  return actions.filter(a => a.allowedRoles.length === 0 || a.allowedRoles.some(r => selectedRoles.includes(r)))
+  const active = new Set(selectedRoles)
+  return actions
+    .map(action => {
+      if (action.allowedRoles.length === 0) return action
+      const kept = action.allowedRoles.filter(r => active.has(r))
+      if (kept.length > 0) return { ...action, allowedRoles: kept }
+      const remapped = [...new Set(
+        action.allowedRoles.flatMap(r =>
+          (ROLE_FALLBACK[r] ?? []).filter(fb => active.has(fb))
+        )
+      )]
+      return { ...action, allowedRoles: remapped.length > 0 ? remapped : [] }
+    })
+    .filter(action =>
+      action.allowedRoles.length === 0 ||
+      action.allowedRoles.some(r => active.has(r))
+    )
 }
 
 // Returns true if this org has automated detection tooling (SIEM/EDR)
@@ -101,15 +118,23 @@ function ransomwareR1(sector: string, systems: string, sel?: Role[], config?: Ex
     redFlags: ["Team dismisses alerts as false positives without investigation", "Helpdesk continues resetting passwords without a hold"],
   }
   const roleActions = filterActions([
-    { id: "gen-r1-a1", label: "Isolate affected endpoints", description: "Isolate the flagged endpoints from the network to stop lateral movement.", allowedRoles: ["it_manager", "system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Limits spread; may disrupt some users temporarily." },
-    { id: "gen-r1-a2", label: "Escalate to CISO", description: "Formally escalate the incident to the CISO and open an incident ticket.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Engages security leadership and starts the formal response clock." },
-    { id: "gen-r1-a3", label: "Open crisis bridge call", description: "Initiate a crisis bridge call with key stakeholders.", allowedRoles: ["ciso", "head_of_comms"], isRecommended: true, irPlanAligned: true, consequence: "Aligns response team early; prevents siloed decisions." },
-    { id: "gen-r1-a4", label: "Notify board immediately", description: "Send immediate notification to the board before facts are established.", allowedRoles: ["ceo", "ciso"], irPlanAligned: false, consequence: "Premature escalation may cause panic before the scope is known." },
-    { id: "gen-r1-do-nothing", label: "Do nothing / wait for more information", description: "Hold until more facts are available before escalating.", allowedRoles: [], irPlanAligned: true, consequence: "Reasonable if signals are ambiguous; risky if detection was already clear." },
+    // IT Manager
+    { id: "gen-r1-itm-1", label: "Isoleer endpoints en escaleer naar CISO", description: "Naar aanleiding van de SIEM-melding: isoleer de gemarkeerde endpoints van het netwerk en open een formeel incidentticket bij de CISO.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Beperkt verspreiding en start de formele responsketting. Tijdelijke uitval voor betrokken gebruikers." },
+    { id: "gen-r1-itm-2", label: "Monitor en log — nog geen isolatie", description: "Blijf de endpoints in de gaten houden en verzamel meer bewijs vóór je isoleert.", allowedRoles: ["it_manager"], isRecommended: false, irPlanAligned: false, consequence: "Aanvaller blijft actief terwijl je wacht. Meer bewijs, maar ook meer schade." },
+    // System Admin
+    { id: "gen-r1-sa-1", label: "Forensische logs veiligstellen vóór isolatie", description: "Naar aanleiding van de DLP-melding: zet een forensische kopie van alle relevante logs apart en controleer de back-upstatus.", allowedRoles: ["system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Bewijsketen gewaarborgd; essentieel voor forensisch onderzoek." },
+    { id: "gen-r1-sa-2", label: "Wachtwoorden resetten van getroffen accounts", description: "Reset de wachtwoorden van de vergrendelde accounts direct en heractiveer de gebruikers.", allowedRoles: ["system_admin"], isRecommended: false, irPlanAligned: false, consequence: "Gebruikers zijn snel actief, maar aanvaller kan dezelfde credentials opnieuw stelen als de vector niet gesloten is." },
+    // CISO
+    { id: "gen-r1-ciso-1", label: "Crisisoverleg openen en IR-retainer activeren", description: "Naar aanleiding van het signalenpatroon: roep de crisiskerngroep bijeen en activeer de externe IR-retainer.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true, consequence: "Coördineert de respons en brengt forensische capaciteit in. Formele respons start direct." },
+    { id: "gen-r1-ciso-2", label: "Wachten op meer bewijs vóór formele escalatie", description: "Houd de situatie in de gaten en escaleer pas als er meer harde bewijzen zijn.", allowedRoles: ["ciso"], isRecommended: false, irPlanAligned: false, consequence: "Aanvaller wint tijd. Passief bij al-duidelijke signalen vergroot de schade." },
+    // CEO
+    { id: "gen-r1-ceo-1", label: "Board direct informeren vóór feiten vaststaan", description: "Stuur nu een melding naar de board dat er een mogelijke aanval gaande is.", allowedRoles: ["ceo"], isRecommended: false, irPlanAligned: false, consequence: "Veroorzaakt paniek vóór de scope bekend is. Creëert reputatiedruk zonder actieplan." },
+    // Universal
+    { id: "gen-r1-do-nothing", label: "Wacht af — meer informatie nodig", description: "Neem nog geen actie; wacht tot het beeld duidelijker is.", allowedRoles: [], isRecommended: false, irPlanAligned: true, consequence: "Kan juist zijn bij onduidelijke signalen; riskant als detectie al helder is." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-r1-1", description: "Team escaleert incident naar CISO en opent crisisoverleg", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["gen-r1-a2", "gen-r1-a3"], achieved: false },
-    { id: "obj-r1-2", description: "Formeel incident gedeclareert en logbewijs veiliggesteld", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["gen-r1-a1", "gen-r1-a2"], achieved: false },
+    { id: "obj-r1-1", description: "Team escaleert incident naar CISO en opent crisisoverleg", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["gen-r1-ciso-1", "gen-r1-itm-1"], achieved: false },
+    { id: "obj-r1-2", description: "Formeel incident gedeclareert en logbewijs veiliggesteld", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["gen-r1-itm-1", "gen-r1-sa-1"], achieved: false },
   ]
   return { round_number: 1, title: "Initial Detection", situation_update: "It is 09:00. Overnight monitoring has produced low- and medium-severity alerts. Nothing critical has tripped, but the pattern is unusual. The on-call analyst has paged the incident commander.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -149,15 +174,26 @@ function ransomwareR2(crown: string, systems: string, sel?: Role[]): Round {
     redFlags: ["Team paralysis — no clear decision owner", "Skipping legal notification entirely"],
   }
   const roleActions = filterActions([
-    { id: "gen-r2-a1", label: "Disable compromised admin account", description: "Immediately disable the compromised Domain Admin account to stop the active session.", allowedRoles: ["it_manager", "system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Cuts off attacker's privileged access; may alert them to detection." },
-    { id: "gen-r2-a2", label: "Engage external IR firm", description: "Contact and engage the external incident response retainer.", allowedRoles: ["ciso", "it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Brings in specialist capability; essential if internal capacity is limited." },
-    { id: "gen-r2-a3", label: "Brief CEO on incident status", description: "Provide a structured factual briefing to the CEO with what is known and unknown.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true, consequence: "Manages executive expectations and enables authorised escalation." },
-    { id: "gen-r2-a4", label: "Advise on insurance notification", description: "Contact cyber insurer to initiate the claim process and get coverage guidance.", allowedRoles: ["cfo", "legal"], isRecommended: true, irPlanAligned: true, consequence: "Preserves insurance coverage; some policies require notification within hours." },
-    { id: "gen-r2-do-nothing", label: "Do nothing / wait for IR retainer", description: "Hold all decisions until the external IR firm is on-call.", allowedRoles: [], irPlanAligned: false, consequence: "Encryption continues while waiting; valuable response time lost." },
+    // IT Manager
+    { id: "gen-r2-itm-1", label: "Gecompromitteerd admin-account uitschakelen", description: "Schakel het gecompromitteerde Domain Admin-account direct uit om de actieve aanvallersessie te beëindigen.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Verbreekt de aanvallerszugriffsweg; aanvaller wordt mogelijk gewaarschuwd van detectie." },
+    { id: "gen-r2-itm-2", label: "Failover naar DR starten zonder besmettingscheck", description: "Start direct de failover naar het DR-systeem om downtime te beperken.", allowedRoles: ["it_manager"], isRecommended: false, irPlanAligned: false, consequence: "Risico op infectie van het DR-systeem als dat ook al gecompromitteerd is." },
+    // System Admin
+    { id: "gen-r2-sa-1", label: "Getroffen bestandsservers isoleren van het netwerk", description: "Isoleer de bestandsservers met actieve encryptie-activiteit onmiddellijk van het netwerk.", allowedRoles: ["system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Stopt verdere encryptie. Vereist gecoördineerde downtime met IT Manager." },
+    { id: "gen-r2-sa-2", label: "Actieve encryptiesessie monitoren zonder onderbreking", description: "Observeer het encryptieproces in real time voor forensische waarde, zonder het te stoppen.", allowedRoles: ["system_admin"], isRecommended: false, irPlanAligned: false, consequence: "Meer forensische informatie, maar meer bestanden versleuteld per minuut monitoring." },
+    // CISO
+    { id: "gen-r2-ciso-1", label: "CEO briefen met feitelijke statusupdate", description: "Naar aanleiding van de CEO-vraag: geef een gestructureerde, feitelijke briefing met wat wel en niet bekend is.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true, consequence: "Stuurt verwachtingen bij en stelt geautoriseerde escalatie veilig." },
+    { id: "gen-r2-ciso-2", label: "Externe IR-retainer formeel inschakelen", description: "Contacteer en activeer de externe IR-retainer voor forensische en technische ondersteuning.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true, consequence: "Brengt specialistische capaciteit in. Essentieel als interne capaciteit beperkt is." },
+    // CFO
+    { id: "gen-r2-cfo-1", label: "Cyber-verzekeraar notificeren en polis activeren", description: "Contacteer de cyber-verzekeraar om de claimprocedure te starten en dekkingsrichtlijnen te verkrijgen.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Behoudt dekkingsrecht; sommige polissen vereisen melding binnen uren." },
+    { id: "gen-r2-cfo-2", label: "Losgeldbedrag reserveren zonder overleg", description: "Reserveer alvast een budget voor een eventuele losgelduitbetaling.", allowedRoles: ["cfo"], isRecommended: false, irPlanAligned: false, consequence: "Premature actie zonder context over hersteloptie via backups. Signaleert betalingsbereidheid prematuur." },
+    // Legal
+    { id: "gen-r2-leg-1", label: "NIS2/GDPR-meldingstijdlijn activeren", description: "Registreer het tijdstip van eerste kennisname en start formeel de 72-uursklok voor de verplichte melding.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Borgt compliance; gemiste meldingsdeadline leidt tot aanzienlijke boetes." },
+    // Universal
+    { id: "gen-r2-do-nothing", label: "Wachten op IR-retainer vóór elke actie", description: "Houd alle besluiten aan totdat de externe IR-firma online is.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "Encryptie gaat door terwijl je wacht. Waardevolle responstijd gaat verloren." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-r2-1", description: "Gecompromitteerd admin-account uitgeschakeld en IR-retainer ingeschakeld", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["gen-r2-a1", "gen-r2-a2"], achieved: false },
-    { id: "obj-r2-2", description: "CEO geïnformeerd met feitelijke briefing", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["gen-r2-a3"], achieved: false },
+    { id: "obj-r2-1", description: "Gecompromitteerd admin-account uitgeschakeld en IR-retainer ingeschakeld", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["gen-r2-itm-1", "gen-r2-ciso-2"], achieved: false },
+    { id: "obj-r2-2", description: "CEO geïnformeerd met feitelijke briefing", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["gen-r2-ciso-1"], achieved: false },
   ]
   return { round_number: 2, title: "Containment & Investigation", situation_update: "It is 10:30. The picture is sharpening: this is not noise. Decisions about isolation, communication, and authority must be made under pressure, with incomplete information.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -197,15 +233,24 @@ function ransomwareR3(sector: string, sel?: Role[]): Round {
     redFlags: ["No one owns the communications channel", "Team wants to pay ransom without board/legal sign-off", "Missing the regulatory notification window"],
   }
   const roleActions = filterActions([
-    { id: "gen-r3-a1", label: "Issue holding statement to media", description: "Release an approved holding statement to media inquiries acknowledging awareness of an IT incident without confirming breach details.", allowedRoles: ["head_of_comms"], isRecommended: true, irPlanAligned: true, consequence: "Controls narrative; prevents speculation. Must be approved by CEO/Legal first." },
-    { id: "gen-r3-a2", label: "Advise on NIS2 notification timeline", description: "Provide legal guidance on notification obligations and deadlines under NIS2/GDPR.", allowedRoles: ["legal", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "Ensures compliance; missing the window creates regulatory liability." },
-    { id: "gen-r3-a3", label: "Recommend ransom negotiation posture to CEO", description: "Provide financial and legal analysis on ransom payment options for CEO decision.", allowedRoles: ["cfo", "legal"], irPlanAligned: true, consequence: "Gives CEO a structured basis for the most visible decision of the incident." },
-    { id: "gen-r3-a4", label: "Authorise ransom payment without board approval", description: "Approve the ransom payment immediately without board sign-off.", allowedRoles: ["ceo", "cfo"], irPlanAligned: false, consequence: "Financially and legally risky; no guarantee of decryption. Board must be consulted." },
-    { id: "gen-r3-do-nothing", label: "Maintain silence on all fronts", description: "Issue no statement and take no regulatory action pending further information.", allowedRoles: [], irPlanAligned: false, consequence: "Regulatory clock is running; silence may worsen both public and legal exposure." },
+    // Head of Comms
+    { id: "gen-r3-hoc-1", label: "Holding statement opstellen voor persverzoeken", description: "Naar aanleiding van de journalistenvraag: stel een goedgekeurd holding statement op dat de situatie erkent zonder bevestiging van details.", allowedRoles: ["head_of_comms"], isRecommended: true, irPlanAligned: true, consequence: "Behoudt controle over het narratief. Moet goedgekeurd zijn door CEO en Legal." },
+    { id: "gen-r3-hoc-2", label: "Volledige breach-details bevestigen aan pers", description: "Bevestig de omvang van het incident met specifieke details aan de journalist.", allowedRoles: ["head_of_comms"], isRecommended: false, irPlanAligned: false, consequence: "Juridische en reputatieschade. Onbevestigde details mogen niet publiek worden gemaakt." },
+    // Legal
+    { id: "gen-r3-leg-1", label: "NIS2-meldingstijdlijn en 72u-deadline bewaken", description: "Naar aanleiding van de regulatoire enquête: zorg dat de melding op schema staat en documenteer het tijdstip van eerste kennisname.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Compliance geborgd; gemiste deadline leidt tot aansprakelijkheid." },
+    { id: "gen-r3-leg-2", label: "Alle externe communicatie blokkeren tot rechtsbijstand klaar is", description: "Verbied elke externe communicatie totdat de juridisch adviseur alle uitingen heeft gereviewd.", allowedRoles: ["legal"], isRecommended: false, irPlanAligned: false, consequence: "Regulatoire klok loopt door; journalist publiceert zonder uw input." },
+    // CFO
+    { id: "gen-r3-cfo-1", label: "Financiële analyse losgeld vs herstelkosten presenteren", description: "Stel een kosten-baten analyse op voor de CEO: losgeld vs. herstelkosten via backups, met verzekeringscontext.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Geeft de CEO een zakelijke basis voor de zichtbaarste beslissing van het incident." },
+    { id: "gen-r3-cfo-2", label: "Losgeld direct goedkeuren zonder boardconsultatie", description: "Autoriseer de losgelduitbetaling onmiddellijk op basis van de urgentie.", allowedRoles: ["cfo"], isRecommended: false, irPlanAligned: false, consequence: "Financieel en juridisch riskant; geen garantie op decryptie. Board moet geconsulteerd worden." },
+    // CEO
+    { id: "gen-r3-ceo-1", label: "Ransom-onderhandelingspositie vaststellen met board", description: "Bepaal samen met de board de positie ten aanzien van losgeld vóór enige onderhandeling.", allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true, consequence: "Legitimeert de beslissing en beperkt persoonlijke aansprakelijkheid." },
+    { id: "gen-r3-ceo-2", label: "Losgeld betalen zonder board of legal", description: "Autoriseer de betaling direct op eigen gezag zonder board- of juridisch advies.", allowedRoles: ["ceo"], isRecommended: false, irPlanAligned: false, consequence: "Bestuursrechtelijk riskant. ~20% van betaalde slachtoffers krijgt data niet terug." },
+    // Universal
+    { id: "gen-r3-do-nothing", label: "Volledige stilte handhaven op alle fronten", description: "Geef geen verklaring af en onderneem geen regulatoire actie in afwachting van meer informatie.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "Regulatoire klok loopt door; media vult het stilzwijgen in." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-r3-1", description: "Holding statement goedgekeurd en NIS2-melding in gang gezet", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["gen-r3-a1", "gen-r3-a2"], achieved: false },
-    { id: "obj-r3-2", description: "Ransomware-onderhandelingspositie bepaald voor CEO", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["gen-r3-a3"], achieved: false },
+    { id: "obj-r3-1", description: "Holding statement goedgekeurd en NIS2-melding in gang gezet", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["gen-r3-hoc-1", "gen-r3-leg-1"], achieved: false },
+    { id: "obj-r3-2", description: "Ransomware-onderhandelingspositie bepaald voor CEO", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["gen-r3-cfo-1", "gen-r3-ceo-1"], achieved: false },
   ]
   return { round_number: 3, title: "Escalation & Public Pressure", situation_update: "It is 14:00. The incident is no longer contained to IT. Communications, Legal, and the executive team are now fully engaged. External pressure is mounting.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -245,15 +290,23 @@ function ransomwareR4(sector: string, crown: string, sel?: Role[]): Round {
     redFlags: ["No consensus on payment — decision deferred without a clear process", "Customer notification blocked past the legal deadline"],
   }
   const roleActions = filterActions([
-    { id: "gen-r4-a1", label: "Authorise recovery from clean backups", description: "Formally authorise recovery from confirmed clean backups and publish the recovery timeline.", allowedRoles: ["it_manager", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "Starts the clock on 18-24h restore. Safe path if initial access vector is confirmed closed." },
-    { id: "gen-r4-a2", label: "File regulatory notification", description: "Submit the required NIS2/GDPR notification to authorities.", allowedRoles: ["legal", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "Ensures compliance; must be done within 72h of first knowledge." },
-    { id: "gen-r4-a3", label: "Send customer breach notification", description: "Send breach notification to affected customers per GDPR Art. 34.", allowedRoles: ["head_of_comms", "legal"], isRecommended: true, irPlanAligned: true, consequence: "Required under GDPR if high risk to individuals. Builds trust if done transparently." },
-    { id: "gen-r4-a4", label: "Resume all systems without full forensics", description: "Restore all systems immediately to minimise downtime before root cause is confirmed.", allowedRoles: ["it_manager"], irPlanAligned: false, consequence: "Risk of reinfection if the initial access vector is still open." },
-    { id: "gen-r4-do-nothing", label: "Defer all decisions pending legal review", description: "Hold all recovery and notification decisions until legal confirms the position.", allowedRoles: [], irPlanAligned: false, consequence: "Delays recovery and may breach notification deadlines." },
+    // IT Manager
+    { id: "gen-r4-itm-1", label: "Herstel vanuit schone backups autoriseren", description: "Autoriseer formeel het herstel van de bevestigde schone backups en publiceer de herstelplanning.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Start de 18-24u herstelperiode. Veilig als de initiële aanvalsvector bevestigd gesloten is." },
+    { id: "gen-r4-itm-2", label: "Alle systemen direct online zonder rootcause-verificatie", description: "Herstel alle systemen onmiddellijk om de downtime te beperken vóór de oorzaak bevestigd is.", allowedRoles: ["it_manager"], isRecommended: false, irPlanAligned: false, consequence: "Risico op herinfectie als de initiële aanvalsvector nog open is." },
+    // Legal
+    { id: "gen-r4-leg-1", label: "NIS2/GDPR-notificatie indienen bij toezichthouder", description: "Dien de verplichte melding in bij de bevoegde autoriteit binnen de 72u-termijn.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Wettelijk vereist. Na de deadline zijn boetes onvermijdelijk." },
+    { id: "gen-r4-leg-2", label: "Notificatie uitstellen tot advocaat volledig gereed is", description: "Houd de toezichthoudermelding aan tot alle juridische details zijn doorgevoerd.", allowedRoles: ["legal"], isRecommended: false, irPlanAligned: false, consequence: "Deadline overschreden; significant boeterisico." },
+    // Head of Comms
+    { id: "gen-r4-hoc-1", label: "Klant-breachnotificatie verzenden per GDPR Art.34", description: "Stuur de verplichte breachnotificatie naar betrokken klanten conform de GDPR Art.34-eisen.", allowedRoles: ["head_of_comms"], isRecommended: true, irPlanAligned: true, consequence: "Wettelijk vereist bij hoog risico voor betrokkenen. Transparantie versterkt het vertrouwen." },
+    { id: "gen-r4-hoc-2", label: "Klantnotificatie afzwakken zonder juridische toetsing", description: "Verstuur een verzachte versie van de klantnotificatie om reputatieschade te beperken.", allowedRoles: ["head_of_comms"], isRecommended: false, irPlanAligned: false, consequence: "Kan juridisch onvoldoende zijn en klanten misleiden. Vergroot aansprakelijkheidsrisico." },
+    // CEO
+    { id: "gen-r4-ceo-1", label: "Definitieve losgeld-positie bepalen met board", description: "Leg de board de keuze voor — betalen of niet — met de bekende backup-hersteloptie als alternatief.", allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true, consequence: "Borgt governance en beperkt persoonlijke aansprakelijkheid." },
+    // Universal
+    { id: "gen-r4-do-nothing", label: "Alle besluiten uitstellen tot juridisch advies gereed is", description: "Houd alle herstel- en notificatiebeslissingen aan totdat Legal de positie bevestigt.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "Vertraagt herstel en overschrijdt mogelijk notificatiedeadlines." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-r4-1", description: "Herstel vanuit schone backup geautoriseerd", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["gen-r4-a1"], achieved: false },
-    { id: "obj-r4-2", description: "Klantnotificatie en NIS2-melding ingediend", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["gen-r4-a2", "gen-r4-a3"], achieved: false },
+    { id: "obj-r4-1", description: "Herstel vanuit schone backup geautoriseerd", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["gen-r4-itm-1"], achieved: false },
+    { id: "obj-r4-2", description: "Klantnotificatie en NIS2-melding ingediend", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["gen-r4-leg-1", "gen-r4-hoc-1"], achieved: false },
   ]
   return { round_number: 4, title: "Recovery & Communications", situation_update: "It is 18:30. The acute phase is winding down. Strategic decisions about payment, recovery sequencing, customer notification, and post-incident learning now define how the organisation comes out of this.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -329,15 +382,23 @@ function insiderR1(sector: string, systems: string, sel?: Role[], config?: Exerc
     redFlags: ["HR acts without Legal sign-off", "IT immediately revokes access before evidence is secured", "No one considers employment law constraints"],
   }
   const roleActions = filterActions([
-    { id: "ins-r1-a1", label: "Brief Legal before any investigation steps", description: "Engage Legal to define the lawful investigation framework before HR or IT take any action.", allowedRoles: ["hr_lead", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "Protects the organisation legally; ensures evidence is gathered in an admissible way." },
-    { id: "ins-r1-a2", label: "Preserve all access logs without alerting the employee", description: "IT secures and preserves all relevant logs, email, and access records for forensic use — without touching the employee's active account.", allowedRoles: ["it_manager", "system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Preserves evidence chain; essential before any confrontation." },
-    { id: "ins-r1-a3", label: "Speak confidentially with the employee's manager", description: "HR Lead conducts a confidential briefing with the team lead to understand behavioural context — without revealing the investigation.", allowedRoles: ["hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Gathers context; manager can flag if the employee plans to leave imminently." },
-    { id: "ins-r1-a4", label: "Confront the employee immediately", description: "Call J. Bakker in for an impromptu meeting and ask directly about the data transfers.", allowedRoles: [], irPlanAligned: false, consequence: "Destroys evidence, triggers legal exposure, and may cause data destruction or further exfiltration." },
-    { id: "ins-r1-do-nothing", label: "Continue passive monitoring before escalating", description: "Allow the employee to continue activity while IT monitors in real time.", allowedRoles: [], irPlanAligned: true, consequence: "Buys investigation time but risk of further exfiltration grows daily." },
+    // HR Lead
+    { id: "ins-r1-hrl-1", label: "Legal raadplegen vóór enige onderzoeksstap", description: "Naar aanleiding van het DLP-signaal: schakel Legal in om het juridische kader van het onderzoek te bepalen vóór HR of IT actie onderneemt.", allowedRoles: ["hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Beschermt de organisatie juridisch; zorgt dat bewijs op toelaatbare wijze wordt verzameld." },
+    { id: "ins-r1-hrl-2", label: "Vertrouwelijk gesprek met de direct leidinggevende", description: "HR voert een vertrouwelijk gesprek met teamleider M. Jansen om gedragscontext te verzamelen, zonder de medewerker te alarmeren.", allowedRoles: ["hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Verzamelt context; leidinggevende kan signaleren als medewerker plotseling vertrekt." },
+    { id: "ins-r1-hrl-3", label: "Medewerker direct confronteren met de beschuldiging", description: "Roep J. Bakker direct naar een gesprek en vraag naar de datatransfers.", allowedRoles: ["hr_lead"], isRecommended: false, irPlanAligned: false, consequence: "Vernietigt bewijs, geeft juridisch voordeel aan de medewerker en kan tot verdere exfiltratie leiden." },
+    // IT Manager
+    { id: "ins-r1-itm-1", label: "Alle relevante logs veiligstellen zonder account aan te raken", description: "IT bewaart alle relevante logs, e-mail en toegangsregistraties voor forensisch gebruik, zonder de actieve account te deactiveren.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Borgt de bewijsketen; essentieel vóór elke confrontatie." },
+    { id: "ins-r1-itm-2", label: "Account J. Bakker direct intrekken", description: "Deactiveer onmiddellijk de toegangsrechten van J. Bakker.", allowedRoles: ["it_manager"], isRecommended: false, irPlanAligned: false, consequence: "Vernietigt bewijs, maakt juridische positie kwetsbaar en waarschuwt de medewerker." },
+    // System Admin
+    { id: "ins-r1-sa-1", label: "Stille real-time monitoring instellen op het account", description: "Configureer stille monitoring op het account van J. Bakker om verdere activiteit in real time te volgen.", allowedRoles: ["system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Verzamelt meer bewijs; vereist juridische toestemming voor werknemersmonitoring in NL." },
+    // CISO
+    { id: "ins-r1-ciso-1", label: "Legal formeel betrekken bij insider threat-onderzoek", description: "Escaleert de zaak naar Legal om de juridische kaders en bevoegdheden voor een insider threat-onderzoek te bepalen.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true, consequence: "Garandeert dat het onderzoek juridisch toelaatbaar is en bewijs geldig blijft." },
+    // Universal
+    { id: "ins-r1-do-nothing", label: "Passief blijven monitoren vóór escalatie", description: "Laat de medewerker zijn activiteit voortzetten terwijl IT in real time monitort.", allowedRoles: [], isRecommended: false, irPlanAligned: true, consequence: "Geeft onderzoekstijd maar vergroot het risico op verdere exfiltratie per dag." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-ins-r1-1", description: "Legal betrokken vóór investigatiestappen", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["ins-r1-a1"], achieved: false },
-    { id: "obj-ins-r1-2", description: "Digitaal bewijs veiliggesteld zonder medewerker te alarmeren", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["ins-r1-a2"], achieved: false },
+    { id: "obj-ins-r1-1", description: "Legal betrokken vóór investigatiestappen", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["ins-r1-hrl-1", "ins-r1-ciso-1"], achieved: false },
+    { id: "obj-ins-r1-2", description: "Digitaal bewijs veiliggesteld zonder medewerker te alarmeren", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["ins-r1-itm-1", "ins-r1-sa-1"], achieved: false },
   ]
   return { round_number: 1, title: "Suspicious Activity Detected", situation_update: "It is 09:00. A cluster of signals — some behavioural, some technical — are pointing at a single employee. Nothing is confirmed yet. The investigation must be handled carefully to preserve evidence and stay within employment law.", timerMinutes: 15, injects: slicedInjects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -377,15 +438,24 @@ function insiderR2(crown: string, sel?: Role[]): Round {
     redFlags: ["HR acts without Legal authorisation", "Access revoked with no accompanying formal process", "No one considers the police/FIOD option explicitly"],
   }
   const roleActions = filterActions([
-    { id: "ins-r2-a1", label: "Place employee on administrative leave", description: "HR Lead, with Legal sign-off, formally places J. Bakker on paid administrative leave pending investigation — effective immediately.", allowedRoles: ["hr_lead", "legal"], isRecommended: true, irPlanAligned: true, consequence: "Stops ongoing exfiltration and is legally defensible. Requires formal written notice." },
-    { id: "ins-r2-a2", label: "Revoke all system access credentials", description: "IT revokes J. Bakker's SSO, email, VPN, and file server access simultaneously with the leave notification.", allowedRoles: ["it_manager", "system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Stops further data transfer. Must be timed with leave notification to avoid legal challenge." },
-    { id: "ins-r2-a3", label: "Prepare formal investigative interview", description: "Legal and HR prepare the hoor-en-wederhoor interview to be conducted before any disciplinary decision.", allowedRoles: ["hr_lead", "legal"], isRecommended: true, irPlanAligned: true, consequence: "Required under Dutch employment law. Strengthens dismissal case if conducted correctly." },
-    { id: "ins-r2-a4", label: "File police report immediately", description: "Report J. Bakker to the police for computer fraud and IP theft before placing on leave.", allowedRoles: ["ceo", "legal"], irPlanAligned: true, consequence: "Legally possible but may complicate the employment law process. Timing matters." },
-    { id: "ins-r2-do-nothing", label: "Continue monitoring while preparing the case", description: "Hold off on all action for another 24 hours to complete the evidence picture.", allowedRoles: [], irPlanAligned: false, consequence: "The competitor meeting tomorrow makes this very risky — data may leave the country." },
+    // HR Lead
+    { id: "ins-r2-hrl-1", label: "Medewerker op non-actief stellen met Legal-akkoord", description: "HR plaatst J. Bakker formeel op betaald non-actief na schriftelijk akkoord van Legal — met directe ingang.", allowedRoles: ["hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Stopt de actieve exfiltratie en is juridisch verdedigbaar. Vereist formele schriftelijke kennisgeving." },
+    { id: "ins-r2-hrl-2", label: "Hoor-en-wederhoor-gesprek voorbereiden", description: "HR bereidt het verplichte onderzoeksinterview (hoor en wederhoor) voor, vóór enige disciplinaire maatregel.", allowedRoles: ["hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Wettelijk vereist (NL arbeidsrecht). Versterkt het ontslagdossier als correct uitgevoerd." },
+    // Legal
+    { id: "ins-r2-leg-1", label: "Non-actiefstelling juridisch autoriseren", description: "Legal geeft formeel akkoord op de non-actiefstelling en begeleidt de procedure conform NL arbeidsrecht.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Juridisch vereist. Voorkomt onrechtmatig ontslag en bewijs-contaminatie." },
+    { id: "ins-r2-leg-2", label: "Politie direct inschakelen vóór non-actiefstelling", description: "Doe aangifte bij de politie voor computercriminaliteit en IP-diefstal vóór de medewerker op non-actief te stellen.", allowedRoles: ["legal"], isRecommended: false, irPlanAligned: true, consequence: "Juridisch mogelijk maar kan het arbeidsrechtelijke traject compliceren. Timing is cruciaal." },
+    // IT Manager
+    { id: "ins-r2-itm-1", label: "Systeemtoegang intrekken gelijktijdig met non-actiefstelling", description: "IT trekt SSO, e-mail, VPN en bestandsservertoegang van J. Bakker in, gesynchroniseerd met de non-actiefkennisgeving.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Stopt verdere datatransfer. Moet gelijktijdig met de kennisgeving plaatsvinden." },
+    // System Admin
+    { id: "ins-r2-sa-1", label: "Actieve ERP-sessie J. Bakker direct beëindigen", description: "Beëindig de actieve ERP-sessie van J. Bakker nu al, terwijl hij bezig is met het openen van contractbestanden.", allowedRoles: ["system_admin"], isRecommended: false, irPlanAligned: false, consequence: "Stopt directe schade maar geeft de medewerker het signaal dat hij gevolgd wordt, zonder formeel proces." },
+    // CEO
+    { id: "ins-r2-ceo-1", label: "Board informeren over insider threat-situatie", description: "Brief de board over de bevestigde exfiltratie en de stappen die worden ondernomen, inclusief juridische positie.", allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true, consequence: "Zorgplicht richting board; beschermt CEO bij volgende boardvergadering." },
+    // Universal
+    { id: "ins-r2-do-nothing", label: "Nog 24 uur wachten om dossier verder op te bouwen", description: "Houd alle actie aan voor nog 24 uur om meer bewijs te verzamelen.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "De concurrent-afspraak van morgen maakt dit zeer riskant — data kan het land verlaten." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-ins-r2-1", description: "Medewerker op non-actief met Legal-akkoord", module: "insider_investigation", measuredBy: "decision", triggerActionIds: ["ins-r2-a1"], achieved: false },
-    { id: "obj-ins-r2-2", description: "Systeemtoegang ingetrokken gelijktijdig met non-actiefstelling", module: "insider_investigation", measuredBy: "decision", triggerActionIds: ["ins-r2-a2"], achieved: false },
+    { id: "obj-ins-r2-1", description: "Medewerker op non-actief met Legal-akkoord", module: "insider_investigation", measuredBy: "decision", triggerActionIds: ["ins-r2-hrl-1"], achieved: false },
+    { id: "obj-ins-r2-2", description: "Systeemtoegang ingetrokken gelijktijdig met non-actiefstelling", module: "insider_investigation", measuredBy: "decision", triggerActionIds: ["ins-r2-itm-1"], achieved: false },
   ]
   return { round_number: 2, title: "Confirmed Exfiltration", situation_update: "It is 11:00. Forensics has confirmed systematic, intentional exfiltration. The employee is currently in the building and actively accessing files. Legal is advising caution. A decision on administrative leave must be made now — or the window closes.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -425,15 +495,23 @@ function insiderR3(sector: string, sel?: Role[]): Round {
     redFlags: ["Legal dismisses whistleblower claim without proper assessment", "AP notification delayed past 72-hour mark", "Communications issues denial before Legal review"],
   }
   const roleActions = filterActions([
-    { id: "ins-r3-a1", label: "Assess whistleblower claim before any further action", description: "Legal advises on whether the protected disclosure claim is valid and what it means for the disciplinary/criminal track.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Prevents wrongful dismissal exposure; determines whether the two tracks (employment + criminal) can proceed in parallel." },
-    { id: "ins-r3-a2", label: "File AP breach notification", description: "Legal drafts and files the GDPR Art. 33 notification to the Dutch Data Protection Authority (AP) within the 72-hour window.", allowedRoles: ["legal", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "Required by law. Missing the window creates significant regulatory liability." },
-    { id: "ins-r3-a3", label: "Issue media holding statement", description: "Communications drafts a measured holding statement acknowledging an internal HR matter — without confirming criminal allegations.", allowedRoles: ["head_of_comms", "ceo"], isRecommended: true, irPlanAligned: true, consequence: "Controls narrative; prevents speculation. Must not prejudge the employee while under investigation." },
-    { id: "ins-r3-a4", label: "Brief board formally", description: "CEO provides board with a written update on the incident scope, legal exposure, and response steps taken.", allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true, consequence: "Board duty of care; protects CEO from being blindsided at next board meeting." },
-    { id: "ins-r3-do-nothing", label: "Wait for legal proceedings to determine next steps", description: "Hold all communications and notifications until the employment court position is clear.", allowedRoles: [], irPlanAligned: false, consequence: "AP notification deadline passes; media runs the story without your input." },
+    // Legal
+    { id: "ins-r3-leg-1", label: "Klokkenluidersclaim juridisch beoordelen vóór verdere actie", description: "Legal beoordeelt of de beschermde melding geldig is en wat de implicaties zijn voor het disciplinaire en strafrechtelijke traject.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Voorkomt aansprakelijkheid voor onrechtmatig ontslag; bepaalt of twee parallelle trajecten mogelijk zijn." },
+    { id: "ins-r3-leg-2", label: "AP-breachmelding opstellen en indienen", description: "Legal stelt de GDPR Art.33-melding op en dient deze in bij de AP binnen het 72u-venster.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Wettelijk vereist. Gemiste deadline leidt tot significante boetes." },
+    { id: "ins-r3-leg-3", label: "Klokkenluidersclaim negeren en ontslag doorzetten", description: "Zet het ontslagtraject door ondanks de klokkenluidersclaim.", allowedRoles: ["legal"], isRecommended: false, irPlanAligned: false, consequence: "Hoog risico op onrechtmatig ontslagclaim en aanvullende arbeidsrechtelijke procedures." },
+    // Head of Comms
+    { id: "ins-r3-hoc-1", label: "Holding statement voor pers opstellen over interne HR-kwestie", description: "Communications stelt een gedoseerde verklaring op die een interne HR-kwestie erkent zonder details of strafrechtelijke beschuldigingen te bevestigen.", allowedRoles: ["head_of_comms"], isRecommended: true, irPlanAligned: true, consequence: "Beheerst het narratief; mag de medewerker niet veroordelen tijdens lopend onderzoek." },
+    { id: "ins-r3-hoc-2", label: "Journalist ontkennen dat er enig incident is", description: "Ontken ieder incident tegenover de journalist.", allowedRoles: ["head_of_comms"], isRecommended: false, irPlanAligned: false, consequence: "Als de journalist al informatie heeft, beschadigt ontkenning de geloofwaardigheid ernstig." },
+    // CEO
+    { id: "ins-r3-ceo-1", label: "Board formeel briefen over incidentomvang en respons", description: "CEO informeert de board schriftelijk over de omvang van het incident, de juridische blootstelling en de genomen stappen.", allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true, consequence: "Zorgplicht board; beschermt CEO bij volgende boardvergadering." },
+    // CISO
+    { id: "ins-r3-ciso-1", label: "Systemen controleren op aanvullende exfiltratie-activiteit", description: "CISO laat een gerichte scan uitvoeren om te bepalen of er naast de bekende exfiltratie nog andere datalekkage is.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true, consequence: "Sluit de scope van het datalek; noodzakelijk voor de AP-melding." },
+    // Universal
+    { id: "ins-r3-do-nothing", label: "Wachten op juridische procedures alvorens te handelen", description: "Houd alle communicatie en notificaties aan totdat de arbeidsrechtelijke positie helder is.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "AP-deadline verstrijkt; media publiceert het verhaal zonder uw input." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-ins-r3-1", description: "AP-melding ingediend binnen 72u na ontdekking", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["ins-r3-a2"], achieved: false },
-    { id: "obj-ins-r3-2", description: "Klokkenluidersclaim juridisch beoordeeld vóór verdere actie", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["ins-r3-a1"], achieved: false },
+    { id: "obj-ins-r3-1", description: "AP-melding ingediend binnen 72u na ontdekking", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["ins-r3-leg-2"], achieved: false },
+    { id: "obj-ins-r3-2", description: "Klokkenluidersclaim juridisch beoordeeld vóór verdere actie", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["ins-r3-leg-1"], achieved: false },
   ]
   return { round_number: 3, title: "Legal Complexity & External Pressure", situation_update: "It is 14:00. The employee has now engaged a lawyer citing whistleblower protection. GDPR requires an AP notification within 72 hours. A journalist is asking questions. The board wants answers. Multiple simultaneous pressure tracks must be managed without contradiction.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -473,15 +551,23 @@ function insiderR4(crown: string, sel?: Role[]): Round {
     redFlags: ["CEO defers settlement/prosecution decision with no timeline", "Customer notification not discussed", "No systemic change identified — treated as a one-off"],
   }
   const roleActions = filterActions([
-    { id: "ins-r4-a1", label: "Authorise settlement negotiation with employee", description: "CEO and CFO approve entering settlement discussions with J. Bakker's lawyer on the terms proposed.", allowedRoles: ["ceo", "cfo"], isRecommended: false, irPlanAligned: true, consequence: "Faster resolution; avoids public trial. Prevents full recovery of damages. Internal morale risk." },
-    { id: "ins-r4-a2", label: "Proceed with criminal prosecution", description: "Legal refers the full case to the police and public prosecutor for criminal charges of IP theft and computer fraud.", allowedRoles: ["ceo", "legal"], irPlanAligned: true, consequence: "Sends a strong message; may deter future incidents. 18–24 month process. No guarantee of conviction." },
-    { id: "ins-r4-a3", label: "Send customer breach notification letters", description: "Communications and Legal coordinate customer notification for all individuals whose PII was included in the exfiltrated data.", allowedRoles: ["head_of_comms", "legal"], isRecommended: true, irPlanAligned: true, consequence: "Required under GDPR Art. 34 if high risk to individuals. Transparency preserves trust." },
-    { id: "ins-r4-a4", label: "Update insider threat detection procedures", description: "HR Lead and CISO commit to updated offboarding checklist, access revocation SLA, and DLP escalation policy effective next quarter.", allowedRoles: ["hr_lead", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "Prevents recurrence. Makes the AP follow-up response credible." },
-    { id: "ins-r4-do-nothing", label: "Defer all decisions to next board meeting", description: "Hold all final decisions until the board formally convenes in two weeks.", allowedRoles: [], irPlanAligned: false, consequence: "AP follow-up deadline and customer notification obligations will be missed." },
+    // CEO
+    { id: "ins-r4-ceo-1", label: "Schikkingsonderhandeling autoriseren", description: "CEO keurt het starten van schikkingsonderhandelingen goed op de voorgestelde voorwaarden (€45k + NDA).", allowedRoles: ["ceo"], isRecommended: false, irPlanAligned: true, consequence: "Snellere afsluiting; vermijdt publieke rechtszaak. Beperkt schadevergoeding en geeft intern signaal." },
+    // CFO
+    { id: "ins-r4-cfo-1", label: "Financiële analyse schikking vs. vervolging presenteren", description: "CFO stelt een kosten-baten analyse op: schikking (€45k + NDA) vs. 18-24 maanden strafproces.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Geeft de CEO een zakelijke basis voor de beslissing. Maakt de financiële trade-off expliciet." },
+    // Legal
+    { id: "ins-r4-leg-1", label: "Strafrechtelijke vervolging inzetten", description: "Legal verwijst de volledige zaak naar politie en OM voor strafrechtelijke aanklacht voor IP-diefstal en computercriminaliteit.", allowedRoles: ["legal"], isRecommended: false, irPlanAligned: true, consequence: "Sterk signaal; kan toekomstige incidenten afschrikken. Duur en langdurig; geen garantie op veroordeling." },
+    { id: "ins-r4-leg-2", label: "AP-follow-up-eigenaar aanwijzen voor 30-dagenrapport", description: "Legal wijst een verantwoordelijke aan voor het 30-dagenrapport aan de AP met volledige impact-assessment en herstelstappen.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "AP-follow-up wordt niet gemist; expliciete eigenaarsbelegging voorkomt verval." },
+    // Head of Comms
+    { id: "ins-r4-hoc-1", label: "Klantnotificatiebrieven verzenden voor betrokken personen", description: "Communications en Legal coördineren de klantnotificatie voor alle personen wier PII in de geëxfiltreerde data zit.", allowedRoles: ["head_of_comms"], isRecommended: true, irPlanAligned: true, consequence: "Verplicht onder GDPR Art.34 bij hoog risico voor betrokkenen. Transparantie versterkt vertrouwen." },
+    // HR Lead
+    { id: "ins-r4-hrl-1", label: "Insider threat-procedures en toegangsbeheer updaten", description: "HR Lead en CISO leggen geüpdatede offboarding-checklist, toegangsintrekkings-SLA en DLP-escalatiebeleid vast.", allowedRoles: ["hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Voorkomt herhaling. Maakt de AP-follow-up geloofwaardig." },
+    // Universal
+    { id: "ins-r4-do-nothing", label: "Alle besluiten tot volgende boardvergadering uitstellen", description: "Houd alle definitieve besluiten aan tot de board formeel bijeenkomt over twee weken.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "AP-follow-up-deadline en klantnotificatieverplichtingen worden gemist." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-ins-r4-1", description: "CEO/CFO neemt beslissing schikking of strafrechtelijk vervolgen", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["ins-r4-a1", "ins-r4-a2"], achieved: false },
-    { id: "obj-ins-r4-2", description: "Klantnotificatie goedgekeurd en eigenaar AP-follow-up aangewezen", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["ins-r4-a3"], achieved: false },
+    { id: "obj-ins-r4-1", description: "CEO/CFO neemt beslissing schikking of strafrechtelijk vervolgen", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["ins-r4-ceo-1", "ins-r4-leg-1"], achieved: false },
+    { id: "obj-ins-r4-2", description: "Klantnotificatie goedgekeurd en eigenaar AP-follow-up aangewezen", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["ins-r4-hoc-1"], achieved: false },
   ]
   return { round_number: 4, title: "Resolution & Lessons Learned", situation_update: "It is 17:00. Forensics confirms competitor involvement. The AP has acknowledged the breach notification. A settlement offer is on the table. The board is waiting. Decisions on legal strategy, customer notification, and systemic improvements must be made today.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -540,15 +626,20 @@ function becR1(sector: string, sel?: Role[]): Round {
     redFlags: ["CFO approves without verbal CEO confirmation", "Finance team prioritises urgency over verification", "No one checks the sender domain carefully"],
   }
   const roleActions = filterActions([
-    { id: "bec-r1-a1", label: "Verify request directly with CEO by phone", description: "CFO or Finance Manager calls the CEO on a known, verified number — not the one in the email — to confirm before any action.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Confirms or disproves the request in under 2 minutes. Always the right first move." },
-    { id: "bec-r1-a2", label: "Analyse email headers for domain spoofing", description: "IT reviews the full email headers to confirm whether the sender domain is a registered company domain or a lookalike.", allowedRoles: ["it_manager", "system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Confirms BEC attempt if domain is different. Preserves evidence." },
-    { id: "bec-r1-a3", label: "Place the transfer request on hold", description: "Finance holds the transfer pending verification — no money moves until the request is confirmed via a secondary channel.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Prevents loss. The 'urgency' framing is a social engineering tactic — holding is always safe." },
-    { id: "bec-r1-a4", label: "Process the transfer — CEO urgency justifies it", description: "Approve and execute the €185k wire transfer based on the email request.", allowedRoles: ["cfo"], irPlanAligned: false, consequence: "Sends €185,000 to a fraudulent account. Recovery is extremely difficult after SWIFT settlement." },
-    { id: "bec-r1-do-nothing", label: "Escalate to CEO's EA to confirm without calling CEO", description: "Ask the CEO's executive assistant to verify the request on your behalf.", allowedRoles: [], irPlanAligned: true, consequence: "Reasonable if EA has direct access. Slower than a direct call but acceptable." },
+    // CFO
+    { id: "bec-r1-cfo-1", label: "CEO telefonisch verifiëren via bekend nummer", description: "Bel de CEO direct op een verifieerd nummer — niet het nummer uit de e-mail — om het verzoek te bevestigen vóór enige actie.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Bevestigt of weerlegt het verzoek in minder dan 2 minuten. Altijd de juiste eerste stap." },
+    { id: "bec-r1-cfo-2", label: "Betalingsverzoek on hold zetten in afwachting van verificatie", description: "Finance houdt de overboeking aan totdat het verzoek via een tweede kanaal is bevestigd.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Voorkomt verlies. De 'urgentie'-framing is een social engineering-tactiek — wachten is altijd veilig." },
+    { id: "bec-r1-cfo-3", label: "Overboeking uitvoeren op basis van CEO-urgentie", description: "Voer de €185.000-overboeking uit op basis van het e-mailverzoek.", allowedRoles: ["cfo"], isRecommended: false, irPlanAligned: false, consequence: "Stuurt €185.000 naar een frauduleuze rekening. Na SWIFT-verrekening nauwelijks te stoppen." },
+    // IT Manager
+    { id: "bec-r1-itm-1", label: "E-mailheaders analyseren op domeinvervalsing", description: "IT beoordeelt de volledige e-mailheaders om te bevestigen of het verzenddomein het geregistreerde bedrijfsdomein is of een lookalike.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Bevestigt BEC-poging als het domein afwijkt. Bewaart bewijs." },
+    // System Admin
+    { id: "bec-r1-sa-1", label: "E-mailgateway controleren op vergelijkbare lookalike-domeinen", description: "Zoek in de gateway-logs op andere e-mails van vergelijkbare lookalike-domeinen de afgelopen 30 dagen.", allowedRoles: ["system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Bepaalt de scope van de BEC-campagne; vergelijkbare pogingen kunnen ook andere medewerkers bereikt hebben." },
+    // Universal
+    { id: "bec-r1-do-nothing", label: "EA vragen te verifiëren in plaats van CEO direct te bellen", description: "Vraag de executive assistant van de CEO om het verzoek namens u te bevestigen.", allowedRoles: [], isRecommended: false, irPlanAligned: true, consequence: "Redelijk als de EA directe toegang heeft. Trager dan direct bellen maar acceptabel." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-bec-r1-1", description: "Betaalverzoek on hold gezet en CEO telefonisch geverifieerd", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["bec-r1-a1", "bec-r1-a3"], achieved: false },
-    { id: "obj-bec-r1-2", description: "E-mailheaders onderzocht op domeinvervalsing", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["bec-r1-a2"], achieved: false },
+    { id: "obj-bec-r1-1", description: "Betaalverzoek on hold gezet en CEO telefonisch geverifieerd", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["bec-r1-cfo-1", "bec-r1-cfo-2"], achieved: false },
+    { id: "obj-bec-r1-2", description: "E-mailheaders onderzocht op domeinvervalsing", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["bec-r1-itm-1"], achieved: false },
   ]
   return { round_number: 1, title: "Suspicious Transfer Request", situation_update: "It is 10:00. A Finance Manager has received what appears to be a CEO-authorised wire transfer request. The urgency framing and secrecy request are unusual. The CFO has been alerted. No transfer has been made yet.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -588,15 +679,21 @@ function becR2(sel?: Role[]): Round {
     redFlags: ["CFO or Legal delays bank call for any reason", "CEO account not reset and MFA not enabled immediately", "Employee blamed before facts are established"],
   }
   const roleActions = filterActions([
-    { id: "bec-r2-a1", label: "Initiate SWIFT recall with bank — immediately", description: "CFO calls the bank fraud department directly to initiate a SWIFT recall of the €185k transfer. 2-hour window is closing.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Partial or full recovery possible within the window. After settlement, funds are typically unrecoverable." },
-    { id: "bec-r2-a2", label: "Reset CEO credentials and enable MFA", description: "IT immediately resets the CEO's password, revokes all active sessions, and enforces MFA on the account.", allowedRoles: ["it_manager", "system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Locks out the attacker. Essential before the CEO communicates anything from their account." },
-    { id: "bec-r2-a3", label: "Notify cyber insurer and document the incident", description: "Legal contacts the cyber insurer to initiate a potential fraud claim and documents the incident timeline.", allowedRoles: ["legal", "cfo"], isRecommended: true, irPlanAligned: true, consequence: "Preserves insurance claim rights. Most policies require prompt notification." },
-    { id: "bec-r2-a4", label: "HR: Conduct due process with Finance employee", description: "HR Lead ensures the junior Finance employee is treated fairly — fact-finding interview before any disciplinary consideration.", allowedRoles: ["hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Protects the organisation legally; the employee may be a victim of a social engineering chain." },
-    { id: "bec-r2-do-nothing", label: "Wait for IT forensics before involving the bank", description: "Hold bank notification until IT has completed its full forensic picture.", allowedRoles: [], irPlanAligned: false, consequence: "The recall window closes. €185,000 is unrecoverable. This is the single worst decision in this incident." },
+    // CFO
+    { id: "bec-r2-cfo-1", label: "SWIFT-recall initiëren via bank — direct bellen", description: "CFO belt het fraudenummer van de bank direct om een SWIFT-recall van de €185.000-overboeking te starten. Het 2-uurs-venster sluit.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Gedeeltelijke of volledige terugvordering mogelijk binnen het venster. Na verrekening zijn middelen doorgaans onterugvorderbaar." },
+    { id: "bec-r2-cfo-2", label: "Verzekeraar notificeren en incident documenteren", description: "CFO contacteert de cyber-verzekeraar om een mogelijke fraudeclaim te initiëren en documenteert de incidenttijdlijn.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Behoudt verzekeringsclaimrecht. De meeste polissen vereisen tijdige melding." },
+    // IT Manager
+    { id: "bec-r2-itm-1", label: "CEO-credentials resetten en MFA inschakelen", description: "IT reset het CEO-wachtwoord, trekt alle actieve sessies in en dwingt MFA af op het account.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Sluit de aanvaller buiten. Essentieel vóór de CEO vanuit het account communiceert." },
+    // System Admin
+    { id: "bec-r2-sa-1", label: "Forensische scope van inbox-toegang bepalen", description: "IT-forensics brengt in kaart hoeveel e-mails de aanvaller gedurende 72u heeft gelezen: deals, contracten, personeelszaken.", allowedRoles: ["system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Bepaalt de volledige blootstelling. Noodzakelijk voor eventuele klant- en regelgevingsnotificaties." },
+    // HR Lead
+    { id: "bec-r2-hrl-1", label: "HR: Due process starten voor Finance-medewerker", description: "HR Lead garandeert dat de junior Finance-medewerker die de overboeking uitvoerde een eerlijk feitenvaststellingsgesprek krijgt vóór eventuele disciplinaire stap.", allowedRoles: ["hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Beschermt de organisatie juridisch; de medewerker kan slachtoffer zijn van een social engineering-keten." },
+    // Universal
+    { id: "bec-r2-do-nothing", label: "Wachten op IT-forensics vóór de bank te bellen", description: "Houd bankkontact aan totdat IT de volledige forensische analyse heeft afgerond.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "Het recall-venster sluit. €185.000 is onterugvorderbaar. Dit is de meest kostbare beslissing in dit incident." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-bec-r2-1", description: "SWIFT-recall ingediend binnen 2-uur-window", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["bec-r2-a1"], achieved: false },
-    { id: "obj-bec-r2-2", description: "CEO-account gereset en MFA ingeschakeld", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["bec-r2-a2"], achieved: false },
+    { id: "obj-bec-r2-1", description: "SWIFT-recall ingediend binnen 2-uur-window", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["bec-r2-cfo-1"], achieved: false },
+    { id: "obj-bec-r2-2", description: "CEO-account gereset en MFA ingeschakeld", module: "triage_containment", measuredBy: "decision", triggerActionIds: ["bec-r2-itm-1"], achieved: false },
   ]
   return { round_number: 2, title: "Transfer Processed — Attacker Had Inbox Access", situation_update: "It is 11:00. The wire transfer has been processed. The bank has a 2-hour recall window. IT confirms the CEO's email was compromised for 72 hours. The attacker has read sensitive deal information. A second wave of fraudulent transfers was prepared but not yet sent.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -636,15 +733,21 @@ function becR3(sector: string, sel?: Role[]): Round {
     redFlags: ["CEO avoids board question", "Comms issues statement before Legal reviews insurance implications", "No one takes ownership of the insurer's 48-hour deadline"],
   }
   const roleActions = filterActions([
-    { id: "bec-r3-a1", label: "Brief board on financial exposure and immediate response", description: "CEO prepares a written board briefing covering: amount lost/recovered, root cause, immediate actions taken, and timeline for control improvements.", allowedRoles: ["ceo", "cfo"], isRecommended: true, irPlanAligned: true, consequence: "Discharges board duty. Protects CEO from governance challenge." },
-    { id: "bec-r3-a2", label: "Submit insurance claim documentation", description: "Legal and CFO compile the incident timeline, forensic evidence, and loss documentation for the insurer's 48-hour requirement.", allowedRoles: ["legal", "cfo"], isRecommended: true, irPlanAligned: true, consequence: "Preserves the €143k claim. Missing the 48-hour window may invalidate coverage." },
-    { id: "bec-r3-a3", label: "Issue media holding statement", description: "Communications issues a measured statement acknowledging an IT security incident and fraudulent transfer attempt, confirming funds recovery steps are underway.", allowedRoles: ["head_of_comms", "ceo"], isRecommended: true, irPlanAligned: true, consequence: "Controls narrative. Must not reference insurance claim details or specific control failures." },
-    { id: "bec-r3-a4", label: "File police report for cyber fraud", description: "Legal files a formal police report for computer fraud and wire fraud to support both the criminal investigation and the insurance claim.", allowedRoles: ["legal", "ceo"], isRecommended: true, irPlanAligned: true, consequence: "Supports the bank's criminal investigation. Required for most insurance fraud claims." },
-    { id: "bec-r3-do-nothing", label: "Hold all communications until legal review is complete", description: "Issue no statement and provide no information to board or press until the full legal picture is clear.", allowedRoles: [], irPlanAligned: false, consequence: "Board chair will escalate. Media will fill the silence. Insurer may interpret silence as non-cooperation." },
+    // CEO
+    { id: "bec-r3-ceo-1", label: "Board briefen over financiële blootstelling en respons", description: "CEO bereidt een schriftelijke board-briefing voor: verloren/teruggevorderd bedrag, oorzaak, direct genomen maatregelen en tijdlijn voor controleverbetering.", allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true, consequence: "Ontlast bestuursverantwoordelijkheid. Beschermt CEO bij governance-uitdaging." },
+    { id: "bec-r3-ceo-2", label: "Boardvraag omzeilen tot juridische positie helder is", description: "Geef de board voorlopig geen antwoord totdat de volledige juridische situatie vaststaat.", allowedRoles: ["ceo"], isRecommended: false, irPlanAligned: false, consequence: "Board zal escaleren. Juridische en reputatieschade neemt toe bij uitblijven van antwoord." },
+    // CFO
+    { id: "bec-r3-cfo-1", label: "Verzekeringsclaimbescheiden samenstellen", description: "CFO stelt de incidenttijdlijn, forensisch bewijs en schadeoverzicht samen voor de 48u-eis van de verzekeraar.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Maximaliseert de €143.000-claim. Gemiste 48u-deadline kan dekking ongeldig maken." },
+    // Head of Comms
+    { id: "bec-r3-hoc-1", label: "Holding statement uitgeven aan financieel journalist", description: "Communications geeft een gedoseerde verklaring af die een IT-beveiligingsincident erkent, met bevestiging dat herstelstappen zijn genomen.", allowedRoles: ["head_of_comms"], isRecommended: true, irPlanAligned: true, consequence: "Beheert het narratief. Mag geen details over verzekeringsaanspraken of specifieke controleproblemen bevatten." },
+    // Legal
+    { id: "bec-r3-leg-1", label: "Aangifte doen voor cyberfraude", description: "Legal dient een formele aangifte in bij de politie voor computerfraude ter ondersteuning van het bankonderzoek en de verzekeringsaanspraak.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Ondersteunt het bankonderzoek. Vereist voor de meeste fraudeverzekeringsclaims." },
+    // Universal
+    { id: "bec-r3-do-nothing", label: "Alle communicatie aanhouden tot juridische review klaar is", description: "Geef geen verklaring af en deel geen informatie met board of pers tot de volledige juridische positie duidelijk is.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "Board zal escaleren. Media vult het stilzwijgen in. Verzekeraar interpreteert stilte als niet-medewerking." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-bec-r3-1", description: "Board geïnformeerd en verzekeraarsdossier opgestart", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["bec-r3-a1", "bec-r3-a2"], achieved: false },
-    { id: "obj-bec-r3-2", description: "Holding statement uitgegeven en aangifte gedaan", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["bec-r3-a3", "bec-r3-a4"], achieved: false },
+    { id: "obj-bec-r3-1", description: "Board geïnformeerd en verzekeraarsdossier opgestart", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["bec-r3-ceo-1", "bec-r3-cfo-1"], achieved: false },
+    { id: "obj-bec-r3-2", description: "Holding statement uitgegeven en aangifte gedaan", module: "crisis_communication", measuredBy: "decision", triggerActionIds: ["bec-r3-hoc-1", "bec-r3-leg-1"], achieved: false },
   ]
   return { round_number: 3, title: "Recovery & External Pressure", situation_update: "It is 13:00. €143,000 is unrecoverable. The insurer has a 48-hour claim window. The board wants answers. A journalist is calling. Legal, Finance, and Communications all need to act — without contradicting each other.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -684,15 +787,22 @@ function becR4(sel?: Role[]): Round {
     redFlags: ["CFO defers controls decision", "Junior employee held responsible for systemic failure", "No one is assigned to close the identified gaps"],
   }
   const roleActions = filterActions([
-    { id: "bec-r4-a1", label: "Approve enhanced financial controls", description: "CFO formally approves the dual-authorisation and callback procedure for wire transfers, effective immediately.", allowedRoles: ["cfo", "ceo"], isRecommended: true, irPlanAligned: true, consequence: "Directly addresses the root cause. Also satisfies the insurer's remediation requirement." },
-    { id: "bec-r4-a2", label: "Implement MFA on all executive email accounts", description: "IT enables MFA across all C-suite and Finance email accounts as an emergency measure, with full rollout in 30 days.", allowedRoles: ["it_manager", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "Closes the primary attack vector. Should have been standard already." },
-    { id: "bec-r4-a3", label: "Accept HR recommendation: retraining not dismissal", description: "CEO and CFO accept HR's recommendation that the Finance employee receives mandatory retraining rather than disciplinary action, given systemic control failure.", allowedRoles: ["ceo", "hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Fair outcome given systemic gaps. Avoids wrongful dismissal risk. Sets the right cultural signal." },
-    { id: "bec-r4-a4", label: "Complete insurer claim documentation", description: "Legal submits the full forensic report and control remediation plan to the insurer to finalise the €143k claim.", allowedRoles: ["legal", "cfo"], isRecommended: true, irPlanAligned: true, consequence: "Maximises claim recovery. Forensics confirms single-account compromise which strengthens the claim." },
-    { id: "bec-r4-do-nothing", label: "Defer control improvements to next quarter's budget cycle", description: "Table the proposed controls for the next quarterly planning session.", allowedRoles: [], irPlanAligned: false, consequence: "Organisation remains exposed to the same attack. Insurer may challenge the claim if controls are delayed." },
+    // CFO
+    { id: "bec-r4-cfo-1", label: "Verbeterde financiële controls autoriseren", description: "CFO keurt de dubbele autorisatie en terugbelprocedure voor overboekingen formeel goed, met directe ingang.", allowedRoles: ["cfo"], isRecommended: true, irPlanAligned: true, consequence: "Pakt de onderliggende oorzaak aan. Voldoet ook aan de hersteleis van de verzekeraar." },
+    // IT Manager
+    { id: "bec-r4-itm-1", label: "MFA inschakelen op alle directie- en Finance-accounts", description: "IT zet MFA aan op alle C-suite- en Finance-e-mailaccounts als noodmaatregel, met volledige uitrol in 30 dagen.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Sluit de primaire aanvalsvector. Had al standaard moeten zijn." },
+    // CEO
+    { id: "bec-r4-ceo-1", label: "HR-aanbeveling accepteren: hertraining in plaats van ontslag", description: "CEO accepteert de HR-aanbeveling dat de Finance-medewerker verplichte hertraining krijgt in plaats van een disciplinaire maatregel.", allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true, consequence: "Eerlijk resultaat gezien systeemfouten. Voorkomt onrechtmatig ontslag. Stuurt de juiste culturele norm." },
+    // Legal
+    { id: "bec-r4-leg-1", label: "Verzekeringsclaimdocumentatie afronden", description: "Legal dient het volledige forensische rapport en verbeterplan voor de controls in bij de verzekeraar ter afronding van de €143.000-claim.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Maximaliseert de claimvergoeding. Forensics bevestigt enkelvoudige compromittering." },
+    // HR Lead
+    { id: "bec-r4-hrl-1", label: "Verplichte BEC-bewustzijnstraining voor Finance plannen", description: "HR Lead plant verplichte anti-BEC en social engineering training voor het volledige Finance-team.", allowedRoles: ["hr_lead"], isRecommended: true, irPlanAligned: true, consequence: "Pakt de menselijke factor aan. Noodzakelijk om de verzekeraar te overtuigen van herstelmaatregelen." },
+    // Universal
+    { id: "bec-r4-do-nothing", label: "Controleverbetering uitstellen naar volgend kwartaalbudget", description: "Stel de voorgestelde maatregelen uit tot de volgende kwartaalplanningssessie.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "Organisatie blijft kwetsbaar voor dezelfde aanval. Verzekeraar kan de claim aanvechten bij vertraging." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-bec-r4-1", description: "Verbeterde financiële controls geautoriseerd door CFO", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["bec-r4-a1"], achieved: false },
-    { id: "obj-bec-r4-2", description: "MFA ingeschakeld op alle executive-accounts", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["bec-r4-a2"], achieved: false },
+    { id: "obj-bec-r4-1", description: "Verbeterde financiële controls geautoriseerd door CFO", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["bec-r4-cfo-1"], achieved: false },
+    { id: "obj-bec-r4-2", description: "MFA ingeschakeld op alle executive-accounts", module: "recovery_lessons", measuredBy: "decision", triggerActionIds: ["bec-r4-itm-1"], achieved: false },
   ]
   return { round_number: 4, title: "Controls & Accountability", situation_update: "It is 16:00. Forensics confirms the breach was limited to the CEO's email. The insurer is processing the claim. HR has completed its review of the junior Finance employee. A clear set of control gaps has been identified. Decisions on controls, accountability, and the insurer's remediation requirement must be made today.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -753,15 +863,22 @@ function exfilR1(sector: string, systems: string, sel?: Role[]): Round {
     redFlags: ["IT revokes access without scoping how much data left first", "No one connects the client complaint to the API anomaly", "Vendor not contacted or GDPR processor agreement not checked"],
   }
   const roleActions = filterActions([
-    { id: "exf-r1-a1", label: "Scope the exfiltration before acting", description: "IT forensics conducts a rapid query analysis to determine how many records were accessed, what data types, and over what period — before revoking access.", allowedRoles: ["it_manager", "system_admin", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "Informs the response. Essential for GDPR notification (you need to know what was taken)." },
-    { id: "exf-r1-a2", label: "Revoke vendor API credentials immediately", description: "IT immediately revokes the third-party vendor's OAuth token and API access.", allowedRoles: ["it_manager", "system_admin"], irPlanAligned: true, consequence: "Stops ongoing exfiltration but may alert the attacker. Should follow, not precede, scoping." },
-    { id: "exf-r1-a3", label: "Legal: Assess client notification obligations", description: "Legal reviews the contract and GDPR processor agreements to determine what notification obligations exist towards the affected client.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Client has already raised the issue. Proactive notification is legally and commercially better than silence." },
-    { id: "exf-r1-a4", label: "Contact the analytics vendor directly", description: "CISO or IT calls the third-party analytics vendor to investigate whether their systems were compromised.", allowedRoles: ["ciso", "it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Vendor may have broader intelligence on the attack. Also a contractual obligation under GDPR processor agreements." },
-    { id: "exf-r1-do-nothing", label: "Wait for CERT-NL to issue further guidance", description: "Hold all internal actions and await the next CERT-NL advisory update.", allowedRoles: [], irPlanAligned: false, consequence: "Exfiltration continues. Client notification window closes. Passive response in an active breach." },
+    // IT Manager
+    { id: "exf-r1-itm-1", label: "Exfiltratiescope bepalen vóór API-toegang in te trekken", description: "IT-forensics voert een snelle query-analyse uit: hoeveel records, welke datatypes, over welke periode — vóór de access in te trekken.", allowedRoles: ["it_manager"], isRecommended: true, irPlanAligned: true, consequence: "Essentieel voor de GDPR-melding: je moet weten wat is meegenomen." },
+    { id: "exf-r1-itm-2", label: "Leveranciers-API-credentials direct intrekken", description: "IT trekt de OAuth-token en API-toegang van de externe leverancier onmiddellijk in.", allowedRoles: ["it_manager"], isRecommended: false, irPlanAligned: true, consequence: "Stopt lopende exfiltratie maar kan de aanvaller waarschuwen. Moet volgen op scope-bepaling." },
+    // System Admin
+    { id: "exf-r1-sa-1", label: "API-querypatronen analyseren op aanvullende compromittering", description: "Systeembeheer analyseert de API-gatewaylogs op andere service-accounts met vergelijkbaar abnormaal gedrag.", allowedRoles: ["system_admin"], isRecommended: true, irPlanAligned: true, consequence: "Bepaalt of de scope beperkt is tot één account of breder. Noodzakelijk voor de GDPR-inschatting." },
+    // CISO
+    { id: "exf-r1-ciso-1", label: "Externe analytics-leverancier direct contacteren", description: "CISO belt de externe leverancier om te onderzoeken of hun systemen zijn gecompromitteerd en welke bredere intelligentie zij hebben over de aanval.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true, consequence: "Leverancier kan bredere aanvalsinformatie hebben. Contractuele verplichting onder GDPR-verwerkersovereenkomst." },
+    { id: "exf-r1-ciso-2", label: "CERT-NL-advisory als voldoende beschouwen en intern melden", description: "Behandel de CERT-NL-waarschuwing als bevestiging en meld intern zonder leverancier te contacteren.", allowedRoles: ["ciso"], isRecommended: false, irPlanAligned: false, consequence: "Leverancier weet mogelijk meer over de aanvalsvector. Missen van leveranciersbesmetting kan tot grotere scope leiden." },
+    // Legal
+    { id: "exf-r1-leg-1", label: "Clientnotificatieplicht juridisch beoordelen", description: "Legal beoordeelt de contractuele en GDPR-verwerkersverplichtingen: welke notificatieplicht bestaat tegenover de getroffen client?", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "De client heeft het probleem al gemeld. Proactieve notificatie is juridisch en commercieel beter dan stilte." },
+    // Universal
+    { id: "exf-r1-do-nothing", label: "Wachten op CERT-NL voor verdere richtlijnen", description: "Houd alle interne acties aan in afwachting van de volgende CERT-NL update.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "Exfiltratie gaat door. Client-notificatievenster sluit. Passieve respons bij een actieve breach." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-exf-r1-1", description: "Exfiltratiescope bepaald vóór actie op vendor", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["exf-r1-a1"], achieved: false },
-    { id: "obj-exf-r1-2", description: "Juridische clientnotificatieplicht beoordeeld", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["exf-r1-a3"], achieved: false },
+    { id: "obj-exf-r1-1", description: "Exfiltratiescope bepaald vóór actie op vendor", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["exf-r1-itm-1"], achieved: false },
+    { id: "obj-exf-r1-2", description: "Juridische clientnotificatieplicht beoordeeld", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: ["exf-r1-leg-1"], achieved: false },
   ]
   return { round_number: 1, title: "Silent Breach Discovered", situation_update: "It is 09:00. A client complaint and an anomalous API alert are pointing at an ongoing, silent data exfiltration through a third-party integration. The breach may have been active for six weeks. Nothing is confirmed yet — but the clock is running.", timerMinutes: 15, injects, facilitatorNotes, roleActions, learningObjectives }
 }
@@ -801,15 +918,22 @@ function exfilR2(crown: string, sel?: Role[]): Round {
     redFlags: ["No one tracks the 72-hour clock explicitly", "Team conflates vendor notification with their own obligation", "Client notification blocked by marketing or legal hesitation"],
   }
   const roleActions = filterActions([
-    { id: "exf-r2-a1", label: "File AP Art. 33 notification within 72 hours", description: "Legal drafts and files the mandatory GDPR Art. 33 notification to the AP, covering: nature of breach, categories of data, approximate number of individuals, likely consequences, and measures taken.", allowedRoles: ["legal", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "Legal requirement. Failure to notify on time significantly increases fine risk under GDPR." },
-    { id: "exf-r2-a2", label: "Send formal written notification to affected client", description: "Legal and Communications prepare a formal written breach notification to the client who flagged the issue, per contractual and GDPR processor obligations.", allowedRoles: ["legal", "head_of_comms", "ceo"], isRecommended: true, irPlanAligned: true, consequence: "Proactive notification is legally required and commercially prudent. The client already suspects the breach." },
-    { id: "exf-r2-a3", label: "Assess Art. 34 individual notification obligation", description: "Legal assesses whether the 340,000 affected individuals must be notified directly under GDPR Art. 34 based on the risk to their rights and freedoms.", allowedRoles: ["legal", "ciso"], isRecommended: true, irPlanAligned: true, consequence: "If high risk is assessed, Art. 34 notification is mandatory. Must be factored into the AP notification." },
-    { id: "exf-r2-a4", label: "Coordinate with vendor on joint AP notification", description: "CISO and Legal coordinate with the vendor to ensure AP notifications are consistent and do not contradict each other.", allowedRoles: ["ciso", "legal"], isRecommended: true, irPlanAligned: true, consequence: "Prevents contradictory regulatory submissions. Vendor is a GDPR processor — coordination is expected." },
-    { id: "exf-r2-do-nothing", label: "Wait for vendor to file first and follow their lead", description: "Hold your own AP notification until the vendor's notification is submitted and reviewed.", allowedRoles: [], irPlanAligned: false, consequence: "You are the data controller. The vendor's notification does not substitute yours. Clock continues." },
+    // Legal
+    { id: "exf-r2-leg-1", label: "AP Art.33-melding indienen binnen 72u", description: "Legal stelt de verplichte GDPR Art.33-melding op en dient deze in bij de AP: aard van de inbreuk, categorieën, aantal betrokkenen, mogelijke gevolgen en getroffen maatregelen.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Wettelijke vereiste. Niet tijdig melden verhoogt het boeterisico aanzienlijk." },
+    { id: "exf-r2-leg-2", label: "Art.34 individuele notificatieplicht beoordelen", description: "Legal beoordeelt of de 340.000 betrokken personen direct gemeld moeten worden conform GDPR Art.34 op basis van het risico voor hun rechten.", allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true, consequence: "Bij hoog risico is Art.34-notificatie verplicht en moet dit in de AP-melding worden meegenomen." },
+    { id: "exf-r2-leg-3", label: "Wachten tot leverancier meldt en hun aanpak volgen", description: "Houd de eigen AP-melding aan totdat de leverancier melding heeft gedaan en analyseer hun aanpak.", allowedRoles: ["legal"], isRecommended: false, irPlanAligned: false, consequence: "U bent de data controller. Melding van leverancier vervangt uw eigen verplichting niet. Klok loopt door." },
+    // CISO
+    { id: "exf-r2-ciso-1", label: "Leverancier coördineren voor consistente AP-melding", description: "CISO en Legal stemmen met de leverancier af om tegenstrijdige GDPR-meldingen bij de AP te voorkomen.", allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true, consequence: "Voorkomt tegenstrijdige regelgevingsaanvragen. Leverancier is GDPR-verwerker — coördinatie wordt verwacht." },
+    // Head of Comms
+    { id: "exf-r2-hoc-1", label: "Formele schriftelijke breachnotificatie aan client sturen", description: "Legal en Communications stellen een formele schriftelijke breachnotificatie op voor de client die de anomalie gemeld heeft, conform GDPR-verwerkersverplichtingen.", allowedRoles: ["head_of_comms"], isRecommended: true, irPlanAligned: true, consequence: "Proactieve notificatie is juridisch vereist en commercieel verstandig. Client vermoedt al een inbreuk." },
+    // CEO
+    { id: "exf-r2-ceo-1", label: "Board informeren over omvang inbreuk en regulatoire stappen", description: "CEO informeert de board over de bevestigde omvang (340.000 records), de lopende meldprocedures en de zakelijke blootstelling.", allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true, consequence: "Zorgplicht richting board; beschermt CEO bij volgende vergadering." },
+    // Universal
+    { id: "exf-r2-do-nothing", label: "Wachten op leverancier vóór enige melding", description: "Houd eigen AP-melding aan totdat de leverancier zijn eigen melding heeft ingediend.", allowedRoles: [], isRecommended: false, irPlanAligned: false, consequence: "U bent de data controller. Leveranciers-melding vervangt uw verplichting niet. Klok loopt door." },
   ], sel)
   const learningObjectives: LearningObjective[] = [
-    { id: "obj-exf-r2-1", description: "AP Art.33-melding ingediend binnen 72u", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["exf-r2-a1"], achieved: false },
-    { id: "obj-exf-r2-2", description: "Formele schriftelijke notificatie verstuurd naar getroffen client", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["exf-r2-a2"], achieved: false },
+    { id: "obj-exf-r2-1", description: "AP Art.33-melding ingediend binnen 72u", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["exf-r2-leg-1"], achieved: false },
+    { id: "obj-exf-r2-2", description: "Formele schriftelijke notificatie verstuurd naar getroffen client", module: "legal_regulatory", measuredBy: "decision", triggerActionIds: ["exf-r2-hoc-1"], achieved: false },
   ]
   return { round_number: 2, title: "Breach Confirmed — Regulatory Clock Running", situation_update: "It is 11:00. 340,000 customer records were systematically exfiltrated. The GDPR 72-hour AP notification clock has 61 hours remaining. An affected client is demanding a formal response today. The vendor has confirmed their own compromise.", timerMinutes: 20, injects, facilitatorNotes, roleActions, learningObjectives }
 }
