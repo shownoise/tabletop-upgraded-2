@@ -1,4 +1,4 @@
-import type { ExerciseConfig, InjectType, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, Urgency } from "./types"
+import type { ExerciseConfig, FactCheckTag, InjectType, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, Urgency } from "./types"
 import type { AssessmentDimensionId, SessionAssessment } from "./engine/types"
 
 async function post<T = unknown>(url: string, body?: unknown): Promise<T> {
@@ -82,4 +82,12 @@ export const api = {
     post<{ ok: true }>("/api/session/phase-pause", { paused }),
   markReady: (participantId: string) =>
     post<{ ok: true }>("/api/session/ready", { participantId }),
+  replotInjects: () =>
+    post<{ ok: true; version?: number }>("/api/session/replot-injects", {}),
+  tagInject: (input: { participantId: string; injectId: string; tag: FactCheckTag }) =>
+    post<{ ok: true }>("/api/session/tag-inject", input),
+  addAnnotation: (input: { participantId: string; injectId: string; start: number; end: number; tag: FactCheckTag }) =>
+    post<{ ok: true; annotationId?: string }>("/api/session/annotate-inject", input),
+  removeAnnotation: (input: { participantId: string; annotationId: string }) =>
+    post<{ ok: true }>("/api/session/annotate-inject/remove", input),
 }

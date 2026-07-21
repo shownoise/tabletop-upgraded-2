@@ -68,6 +68,12 @@ function labelFor(ev: TimelineEvent): string {
       return "Inject pushed earlier"
     case "discussion_phase_changed":
       return "Discussion phase"
+    case "inject_routes_plotted":
+      return "Verdeling geplot"
+    case "inject_routes_replotted":
+      return "Verdeling herzien"
+    case "inject_tagged":
+      return "Fact-check tag"
   }
 }
 
@@ -98,5 +104,14 @@ function descFor(ev: TimelineEvent): string {
     }
     case "discussion_phase_changed":
       return typeof ev.data.phaseName === "string" ? `Next: ${ev.data.phaseName}` : "Phase advanced"
+    case "inject_routes_plotted":
+      return `v${ev.data.version ?? "?"} — ${ev.data.count ?? 0} injects verdeeld`
+    case "inject_routes_replotted":
+      return `v${ev.data.version ?? "?"} — herverdeeld (${ev.data.count ?? 0})`
+    case "inject_tagged": {
+      const tag = ev.data.tag as string | undefined
+      const title = ev.data.injectTitle as string | undefined
+      return title ? `${tag ?? "tag"} — ${title}` : `Tag: ${tag ?? "?"}`
+    }
   }
 }

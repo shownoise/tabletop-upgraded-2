@@ -16,6 +16,9 @@ import { InjectControls } from "./inject-controls"
 import { DecisionsView } from "./decisions-view"
 import { SpecialsPanel } from "./specials-panel"
 import { GraphPathPanel } from "./graph-path-panel"
+import { InjectRoutePlan } from "./inject-route-plan"
+import { FactCheckPanel } from "./fact-check-panel"
+import { buildTeamRoles } from "@/lib/team-roster"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
@@ -347,6 +350,13 @@ export function ControlDashboard() {
     }
   }
 
+  async function retreatPhase() {
+    const idx = PHASE_ORDER.indexOf(currentPhase)
+    if (idx > 0) {
+      await run("phase", () => api.setPhase(PHASE_ORDER[idx - 1]))
+    }
+  }
+
   async function run(label: string, fn: () => Promise<unknown>) {
     setWorking(label)
     setError(null)
@@ -553,15 +563,26 @@ export function ControlDashboard() {
           <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "currentPhase")}</span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={advancePhase}
-                disabled={working !== null || currentPhase === "review"}
-                className="gap-1.5 font-mono uppercase tracking-wider text-[10px]"
-              >
-                {tr(lang, "advancePhase")} <PhaseArrow className="size-3" />
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={retreatPhase}
+                  disabled={working !== null || currentPhase === "inject"}
+                  className="gap-1.5 font-mono uppercase tracking-wider text-[10px]"
+                >
+                  <ChevronLeft className="size-3" /> Vorige fase
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={advancePhase}
+                  disabled={working !== null || currentPhase === "review"}
+                  className="gap-1.5 font-mono uppercase tracking-wider text-[10px]"
+                >
+                  Volgende fase <PhaseArrow className="size-3" />
+                </Button>
+              </div>
             </div>
             {/* Phase progress indicator */}
             <div className="flex items-center gap-2">
@@ -933,6 +954,18 @@ export function ControlDashboard() {
 
             {/* Graph path panel — only for graph-driven sessions */}
             {session.graph && <GraphPathPanel session={session} />}
+
+            {/* Locked-at-start inject → recipient routing */}
+            {(session.injectRoutePlan || session.status === "active") && (
+              <InjectRoutePlan
+                session={session}
+                teamRoles={buildTeamRoles()}
+                onReplot={async () => { await api.replotInjects() }}
+              />
+            )}
+
+            {/* Fact-check panel — live tag distribution + ground truth (facilitator-only) */}
+            <FactCheckPanel session={session} />
 
             {/* Specials panel — shown when mode is not off */}
             {session.config.specialsMode && session.config.specialsMode !== "off" && (

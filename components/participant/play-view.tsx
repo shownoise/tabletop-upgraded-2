@@ -13,6 +13,8 @@ import type { GoalId } from "@/lib/engine/types"
 import { InjectFeed } from "./inject-feed"
 import { UrgentInjectModal } from "./urgent-inject-modal"
 import { RoundTimerCompact } from "./round-timer"
+import { RoundPhaseTimeline } from "./round-phase-timeline"
+import { FactCheckReview } from "./fact-check-review"
 import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
@@ -869,6 +871,13 @@ export function PlayView() {
       {/* HUD header */}
       <SessionHUD session={session} connected={connected} name={name} participantRole={participantRole} lang={lang} setLang={setLang} />
 
+      {/* Whole-round phase timeline (four top-level phases) */}
+      {currentRound && session.activeRoundPhaseState && (
+        <div className="mx-auto max-w-6xl px-4 pt-3 md:px-8">
+          <RoundPhaseTimeline state={session.activeRoundPhaseState} paused={session.phaseAutoAdvancePaused} />
+        </div>
+      )}
+
       {/* Round timer + inline banner zone */}
       {currentRound && (
         <div className="sticky top-[52px] z-30 bg-background/95 backdrop-blur border-b border-border">
@@ -1104,8 +1113,13 @@ export function PlayView() {
               )
             })()}
 
+            {/* Fact-check review — shown when the current round reaches the review phase */}
+            {session.roundPhase === "review" && participantId && (
+              <FactCheckReview session={session} participantId={participantId} roundIndex={session.currentRound} />
+            )}
+
             {/* Inject feed — always shown for context */}
-            <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} />
+            <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} session={session} participantId={participantId ?? undefined} />
           </div>
 
           {/* Sidebar */}

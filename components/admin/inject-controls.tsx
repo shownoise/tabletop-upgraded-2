@@ -27,7 +27,7 @@ import type { Inject, InjectType, Role, SessionState, Urgency } from "@/lib/type
 import { ROLE_META } from "@/lib/types"
 import { api } from "@/lib/api-client"
 import { injectTypeLabel, urgencyClasses, urgencyLabel, channelLabel, channelIcon } from "@/lib/format"
-import { resolveInjectRecipients } from "@/lib/inject-routing"
+import { getInjectRecipients } from "@/lib/inject-routing"
 import { buildTeamRoles } from "@/lib/team-roster"
 
 type DeliveryState = "not_pushed" | "scheduled_future" | "delivered"
@@ -51,10 +51,6 @@ export function InjectControls({ session, disabled, lang = "en" }: { session: Se
   }, [])
 
   const teamRoles = useMemo(buildTeamRoles, [])
-  const presentRoles = useMemo<Role[]>(
-    () => session.participants.map(p => p.role).filter((r): r is Role => !!r),
-    [session.participants],
-  )
 
   async function handlePush(injectId: string) {
     if (currentIndex < 0) return
@@ -97,20 +93,24 @@ export function InjectControls({ session, disabled, lang = "en" }: { session: Se
                 const pushedRec = pushedIndex.get(inject.id)
                 let deliveryState: DeliveryState = "not_pushed"
                 let scheduledInSec: number | undefined
+                let deliveredAt: number | undefined
                 if (pushedRec) {
-                  if (pushedRec.pushedAt <= now) deliveryState = "delivered"
-                  else {
+                  if (pushedRec.pushedAt <= now) {
+                    deliveryState = "delivered"
+                    deliveredAt = pushedRec.pushedAt
+                  } else {
                     deliveryState = "scheduled_future"
                     scheduledInSec = Math.max(0, Math.round((pushedRec.pushedAt - now) / 1000))
                   }
                 }
-                const recipients = resolveInjectRecipients({ inject, presentRoles, teamRoles })
+                const recipients = getInjectRecipients(inject, session, teamRoles)
                 return (
                   <InjectRow
                     key={inject.id}
                     inject={inject}
                     deliveryState={deliveryState}
                     scheduledInSec={scheduledInSec}
+                    deliveredAt={deliveredAt}
                     recipients={recipients}
                     busy={busy === inject.id}
                     disabled={disabled || isLobby || isEnded || deliveryState === "delivered" || busy !== null}
@@ -161,12 +161,13 @@ function InjectRow(props: {
   inject: Inject
   deliveryState: DeliveryState
   scheduledInSec?: number
+  deliveredAt?: number
   recipients: Role[]
   busy: boolean
   disabled: boolean
   onPush: () => void
 }) {
-  const { inject, deliveryState, scheduledInSec, recipients, busy, disabled, onPush } = props
+  const { inject, deliveryState, scheduledInSec, deliveredAt, recipients, busy, disabled, onPush } = props
   const isDelivered = deliveryState === "delivered"
   const isScheduled = deliveryState === "scheduled_future"
   const borderClass = isDelivered
@@ -174,11 +175,14 @@ function InjectRow(props: {
     : isScheduled
       ? "border-amber-400/50 bg-amber-500/5"
       : "border-border"
+  const deliveredTime = deliveredAt
+    ? new Date(deliveredAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : undefined
   const buttonLabel = isDelivered
-    ? "Delivered"
+    ? deliveredTime ? `Bezorgd om ${deliveredTime}` : "Bezorgd"
     : isScheduled
-      ? `Push earlier${typeof scheduledInSec === "number" ? ` · ${formatSec(scheduledInSec)}` : ""}`
-      : "Push to participants"
+      ? `Push eerder${typeof scheduledInSec === "number" ? ` (was over ${formatSec(scheduledInSec)})` : ""}`
+      : "Push nu"
   const ButtonIcon = busy ? Loader2 : isDelivered ? Check : Send
   return (
     <li className={`flex flex-col gap-3 rounded-md border bg-background p-4 transition-colors ${borderClass}`}>

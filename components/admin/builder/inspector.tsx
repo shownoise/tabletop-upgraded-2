@@ -385,6 +385,9 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
             <option value="unverified">⚠ Ongeverifieerd</option>
             <option value="misleading">✗ Misleidend (verborgen voor participant)</option>
           </select>
+          <p className="mt-1 font-mono text-[10px] text-muted-foreground leading-snug">
+            Alleen jij (facilitator) ziet dit. Participanten moeten zelf de betrouwbaarheid bepalen.
+          </p>
         </Field>
       </div>
 

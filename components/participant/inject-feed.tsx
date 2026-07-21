@@ -5,11 +5,14 @@ import {
   Mail, MessageSquare, MessageCircle, AlertTriangle, Phone,
   Newspaper, Shield, Smartphone, FileText, ShieldAlert,
 } from "lucide-react"
-import type { PushedInject, InjectChannel, InjectType, Urgency } from "@/lib/types"
+import type { FactCheckTag, PushedInject, InjectChannel, InjectType, SessionState, Urgency } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import type { Role } from "@/lib/types"
-import { resolveInjectRecipients } from "@/lib/inject-routing"
+import { getInjectRecipients, resolveInjectRecipients } from "@/lib/inject-routing"
 import { buildTeamRoles } from "@/lib/team-roster"
+import { InjectVerifyMenu } from "./inject-verify-menu"
+import { InjectAnnotator } from "./inject-annotator"
+import { api } from "@/lib/api-client"
 import { formatTime } from "@/lib/format"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
@@ -54,6 +57,20 @@ interface InjectCardProps {
   inject: PushedInject["inject"]
   pushedAt: number
   size: InjectSize
+  myTag?: FactCheckTag
+  totalTags?: number
+  hasSplit?: boolean
+  reviewPhase?: boolean
+  participantId?: string
+  myAnnotations?: Array<{ id: string; start: number; end: number; tag: FactCheckTag }>
+  onTag?: (tag: FactCheckTag) => void | Promise<void>
+  isFactCheckTarget?: boolean
+}
+
+const OWN_TAG_STYLE: Record<FactCheckTag, { border: string; pill: string; underline: string }> = {
+  fact:       { border: "border-l-emerald-500", pill: "border-emerald-500/40 bg-emerald-500/10 text-emerald-500", underline: "decoration-emerald-500/60" },
+  assumption: { border: "border-l-yellow-500",  pill: "border-yellow-500/40 bg-yellow-500/10 text-yellow-500",    underline: "decoration-yellow-500/60"  },
+  misleading: { border: "border-l-red-500",     pill: "border-red-500/40 bg-red-500/10 text-red-500",             underline: "decoration-red-500/60"     },
 }
 
 // ─────────────────── Shell (shared wrapper) ───────────────────
@@ -63,16 +80,26 @@ function Shell({
   pushedAt,
   size,
   subheader,
+  myTag,
+  participantId,
+  myAnnotations,
+  reviewPhase,
+  isFactCheckTarget,
 }: InjectCardProps & { channel: string; subheader?: React.ReactNode }) {
   const cfg = CHANNEL_CONFIG[channel] ?? CHANNEL_CONFIG.raw
   const { Icon } = cfg
   const big = size === "xl"
   const typeLabel = inject.type ? INJECT_TYPE_LABELS[inject.type] : undefined
   const showTeamBadge = inject.targetTeam && inject.targetTeam !== "all"
+  const ownStyle = myTag ? OWN_TAG_STYLE[myTag] : undefined
+  const borderStyle = ownStyle
+    ? undefined
+    : { borderLeft: `3px solid ${cfg.color}` }
+  const borderCls = ownStyle ? `border-l-[3px] ${ownStyle.border}` : ""
   return (
     <div
-      className="border border-tt-border bg-tt-surface overflow-hidden"
-      style={{ borderLeft: `3px solid ${cfg.color}` }}
+      className={`border border-tt-border bg-tt-surface overflow-hidden ${borderCls}`}
+      style={borderStyle}
     >
       {/* Channel strip */}
       <div className="flex items-center gap-2 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
@@ -94,21 +121,6 @@ function Shell({
             NIS2
           </span>
         )}
-        {inject.reliability === "fact" && (
-          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-emerald-500/40 bg-emerald-500/10 text-emerald-500 px-1 py-px">
-            ✓ Feit
-          </span>
-        )}
-        {inject.reliability === "assumption" && (
-          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-yellow-500/40 bg-yellow-500/10 text-yellow-500 px-1 py-px">
-            ? Aanname
-          </span>
-        )}
-        {inject.reliability === "unverified" && (
-          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-orange-500/40 bg-orange-500/10 text-orange-500 px-1 py-px">
-            ⚠ Ongeverifieerd
-          </span>
-        )}
         {showTeamBadge && (
           <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-tt-accent/30 px-1 py-px text-tt-accent">
             {inject.targetTeam === "technical_it" ? "IT" : "CRISIS"}
@@ -120,6 +132,14 @@ function Shell({
             <span className="ml-1 opacity-50">&lt;{inject.senderHandle}&gt;</span>
           )}
         </span>
+        {ownStyle && (
+          <span
+            className={`font-mono text-[9px] uppercase tracking-widest shrink-0 border px-1 py-px ${ownStyle.pill}`}
+            title="Alleen jij ziet dit — jouw eigen markering"
+          >
+            {myTag}
+          </span>
+        )}
         <span className="font-mono text-[10px] text-tt-dim shrink-0">
           {inject.timestamp ?? formatTime(pushedAt)}
         </span>
@@ -129,12 +149,86 @@ function Shell({
 
       {/* Content */}
       <div
-        className={`px-4 py-4 font-mono whitespace-pre-wrap leading-relaxed text-tt-bright ${
+        className={`px-4 py-4 font-mono leading-relaxed text-tt-bright whitespace-pre-wrap ${
           big ? "text-sm" : "text-xs"
         }`}
       >
-        {stripMarkdown(inject.content)}
+        <InjectBody
+          text={stripMarkdown(inject.content)}
+          injectId={inject.id}
+          participantId={isFactCheckTarget ? participantId : undefined}
+          annotations={myAnnotations ?? []}
+          reviewLocked={reviewPhase}
+        />
       </div>
+    </div>
+  )
+}
+
+interface InjectBodyProps {
+  text: string
+  injectId: string
+  participantId?: string
+  annotations: Array<{ id: string; start: number; end: number; tag: FactCheckTag }>
+  reviewLocked?: boolean
+}
+
+function InjectBody(props: InjectBodyProps) {
+  const { text, injectId, participantId, annotations, reviewLocked } = props
+  if (participantId && !reviewLocked) {
+    return (
+      <InjectAnnotator
+        injectId={injectId}
+        participantId={participantId}
+        content={text}
+        annotations={annotations}
+      />
+    )
+  }
+  if (annotations.length === 0) return <>{text}</>
+  const sorted = [...annotations].sort((a, b) => a.start - b.start)
+  const segs: Array<{ start: number; end: number; tag?: FactCheckTag }> = []
+  let cursor = 0
+  for (const a of sorted) {
+    if (a.start > cursor) segs.push({ start: cursor, end: a.start })
+    segs.push({ start: Math.max(a.start, cursor), end: a.end, tag: a.tag })
+    cursor = Math.max(cursor, a.end)
+  }
+  if (cursor < text.length) segs.push({ start: cursor, end: text.length })
+  return (
+    <>
+      {segs.map((seg, i) => {
+        const slice = text.slice(seg.start, seg.end)
+        if (!seg.tag) return <span key={i}>{slice}</span>
+        return (
+          <span key={i} className={`underline decoration-2 ${OWN_TAG_STYLE[seg.tag].underline}`}>{slice}</span>
+        )
+      })}
+    </>
+  )
+}
+
+interface FactCheckFooterProps {
+  inject: PushedInject["inject"]
+  participantId?: string
+  myTag?: FactCheckTag
+  totalTags: number
+  hasSplit: boolean
+  reviewPhase: boolean
+  onTag: (tag: FactCheckTag) => void | Promise<void>
+}
+
+function FactCheckFooter(props: FactCheckFooterProps) {
+  const { participantId, myTag, totalTags, hasSplit, reviewPhase, onTag } = props
+  if (!participantId) return null
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-b-none border border-t-0 border-tt-border/60 px-4 py-2 bg-tt-surface">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
+        {totalTags > 0
+          ? `${totalTags} markering${totalTags === 1 ? "" : "en"}${hasSplit ? " · uitgesplitst" : ""}`
+          : "Nog niet gemarkeerd"}
+      </span>
+      <InjectVerifyMenu currentTag={myTag} disabled={reviewPhase} onTag={onTag} />
     </div>
   )
 }
@@ -367,6 +461,19 @@ function InjectCard(props: InjectCardProps) {
   }
 }
 
+function computeTagStats(
+  injectId: string,
+  factChecks: SessionState["factChecks"],
+  myParticipantId?: string,
+): { totalTags: number; hasSplit: boolean; myTag?: FactCheckTag } {
+  const list = (factChecks ?? []).filter(f => f.injectId === injectId)
+  const totalTags = list.length
+  const tags = new Set(list.map(f => f.tag))
+  const hasSplit = tags.size > 1
+  const myTag = myParticipantId ? list.find(f => f.participantId === myParticipantId)?.tag : undefined
+  return { totalTags, hasSplit, myTag }
+}
+
 // ─────────────────── Size logic ───────────────────
 function getSize(urgency: Urgency, index: number, isSurprise: boolean): InjectSize {
   if (isSurprise || urgency === "critical") return "xl"
@@ -388,11 +495,15 @@ export function InjectFeed({
   lang,
   participantRole,
   participants,
+  session,
+  participantId,
 }: {
   pushed: PushedInject[]
   lang: Lang
   participantRole?: Role
   participants?: Array<{ role?: Role | null }>
+  session?: SessionState
+  participantId?: string
 }) {
   const myRoleLabel = participantRole ? ROLE_META[participantRole]?.label : undefined
 
@@ -417,9 +528,13 @@ export function InjectFeed({
       if (inject.targetRoles?.length) return inject.targetRoles.includes(participantRole)
       return true
     }
-    const recipients = resolveInjectRecipients({ inject: p.inject, presentRoles, teamRoles })
+    const recipients = session
+      ? getInjectRecipients(p.inject, session, teamRoles)
+      : resolveInjectRecipients({ inject: p.inject, presentRoles, teamRoles })
     return recipients.includes(participantRole)
   })
+  void participantId
+
 
   const sorted = [...filtered].sort((a, b) => b.pushedAt - a.pushedAt)
   const topRef = useRef<HTMLDivElement>(null)
@@ -478,6 +593,9 @@ export function InjectFeed({
             p.inject.urgency === "critical" ? "var(--tt-red)" :
             p.inject.urgency === "high"     ? "var(--tt-warn)" :
             p.inject.urgency === "medium"   ? "var(--tt-accent)" : "var(--tt-dim)"
+          const isFactCheckTarget = p.inject.reliability !== undefined
+          const reviewPhase = session?.roundPhase === "review"
+          const { totalTags, hasSplit, myTag } = computeTagStats(p.inject.id, session?.factChecks, participantId)
           return (
             <li
               key={`${p.inject.id}-${p.pushedAt}`}
@@ -501,7 +619,31 @@ export function InjectFeed({
                   {formatTime(p.pushedAt)}
                 </span>
               </div>
-              <InjectCard inject={p.inject} pushedAt={p.pushedAt} size={size} />
+              <InjectCard
+                inject={p.inject}
+                pushedAt={p.pushedAt}
+                size={size}
+                myTag={myTag}
+                participantId={participantId}
+                myAnnotations={(session?.injectAnnotations ?? []).filter(a => a.injectId === p.inject.id && a.participantId === participantId).map(a => ({ id: a.id, start: a.start, end: a.end, tag: a.tag }))}
+                reviewPhase={reviewPhase}
+                isFactCheckTarget={isFactCheckTarget}
+              />
+              {isFactCheckTarget && participantId && (
+                <FactCheckFooter
+                  inject={p.inject}
+                  participantId={participantId}
+                  myTag={myTag}
+                  totalTags={totalTags}
+                  hasSplit={hasSplit}
+                  reviewPhase={reviewPhase}
+                  onTag={async (tag) => {
+                    try {
+                      await api.tagInject({ participantId, injectId: p.inject.id, tag })
+                    } catch { /* ignore */ }
+                  }}
+                />
+              )}
             </li>
           )
         })}

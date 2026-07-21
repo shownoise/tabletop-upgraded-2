@@ -350,8 +350,11 @@ export interface Inject {
   nis2Relevant?: boolean
   // Drip delivery: if > 0, this inject appears X seconds after the round starts (client-side reveal).
   deliverySeconds?: number
-  // BOB-training: how reliable is this info? Participants see a badge (except 'misleading' — no badge, they must detect).
+  // BOB-training: how reliable is this info? Ground truth — hidden from participants during play,
+  // revealed in the review phase.
   reliability?: InjectReliability
+  // Optional per-span ground truth for annotation-level scoring (Phase D.11).
+  groundTruthAnnotations?: Array<{ start: number; end: number; tag: FactCheckTag }>
 }
 
 export interface FacilitatorNotes {
@@ -505,6 +508,9 @@ export type TimelineEventType =
   | "special_triggered"
   | "special_completed"
   | "discussion_phase_changed"
+  | "inject_routes_plotted"
+  | "inject_routes_replotted"
+  | "inject_tagged"
 
 export interface TimelineEvent {
   id: string
@@ -541,6 +547,40 @@ export interface GraphRuntimeState {
   }
 }
 
+export interface InjectRoutePlan {
+  version: number
+  plottedAt: number
+  presentRolesAtPlot: Role[]
+  routes: Record<string, Role[]>
+}
+
+export interface RoundPhaseState {
+  roundNumber: number
+  currentPhase: RoundPhase
+  phaseStartedAt: number
+  durations: Record<RoundPhase, number>
+}
+
+export type FactCheckTag = 'fact' | 'assumption' | 'misleading'
+
+export interface FactCheckEntry {
+  injectId: string
+  participantId: string
+  tag: FactCheckTag
+  taggedAt: number
+  changedCount: number
+}
+
+export interface InjectAnnotation {
+  id: string
+  injectId: string
+  participantId: string
+  start: number
+  end: number
+  tag: FactCheckTag
+  createdAt: number
+}
+
 export interface SessionState {
   id: string
   joinCode: string
@@ -575,6 +615,14 @@ export interface SessionState {
   // Graph runtime — populated when the session was created from a scenario graph.
   graph?: ScenarioGraph
   graphState?: GraphRuntimeState
+  // Locked-at-start inject → recipient routing. Undefined for sessions predating this feature.
+  injectRoutePlan?: InjectRoutePlan
+  // Whole-round phase timeline state (inject → discussion → decision → review).
+  activeRoundPhaseState?: RoundPhaseState
+  // Fact-check tagging (participant privately marks reliability of each inject).
+  factChecks?: FactCheckEntry[]
+  // Inline text-highlight annotations on inject bodies (private per participant).
+  injectAnnotations?: InjectAnnotation[]
 }
 
 export interface PublicState {

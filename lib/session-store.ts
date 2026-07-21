@@ -17,14 +17,19 @@ import {
 } from "./db"
 import type { ScenarioGraph } from "./graph/types"
 import type {
-  ActivePhaseState, ExerciseConfig, FacilitatorRoundScore, GovernanceFlag, Inject, InjectType,
+  ActivePhaseState, ExerciseConfig, FactCheckEntry, FactCheckTag, FacilitatorRoundScore,
+  GovernanceFlag, Inject, InjectAnnotation, InjectRoutePlan, InjectType,
   LearningObjective, LiveEvent, LiveEventName, Participant, PublicState, Role, RoleAction,
-  RoleDocument, RoundPhase, Scenario, SessionState, SimulationMode, SpecialEvent, SpecialMessage,
-  SpecialScore, SpecialType, StreamMessage, SubmittedDecision, TimelineEvent, TimelineEventType, Urgency,
+  RoleDocument, RoundPhase, RoundPhaseState, Scenario, SessionState, SimulationMode, SpecialEvent,
+  SpecialMessage, SpecialScore, SpecialType, StreamMessage, SubmittedDecision, TimelineEvent,
+  TimelineEventType, Urgency,
 } from "./types"
 import { ROLE_FALLBACK } from "./types"
 import type { AssessmentEvent, AssessmentDimensionId } from "./engine/types"
 import { BOB_PHASES, OODA_PHASES } from "./engine/facilitator-support"
+import { plotInjectRoutes } from "./inject-routing"
+import { buildTeamRoles } from "./team-roster"
+import { computeRoundPhaseDurations } from "./engine/round-phases"
 
 function remapMissingRoles(scenario: Scenario, selectedRoles: Role[]): Scenario {
   const active = new Set(selectedRoles)
@@ -83,9 +88,45 @@ function broadcastState(session: SessionState | null) {
   // re-tick here in case a fresh phase boundary crossed between mutation and
   // broadcast; the update propagates to SSE listeners immediately but skips
   // the extra write to keep broadcasts cheap (next mutation will persist).
-  const ticked = session ? tickPhases(session) : null
+  const ticked = session ? tickPhases(tickRoundPhase(session)) : null
   const snapshot: PublicState = { session: ticked }
   for (const l of listeners) l({ type: "state", data: snapshot })
+}
+
+function tickRoundPhase(session: SessionState): SessionState {
+  const state = session.activeRoundPhaseState
+  if (!state) return session
+  if (session.phaseAutoAdvancePaused) return session
+  if (session.graph) return session
+
+  const durationMs = (state.durations[state.currentPhase] ?? 0) * 1000
+  const elapsedMs = Date.now() - state.phaseStartedAt
+  if (elapsedMs < durationMs) return session
+
+  const order: RoundPhase[] = ["inject", "discussion", "decision", "review"]
+  const currentIdx = order.indexOf(state.currentPhase)
+  const nextPhase = order[currentIdx + 1]
+  if (!nextPhase) return session
+
+  const enteringDiscussion = nextPhase === "discussion"
+  const now = Date.now()
+  return {
+    ...session,
+    roundPhase: nextPhase,
+    activeRoundPhaseState: {
+      ...state,
+      currentPhase: nextPhase,
+      phaseStartedAt: state.phaseStartedAt + durationMs,
+    },
+    activeDiscussionPhase: enteringDiscussion
+      ? {
+          roundNumber: state.roundNumber,
+          phaseIndex: 0,
+          phaseStartedAt: now,
+          extended: false,
+        }
+      : session.activeDiscussionPhase,
+  }
 }
 
 // ─── Phase auto-advance (Phase 10) ─────────────────────────────
@@ -157,6 +198,13 @@ function emit(name: LiveEventName, payload: Record<string, unknown>) {
 // Server-side logic (flagging, scoring) always uses the real stored state.
 
 export function toParticipantState(session: SessionState): SessionState {
+  const stripInjectGroundTruth = (inject: Inject, isReviewRound: boolean): Inject => {
+    if (isReviewRound) return inject
+    // WHY: participants must judge reliability themselves during play — the fact-check reveal
+    // waits until the review phase.
+    const { reliability: _r, groundTruthAnnotations: _g, ...safe } = inject
+    return safe
+  }
   return {
     ...session,
     scenario: {
@@ -172,9 +220,13 @@ export function toParticipantState(session: SessionState): SessionState {
             facilitatorNotes: undefined,
           }
         }
+        const isReviewRound =
+          (i < session.currentRound) ||
+          (i === session.currentRound && session.roundPhase === "review")
         // Current + past rounds: strip facilitator-only fields
         return {
           ...round,
+          injects: round.injects.map(inj => stripInjectGroundTruth(inj, isReviewRound)),
           facilitatorNotes: undefined,
           roleActions: round.roleActions?.map(action => ({
             id: action.id,
@@ -187,6 +239,13 @@ export function toParticipantState(session: SessionState): SessionState {
         }
       }),
     },
+    pushedInjects: session.pushedInjects.map(p => {
+      const isReviewRound =
+        p.roundIndex < 0 ||
+        p.roundIndex < session.currentRound ||
+        (p.roundIndex === session.currentRound && session.roundPhase === "review")
+      return { ...p, inject: stripInjectGroundTruth(p.inject, isReviewRound) }
+    }),
     // Strip flags — these reveal which decisions were marked bad
     governanceFlags: [],
     // Keep decisions for own-decision display, but strip flag metadata
@@ -310,7 +369,7 @@ async function mutate(fn: (s: SessionState) => SessionState | null | { error: st
   if (typeof updated === "object" && updated !== null && "error" in updated && !("participants" in updated)) {
     return { ok: false, error: updated.error }
   }
-  const ticked = tickPhases(updated as SessionState)
+  const ticked = tickPhases(tickRoundPhase(updated as SessionState))
   await dbSetSession(ticked)
   broadcastState(ticked)
   return { ok: true }
@@ -361,6 +420,8 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
       for (const p of autoPushed) {
         updated = pushTimeline(updated, "inject_pushed", { roundIndex, inject: p.inject })
       }
+      updated = mergeInjectRoutePlan(updated, round.injects.map(i => i.id))
+      updated = withRoundPhaseState(updated, roundIndex, now)
     } else if (output.kind === "trigger_special") {
       const mode = updated.config.specialsMode
       if (!mode || mode === "off") continue
@@ -475,17 +536,212 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
       const now = Date.now()
       let updated = triggerEngine(s, { kind: "auto" })
       updated = { ...updated, status: "active" as const, startedAt: now }
+      updated = withInjectRoutePlan(updated)
+      updated = withRoundPhaseState(updated, updated.currentRound, now)
       updated = pushTimeline(updated, "session_started", { roundIndex: updated.currentRound })
       return updated
     }
     if (s.scenario.rounds.length === 0) return null
     const now = Date.now()
     let updated: SessionState = { ...s, status: "active" as const, currentRound: 0, roundStartedAt: now, startedAt: now }
+    updated = withInjectRoutePlan(updated)
+    updated = withRoundPhaseState(updated, 0, now)
     updated = pushTimeline(updated, "session_started", { roundIndex: 0 })
     return updated
   })
   if (result.ok) emit("start_session", { roundIndex: 0 })
   return result
+}
+
+function withInjectRoutePlan(session: SessionState): SessionState {
+  const presentRoles = session.participants.map(p => p.role).filter((r): r is Role => !!r)
+  const teamRoles = buildTeamRoles()
+  const plan = plotInjectRoutes({
+    scenario: session.scenario,
+    presentRoles,
+    teamRoles,
+    previousVersion: session.injectRoutePlan?.version ?? 0,
+  })
+  const count = Object.keys(plan.routes).length
+  let updated: SessionState = { ...session, injectRoutePlan: plan }
+  updated = pushTimeline(updated, "inject_routes_plotted", { version: plan.version, count })
+  return updated
+}
+
+function withRoundPhaseState(session: SessionState, roundIndex: number, startedAt: number): SessionState {
+  const round = session.scenario.rounds[roundIndex]
+  if (!round) return session
+  const roundBudgetSeconds = (round.timerMinutes ?? session.config.timerPerRound ?? 10) * 60
+  const durations = computeRoundPhaseDurations(roundBudgetSeconds)
+  const state: RoundPhaseState = {
+    roundNumber: round.round_number,
+    currentPhase: "inject",
+    phaseStartedAt: startedAt,
+    durations,
+  }
+  return { ...session, activeRoundPhaseState: state, roundPhase: "inject" }
+}
+
+function mergeInjectRoutePlan(session: SessionState, newInjectIds: string[]): SessionState {
+  if (!session.injectRoutePlan) return session
+  const presentRoles = session.participants.map(p => p.role).filter((r): r is Role => !!r)
+  if (presentRoles.length === 0) return session
+  const teamRoles = buildTeamRoles()
+  const pending = newInjectIds.filter(id => !session.injectRoutePlan!.routes[id])
+  if (pending.length === 0) return session
+  const partial = plotInjectRoutes({
+    scenario: session.scenario,
+    presentRoles,
+    teamRoles,
+    previousVersion: (session.injectRoutePlan.version ?? 1) - 1,
+  })
+  const merged: Record<string, Role[]> = { ...session.injectRoutePlan.routes }
+  for (const id of pending) {
+    if (partial.routes[id]) merged[id] = partial.routes[id]
+  }
+  return {
+    ...session,
+    injectRoutePlan: {
+      ...session.injectRoutePlan,
+      routes: merged,
+    },
+  }
+}
+
+export async function tagInject(input: {
+  participantId: string
+  injectId: string
+  tag: FactCheckTag
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  if (session.roundPhase === "review") return { ok: false, error: "Tagging gesloten tijdens review." }
+
+  const participant = session.participants.find(p => p.id === input.participantId)
+  if (!participant) return { ok: false, error: "Participant not found." }
+
+  // Locate the inject in the scenario (or pushed) — needed to emit a titled timeline event.
+  let injectTitle: string | undefined
+  for (const r of session.scenario.rounds) {
+    const inj = r.injects.find(i => i.id === input.injectId)
+    if (inj) { injectTitle = inj.title; break }
+  }
+  if (!injectTitle) {
+    const pushed = session.pushedInjects.find(p => p.inject.id === input.injectId)
+    if (pushed) injectTitle = pushed.inject.title
+  }
+
+  const existingIdx = (session.factChecks ?? []).findIndex(
+    f => f.injectId === input.injectId && f.participantId === input.participantId
+  )
+  const entries = [...(session.factChecks ?? [])]
+  const now = Date.now()
+
+  if (existingIdx >= 0) {
+    const existing = entries[existingIdx]
+    if (existing.tag === input.tag) return { ok: true }
+    entries[existingIdx] = {
+      ...existing,
+      tag: input.tag,
+      taggedAt: now,
+      changedCount: (existing.changedCount ?? 0) + 1,
+    }
+  } else {
+    const entry: FactCheckEntry = {
+      injectId: input.injectId,
+      participantId: input.participantId,
+      tag: input.tag,
+      taggedAt: now,
+      changedCount: 0,
+    }
+    entries.push(entry)
+  }
+
+  let updated: SessionState = { ...session, factChecks: entries }
+  updated = pushTimeline(updated, "inject_tagged", {
+    injectId: input.injectId,
+    injectTitle,
+    participantId: input.participantId,
+    participantName: participant.name,
+    tag: input.tag,
+  })
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true }
+}
+
+export async function addAnnotation(input: {
+  participantId: string
+  injectId: string
+  start: number
+  end: number
+  tag: FactCheckTag
+}): Promise<{ ok: boolean; error?: string; annotationId?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  if (session.roundPhase === "review") return { ok: false, error: "Annotaties gesloten tijdens review." }
+  if (input.start < 0 || input.end <= input.start) {
+    return { ok: false, error: "Invalid range." }
+  }
+
+  const annotation: InjectAnnotation = {
+    id: genId("ann"),
+    injectId: input.injectId,
+    participantId: input.participantId,
+    start: input.start,
+    end: input.end,
+    tag: input.tag,
+    createdAt: Date.now(),
+  }
+  const updated: SessionState = {
+    ...session,
+    injectAnnotations: [...(session.injectAnnotations ?? []), annotation],
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true, annotationId: annotation.id }
+}
+
+export async function removeAnnotation(input: {
+  participantId: string
+  annotationId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  const list = session.injectAnnotations ?? []
+  const target = list.find(a => a.id === input.annotationId)
+  if (!target) return { ok: false, error: "Annotation not found." }
+  if (target.participantId !== input.participantId) return { ok: false, error: "Not yours to remove." }
+  const updated: SessionState = {
+    ...session,
+    injectAnnotations: list.filter(a => a.id !== input.annotationId),
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true }
+}
+
+export async function replotInjectRoutes(): Promise<{ ok: boolean; error?: string; version?: number }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  const presentRoles = session.participants.map(p => p.role).filter((r): r is Role => !!r)
+  const teamRoles = buildTeamRoles()
+  const plan = plotInjectRoutes({
+    scenario: session.scenario,
+    presentRoles,
+    teamRoles,
+    previousVersion: session.injectRoutePlan?.version ?? 0,
+  })
+  const count = Object.keys(plan.routes).length
+  let updated: SessionState = { ...session, injectRoutePlan: plan }
+  updated = pushTimeline(updated, "inject_routes_replotted", {
+    version: plan.version,
+    count,
+    triggeredBy: "facilitator",
+  })
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true, version: plan.version }
 }
 
 export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> {
@@ -520,15 +776,17 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
 
   if (session.currentRound < session.scenario.rounds.length - 1) {
     const nextIdx = session.currentRound + 1
+    const now = Date.now()
     let updated: SessionState = {
       ...session,
       currentRound: nextIdx,
-      roundStartedAt: Date.now(),
+      roundStartedAt: now,
       roundPhase: "inject" as RoundPhase,
       activeDiscussionPhase: undefined,
       currentDiscussionPrompt: undefined,
       currentDiscussionPhaseIndex: undefined,
     }
+    updated = withRoundPhaseState(updated, nextIdx, now)
     updated = pushTimeline(updated, "round_changed", { roundIndex: nextIdx })
     await dbSetSession(updated)
     broadcastState(updated)
@@ -550,7 +808,9 @@ export async function goToPrevRound(): Promise<{ ok: boolean; error?: string }> 
   if (!session || session.currentRound <= 0) return { ok: false, error: "Cannot go back." }
 
   const prevIdx = session.currentRound - 1
-  let updated: SessionState = { ...session, currentRound: prevIdx, roundStartedAt: Date.now() }
+  const now = Date.now()
+  let updated: SessionState = { ...session, currentRound: prevIdx, roundStartedAt: now }
+  updated = withRoundPhaseState(updated, prevIdx, now)
   updated = pushTimeline(updated, "round_changed", { roundIndex: prevIdx })
   await dbSetSession(updated)
   broadcastState(updated)
@@ -622,9 +882,12 @@ export async function pushSurpriseInject(input: {
 
 export async function setPhase(phase: RoundPhase): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(s => {
-    // Graph-driven sessions use the round's bobPhase + facilitator notes for guidance;
-    // avoid overlaying the generic BOB/OODA framework on top.
+    const now = Date.now()
     const isGraphDriven = !!s.graph
+    // Update whole-round phase state so auto-advance realigns from this manual override.
+    const nextRoundPhaseState: RoundPhaseState | undefined = s.activeRoundPhaseState
+      ? { ...s.activeRoundPhaseState, currentPhase: phase, phaseStartedAt: now }
+      : s.activeRoundPhaseState
     if (phase === 'discussion' && !s.activeDiscussionPhase && !isGraphDriven) {
       const phases = s.config.decisionFramework === 'ooda' ? OODA_PHASES : BOB_PHASES
       const firstPhase = phases[0]
@@ -632,7 +895,7 @@ export async function setPhase(phase: RoundPhase): Promise<{ ok: boolean; error?
         const active: ActivePhaseState = {
           roundNumber: s.currentRound,
           phaseIndex: 0,
-          phaseStartedAt: Date.now(),
+          phaseStartedAt: now,
           extended: false,
         }
         return {
@@ -640,10 +903,20 @@ export async function setPhase(phase: RoundPhase): Promise<{ ok: boolean; error?
           roundPhase: phase,
           activeDiscussionPhase: active,
           currentDiscussionPrompt: firstPhase.participantPrompt,
+          activeRoundPhaseState: nextRoundPhaseState,
         }
       }
     }
-    return { ...s, roundPhase: phase }
+    // Leaving discussion clears the sub-phase timer.
+    const clearedSub = phase !== 'discussion'
+      ? { activeDiscussionPhase: undefined, currentDiscussionPrompt: undefined, currentDiscussionPhaseIndex: undefined }
+      : {}
+    return {
+      ...s,
+      roundPhase: phase,
+      activeRoundPhaseState: nextRoundPhaseState,
+      ...clearedSub,
+    }
   })
   if (result.ok) emit("phase_changed", { phase })
   return result
