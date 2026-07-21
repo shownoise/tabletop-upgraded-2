@@ -44,8 +44,15 @@ export function InjectAnnotator({ injectId, participantId, content, annotations 
         window.getSelection()?.removeAllRanges()
       }
     }
+    function onScroll() { setToolbar(null) }
     window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    window.addEventListener("scroll", onScroll, true)
+    window.addEventListener("resize", onScroll)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      window.removeEventListener("scroll", onScroll, true)
+      window.removeEventListener("resize", onScroll)
+    }
   }, [])
 
   function handleMouseUp() {
@@ -69,9 +76,18 @@ export function InjectAnnotator({ injectId, participantId, content, annotations 
     if (end <= start) { setToolbar(null); return }
     const rect = range.getBoundingClientRect()
     const rootRect = root.getBoundingClientRect()
+    // WHY: clamp to viewport so the popover never renders outside the visible area
+    // (fixes injects near the top/bottom or the horizontal edges).
+    const TOOLBAR_W = 140
+    const TOOLBAR_H = 32
+    const viewportPadding = 8
+    const rawX = rect.left + rect.width / 2
+    const rawY = rect.top - TOOLBAR_H - 8
+    const clampedViewportX = Math.max(TOOLBAR_W / 2 + viewportPadding, Math.min(window.innerWidth - TOOLBAR_W / 2 - viewportPadding, rawX))
+    const clampedViewportY = Math.max(viewportPadding, rawY < 0 ? rect.bottom + 8 : rawY)
     setToolbar({
-      x: rect.left - rootRect.left + rect.width / 2,
-      y: rect.top - rootRect.top - 8,
+      x: clampedViewportX - rootRect.left,
+      y: clampedViewportY - rootRect.top,
       start,
       end,
     })

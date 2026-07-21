@@ -153,6 +153,9 @@ export function evaluateChasersOnRoundStart(
     if (typeof data.condition.afterRoundNumber === "number" && data.condition.afterRoundNumber > roundNumber) continue
     if (!conditionTrue(data, session)) continue
     const { kind: _kind, ...injectFields } = data.inject
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(`[chaser] firing "${injectFields.title}" (round=${roundNumber}, condition=${data.condition.kind})`)
+    }
     results.push({ id: `${node.id}-chase`, ...injectFields })
   }
   return results

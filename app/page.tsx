@@ -1,115 +1,53 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, Library, ShieldAlert } from "lucide-react"
+import { ArrowRight, Library } from "lucide-react"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
-import { LangToggle } from "@/components/lang-toggle"
-import { ThemeToggle } from "@/components/theme-toggle"
-
-const META = [
-  { label: "SCENARIO TYPES", value: "4" },
-  { label: "ROLES",          value: "9" },
-  { label: "AI MODE",        value: "SONNET" },
-  { label: "INJECT CHANNELS", value: "8+" },
-] as const
+import { Button } from "@/components/ui/button"
 
 export default function LandingPage() {
-  const [lang, setLang] = useLang()
+  const [lang] = useLang()
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-tt-bg">
-      {/* Grid background */}
-      <div className="grid-bg pointer-events-none absolute inset-0 opacity-30" aria-hidden />
-
-      {/* Top nav */}
-      <header className="relative z-10 flex items-center justify-between border-b border-tt-border px-6 py-4 md:px-10">
-        <div className="flex items-center gap-3">
-          <ShieldAlert className="size-4 text-tt-accent" />
-          <span className="font-mono text-sm tracking-widest text-tt-bright">CYBER_TABLETOP</span>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="relative flex min-h-[calc(100vh-3.5rem)] flex-col">
+      <section className="eye-hero-gradient relative flex flex-1 items-center justify-center overflow-hidden px-6 py-20 md:px-10 md:py-28">
+        <div className="relative z-10 flex w-full max-w-3xl flex-col items-start gap-8 text-white">
+          <span className="text-xs uppercase tracking-[0.28em] text-eye-lavender">
+            {tr(lang, "tagline")}
+          </span>
+          <h1 className="text-5xl font-bold leading-tight md:text-6xl">
+            Cyber Crisis Tabletop
+          </h1>
+          <p className="max-w-xl text-lg text-eye-lavender">
+            Live, AI-gegenereerde incident-response oefeningen voor crisisteams. Realistisch, geregisseerd, meetbaar.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg">
+              <Link href="/admin">
+                Ik ben facilitator
+                <ArrowRight className="ml-1 size-4" />
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="border-white text-white hover:bg-white hover:text-eye-indigo">
+              <Link href="/join">
+                Ik ben deelnemer
+              </Link>
+            </Button>
+          </div>
           <Link
             href="/templates"
-            className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-tt-dim hover:text-tt-bright transition-colors"
+            className="mt-2 inline-flex items-center gap-1.5 text-sm text-eye-lavender/90 hover:text-white"
           >
-            <Library className="size-3" /> Templates
+            <Library className="size-4" /> Bekijk scenariotemplates
           </Link>
-          <LangToggle lang={lang} setLang={setLang} />
-          <ThemeToggle />
         </div>
-      </header>
+      </section>
 
-      {/* Main content */}
-      <main className="relative z-10 flex flex-1 items-center justify-center px-6 py-12 md:px-10">
-        <div className="flex w-full max-w-2xl flex-col gap-10">
-
-          {/* Operation header */}
-          <div className="flex flex-col gap-4">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
-              {tr(lang, "tagline")}
-            </span>
-            <h1 className="font-mono text-5xl md:text-6xl font-bold tracking-tight leading-none text-tt-accent">
-              INCIDENT<br />RESPONSE
-            </h1>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-tt-dim">
-              AI-GENERATED · REAL-TIME · ROLE-BASED CRISIS EXERCISE
-            </p>
-          </div>
-
-          {/* Role selector cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Link
-              href="/admin"
-              className="group flex flex-col gap-3 border border-tt-border bg-tt-surface px-6 py-5 transition-colors hover:border-[#e8ff40]/40"
-              style={{ borderLeft: "3px solid var(--tt-accent)" }}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-tt-accent">
-                  {tr(lang, "facilitator")}
-                </span>
-                <ArrowRight className="size-3.5 text-tt-dim transition-colors group-hover:text-tt-accent" />
-              </div>
-              <p className="font-mono text-[10px] leading-relaxed text-tt-dim">
-                Configure scenario · Push injects · Control timeline
-              </p>
-              <span className="font-mono text-[9px] tracking-widest text-tt-dim">CONSOLE ACCESS</span>
-            </Link>
-
-            <Link
-              href="/join"
-              className="group flex flex-col gap-3 border border-tt-border bg-tt-surface px-6 py-5 transition-colors hover:border-[#40c4ff]/40"
-              style={{ borderLeft: "3px solid var(--tt-blue)" }}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-tt-blue">
-                  {tr(lang, "participant")}
-                </span>
-                <ArrowRight className="size-3.5 text-tt-dim transition-colors group-hover:text-tt-blue" />
-              </div>
-              <p className="font-mono text-[10px] leading-relaxed text-tt-dim">
-                Join active exercise · Receive injects · Submit decisions
-              </p>
-              <span className="font-mono text-[9px] tracking-widest text-tt-dim">JOIN WITH CODE</span>
-            </Link>
-          </div>
-
-          {/* Meta-grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-tt-border">
-            {META.map(({ label, value }) => (
-              <div key={label} className="flex flex-col gap-1 bg-tt-surface px-4 py-3">
-                <span className="font-mono text-[8px] uppercase tracking-widest text-tt-dim">{label}</span>
-                <span className="font-mono text-xl text-tt-bright">{value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </main>
-
-      <footer className="relative z-10 border-t border-tt-border px-6 py-3 md:px-10">
-        <div className="flex items-center justify-between font-mono text-[9px] text-tt-dim">
-          <span>SESSION = ephemeral · in-memory · Vercel KV</span>
-          <span>v3.0 · 2 built-in templates</span>
+      <footer className="border-t border-border px-6 py-3 md:px-10">
+        <div className="mx-auto flex max-w-7xl items-center justify-between text-xs text-muted-foreground">
+          <span>Sessies zijn ephemeral en gedeeld via Vercel KV.</span>
+          <span>v4.0 · Eye Security 2026</span>
         </div>
       </footer>
     </div>

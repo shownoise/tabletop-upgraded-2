@@ -208,10 +208,16 @@ function InnerCanvas() {
 
   const handleAutoFixCoverage = useCallback((areaId: string) => {
     const id = `dec_${areaId}_${Math.random().toString(36).slice(2, 6)}`
+    // WHY: anchor new nodes near the Start node so they land inside the viewport
+    // instead of at (0,0) which is off-screen once the graph has been panned.
+    const startNode = nodes.find(n => n.type === "start")
+    const anchor = startNode
+      ? { x: startNode.position.x + 320, y: startNode.position.y + 120 + Math.random() * 120 }
+      : { x: 320, y: 240 + Math.random() * 120 }
     const newFlowNode: Node = {
       id,
       type: "decision",
-      position: { x: 100, y: 100 + Math.random() * 200 },
+      position: anchor,
       data: {
         kind: "decision",
         prompt: `Beslissing over ${areaId.replace(/_/g, " ")}`,
@@ -225,7 +231,8 @@ function InnerCanvas() {
     }
     setNodes(prev => [...prev, newFlowNode])
     setSelectedId(id)
-  }, [setNodes])
+    setCenter(anchor.x, anchor.y, { duration: 400, zoom: 1.1 })
+  }, [nodes, setNodes, setCenter])
 
   const selectedNode = useMemo(() => nodes.find(n => n.id === selectedId) ?? null, [nodes, selectedId])
 

@@ -4,107 +4,118 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Light terminal palette */
-  --tt-bg:      #f4f6f6;
-  --tt-surface: #eaeeee;
-  --tt-accent:  #5a7a00;
-  --tt-red:     #c82010;
-  --tt-blue:    #0055aa;
-  --tt-green:   #006644;
-  --tt-warn:    #8a5500;
-  --tt-purple:  #5540aa;
-  --tt-border:  #c8d8d8;
-  --tt-dim:     #607070;
-  --tt-bright:  #0d1414;
+  /* Eye Security 2026 brand palette */
+  --eye-indigo:   #192440;
+  --eye-grape:    #472151;
+  --eye-twilight: #624185;
+  --eye-lavender: #b5a1e8;
+  --eye-orange:   #F49719;
+  --eye-lemon:    #F7CF45;
+  --eye-white:    #FFFFFF;
+  --eye-off:      #F7F5F2;
+  --eye-ink:      #0d1220;
 
-  /* shadcn semantic vars — light terminal */
-  --background: #f4f6f6;
-  --foreground: #0d1414;
-  --card: #eaeeee;
-  --card-foreground: #0d1414;
-  --popover: #eaeeee;
-  --popover-foreground: #0d1414;
-  --primary: #5a7a00;
-  --primary-foreground: #f4f6f6;
-  --secondary: #dde8e8;
-  --secondary-foreground: #0d1414;
-  --muted: #dde8e8;
-  --muted-foreground: #607070;
-  --accent: #d5e5e5;
-  --accent-foreground: #0d1414;
-  --destructive: #c82010;
-  --destructive-foreground: #f4f6f6;
-  --border: #c8d8d8;
-  --input: #dde8e8;
-  --ring: #5a7a00;
-  --chart-1: #5a7a00;
-  --chart-2: #c82010;
-  --chart-3: #0055aa;
-  --chart-4: #5540aa;
-  --chart-5: #006644;
-  --radius: 0px;
-  --sidebar: #eaeeee;
-  --sidebar-foreground: #0d1414;
-  --sidebar-primary: #5a7a00;
-  --sidebar-primary-foreground: #f4f6f6;
-  --sidebar-accent: #d5e5e5;
-  --sidebar-accent-foreground: #0d1414;
-  --sidebar-border: #c8d8d8;
-  --sidebar-ring: #5a7a00;
+  /* shadcn semantic vars — light Eye theme */
+  --background: var(--eye-off);
+  --foreground: var(--eye-indigo);
+  --card: var(--eye-white);
+  --card-foreground: var(--eye-indigo);
+  --popover: var(--eye-white);
+  --popover-foreground: var(--eye-indigo);
+  --primary: var(--eye-orange);
+  --primary-foreground: var(--eye-white);
+  --secondary: var(--eye-lavender);
+  --secondary-foreground: var(--eye-indigo);
+  --muted: #eef0f6;
+  --muted-foreground: #5b6478;
+  --accent: var(--eye-twilight);
+  --accent-foreground: var(--eye-white);
+  --destructive: #b91c1c;
+  --destructive-foreground: var(--eye-white);
+  --border: #d8dae4;
+  --input: #d8dae4;
+  --ring: var(--eye-orange);
+  --chart-1: var(--eye-orange);
+  --chart-2: var(--eye-grape);
+  --chart-3: var(--eye-twilight);
+  --chart-4: var(--eye-lavender);
+  --chart-5: var(--eye-lemon);
+  --radius: 12px;
+  --sidebar: var(--eye-white);
+  --sidebar-foreground: var(--eye-indigo);
+  --sidebar-primary: var(--eye-orange);
+  --sidebar-primary-foreground: var(--eye-white);
+  --sidebar-accent: #f1eef8;
+  --sidebar-accent-foreground: var(--eye-indigo);
+  --sidebar-border: #d8dae4;
+  --sidebar-ring: var(--eye-orange);
+
+  /* Legacy tt-* remapped onto Eye tokens so all pre-existing usages inherit the new palette. */
+  --tt-bg:      var(--background);
+  --tt-surface: var(--card);
+  --tt-bright:  var(--foreground);
+  --tt-dim:     var(--muted-foreground);
+  --tt-border:  var(--border);
+  --tt-accent:  var(--eye-orange);
+  --tt-red:     var(--destructive);
+  --tt-blue:    var(--eye-twilight);
+  --tt-green:   #16a34a;
+  --tt-warn:    var(--eye-lemon);
+  --tt-purple:  var(--eye-grape);
 }
 
 .dark {
-  /* Dark terminal palette */
-  --tt-bg:      #0d0f0f;
-  --tt-surface: #111618;
-  --tt-accent:  #e8ff40;
-  --tt-red:     #ff4d3d;
-  --tt-blue:    #40c4ff;
-  --tt-green:   #40ffb3;
-  --tt-warn:    #ffb340;
-  --tt-purple:  #7b68ee;
-  --tt-border:  #2a3030;
-  --tt-dim:     #7a9090;
-  --tt-bright:  #f0fafa;
+  --background: var(--eye-indigo);
+  --foreground: var(--eye-white);
+  --card: #1f2b4a;
+  --card-foreground: var(--eye-white);
+  --popover: #1f2b4a;
+  --popover-foreground: var(--eye-white);
+  --primary: var(--eye-orange);
+  --primary-foreground: var(--eye-indigo);
+  --secondary: var(--eye-twilight);
+  --secondary-foreground: var(--eye-white);
+  --muted: #23305a;
+  --muted-foreground: #a2acc4;
+  --accent: var(--eye-lavender);
+  --accent-foreground: var(--eye-indigo);
+  --destructive: #ef4444;
+  --destructive-foreground: var(--eye-white);
+  --border: #2b3866;
+  --input: #2b3866;
+  --ring: var(--eye-orange);
+  --chart-1: var(--eye-orange);
+  --chart-2: var(--eye-lavender);
+  --chart-3: var(--eye-twilight);
+  --chart-4: var(--eye-lemon);
+  --chart-5: var(--eye-grape);
+  --sidebar: #131c37;
+  --sidebar-foreground: var(--eye-white);
+  --sidebar-primary: var(--eye-orange);
+  --sidebar-primary-foreground: var(--eye-indigo);
+  --sidebar-accent: #23305a;
+  --sidebar-accent-foreground: var(--eye-white);
+  --sidebar-border: #2b3866;
+  --sidebar-ring: var(--eye-orange);
 
-  /* shadcn semantic vars — dark terminal */
-  --background: #0d0f0f;
-  --foreground: #f0fafa;
-  --card: #111618;
-  --card-foreground: #f0fafa;
-  --popover: #111618;
-  --popover-foreground: #f0fafa;
-  --primary: #e8ff40;
-  --primary-foreground: #0d0f0f;
-  --secondary: #1a2424;
-  --secondary-foreground: #f0fafa;
-  --muted: #1a2424;
-  --muted-foreground: #7a9090;
-  --accent: #1e2c2c;
-  --accent-foreground: #f0fafa;
-  --destructive: #ff4d3d;
-  --destructive-foreground: #f0fafa;
-  --border: #2a3030;
-  --input: #1a2424;
-  --ring: #e8ff40;
-  --chart-1: #e8ff40;
-  --chart-2: #ff4d3d;
-  --chart-3: #40c4ff;
-  --chart-4: #7b68ee;
-  --chart-5: #40ffb3;
-  --sidebar: #0a0c0c;
-  --sidebar-foreground: #f0fafa;
-  --sidebar-primary: #e8ff40;
-  --sidebar-primary-foreground: #0d0f0f;
-  --sidebar-accent: #1a2424;
-  --sidebar-accent-foreground: #f0fafa;
-  --sidebar-border: #2a3030;
-  --sidebar-ring: #e8ff40;
+  --tt-bg:      var(--background);
+  --tt-surface: var(--card);
+  --tt-bright:  var(--foreground);
+  --tt-dim:     var(--muted-foreground);
+  --tt-border:  var(--border);
+  --tt-accent:  var(--eye-orange);
+  --tt-red:     var(--destructive);
+  --tt-blue:    var(--eye-lavender);
+  --tt-green:   #34d399;
+  --tt-warn:    var(--eye-lemon);
+  --tt-purple:  var(--eye-lavender);
 }
 
 @theme inline {
-  --font-sans: 'IBM Plex Sans', sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
+  --font-sans: var(--font-silka), 'Source Sans Pro', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  --font-silka: var(--font-silka), 'Source Sans Pro', system-ui, sans-serif;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -133,6 +144,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-pill: 30px;
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -142,7 +154,18 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Tabletop color tokens */
+  /* Eye palette */
+  --color-eye-indigo:   #192440;
+  --color-eye-grape:    #472151;
+  --color-eye-twilight: #624185;
+  --color-eye-lavender: #b5a1e8;
+  --color-eye-orange:   #F49719;
+  --color-eye-lemon:    #F7CF45;
+  --color-eye-off:      #F7F5F2;
+  --color-eye-white:    #FFFFFF;
+  --color-eye-ink:      #0d1220;
+
+  /* Legacy tt-* still referenced by many components — kept until callers migrate. */
   --color-tt-bg:      var(--tt-bg);
   --color-tt-surface: var(--tt-surface);
   --color-tt-accent:  var(--tt-accent);
@@ -162,6 +185,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-silka), 'Source Sans Pro', 'Segoe UI', system-ui, sans-serif;
   }
 }
 
@@ -216,5 +240,22 @@
   }
   @keyframes rf-edge-dash {
     to { stroke-dashoffset: -20; }
+  }
+  .rounded-pill {
+    border-radius: 30px;
+  }
+  .eye-hero-gradient {
+    background:
+      radial-gradient(80% 60% at 20% 20%, rgba(98, 65, 133, 0.65), transparent 60%),
+      radial-gradient(70% 50% at 80% 60%, rgba(71, 33, 81, 0.4), transparent 70%),
+      var(--eye-indigo);
+  }
+  .chaser-stripes {
+    background-image: repeating-linear-gradient(
+      45deg,
+      var(--eye-orange) 0 10px,
+      #d67d0f 10px 20px
+    );
+    color: white;
   }
 }

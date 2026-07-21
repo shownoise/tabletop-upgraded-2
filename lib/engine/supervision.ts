@@ -9,6 +9,7 @@ import type {
   SupervisionReportEdits,
 } from "@/lib/types"
 import type { DecisionNodeData, GraphNode, InjectNodeData, ScenarioGraph } from "@/lib/graph/types"
+import { RETAINER_ACTIVATED_FLAG } from "@/lib/graph/types"
 
 export type SupervisionArea =
   | 'detection_classification'
@@ -528,7 +529,7 @@ export function scoreAreaFromEvidence(
     const graphProfile = session.graph?.irRetainerProfile
     const configProfile = session.config?.irRetainerProfile
     const profile = configProfile ?? graphProfile
-    const activated = !!rs?.dialedAt || (session.flags?.['retainer_activated'] === true)
+    const activated = !!rs?.dialedAt || (session.flags?.[RETAINER_ACTIVATED_FLAG] === true)
     const authorized = !!rs?.chosenActivatorAuthorized
     const handoffCount = rs?.handoffCompleted?.length ?? 0
     const handoffTotal = profile?.handoffChecklist.length ?? 0

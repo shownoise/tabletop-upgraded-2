@@ -107,4 +107,8 @@ export const api = {
   },
   updateRetainer: (input: { participantId: string; patch: Partial<RetainerActivationState> }) =>
     post<{ ok: true }>("/api/session/retainer-activation", input),
+  dismissMeldplichtPrompt: (input: { promptId: string }) =>
+    post<{ ok: true }>("/api/session/meldplicht-prompt/dismiss", input),
+  triggerMeldplichtManual: (input: { type: NotificationType; summary?: string }) =>
+    post<{ ok: true }>("/api/session/meldplicht-prompt/manual", input),
 }

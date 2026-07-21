@@ -195,6 +195,25 @@ export interface IrRetainerProfile {
 
 export type NotificationType = 'ncsc_24h' | 'ncsc_72h' | 'ncsc_final' | 'ap_72h'
 
+export type MeldplichtPromptTrigger =
+  | 'inject_flagged'
+  | 'decision_taken'
+  | 'chaser_fired'
+  | 'facilitator_manual'
+
+export interface MeldplichtPrompt {
+  id: string
+  type: NotificationType
+  roundNumber: number
+  triggeredAt: number
+  triggerReason: {
+    kind: MeldplichtPromptTrigger
+    sourceId?: string
+    summary: string
+  }
+  status: 'open' | 'drafted' | 'submitted' | 'dismissed'
+}
+
 export interface NotificationDraft {
   id: string
   type: NotificationType
@@ -680,6 +699,8 @@ export interface SessionState {
   injectAnnotations?: InjectAnnotation[]
   // Notification duty (Cbw/AVG meldplicht) — active gameplay.
   notifications?: NotificationDraft[]
+  // Story-driven meldplicht prompts spawned by inject/decision/chaser events.
+  meldplichtPrompts?: MeldplichtPrompt[]
   // Anchor for meldplicht deadline countdowns.
   incidentDetectedAt?: number
   // Boolean flags for chaser conditions and generic scenario state.

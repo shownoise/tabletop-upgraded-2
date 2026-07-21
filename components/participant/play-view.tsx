@@ -18,7 +18,7 @@ import { FactCheckReview } from "./fact-check-review"
 import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
-import { NotificationDrafter } from "./notification-drafter"
+import { MeldplichtTray } from "./meldplicht-tray"
 import { RetainerActivationPanel } from "./retainer-activation-panel"
 import { SpecialModal } from "./special-modal"
 import { PhaseTimer, PhaseSegments } from "./phase-timer"
@@ -1120,6 +1120,9 @@ export function PlayView() {
               <FactCheckReview session={session} participantId={participantId} roundIndex={session.currentRound} />
             )}
 
+            {/* Meldplicht tray — story-driven prompt cards (top of feed area) */}
+            {participantId && <MeldplichtTray session={session} participantId={participantId} />}
+
             {/* Inject feed — always shown for context */}
             <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} session={session} participantId={participantId ?? undefined} />
           </div>
@@ -1155,11 +1158,6 @@ export function PlayView() {
                 ))}
               </ul>
             </div>
-
-            {/* Meldplicht drafter — visible when scenario has meldplicht enabled */}
-            {participantId && (session.graph?.meldplicht?.enabled ?? true) && (
-              <NotificationDrafter session={session} participantId={participantId} />
-            )}
 
             {/* IR-retainer activation — visible when scenario has retainer profile authored */}
             {participantId && (session.graph?.irRetainerProfile || session.config.irRetainerProfile) && (

@@ -16,10 +16,12 @@ import {
   dbSetSession,
 } from "./db"
 import type { ScenarioGraph } from "./graph/types"
+import { RETAINER_ACTIVATED_FLAG } from "./graph/types"
 import type {
   ActivePhaseState, ExerciseConfig, FactCheckEntry, FactCheckTag, FacilitatorRoundScore,
   GovernanceFlag, Inject, InjectAnnotation, InjectRoutePlan, InjectType,
-  LearningObjective, LiveEvent, LiveEventName, NotificationDraft, NotificationType,
+  LearningObjective, LiveEvent, LiveEventName, MeldplichtPrompt, MeldplichtPromptTrigger,
+  NotificationDraft, NotificationType,
   Participant, PublicState, RetainerActivationState, Role, RoleAction,
   RoleDocument, RoundPhase, RoundPhaseState, Scenario, SessionState, SimulationMode, SpecialEvent,
   SpecialMessage, SpecialScore, SpecialType, StreamMessage, SubmittedDecision, SupervisionReportEdits, TimelineEvent,
@@ -89,7 +91,20 @@ function broadcastState(session: SessionState | null) {
   // re-tick here in case a fresh phase boundary crossed between mutation and
   // broadcast; the update propagates to SSE listeners immediately but skips
   // the extra write to keep broadcasts cheap (next mutation will persist).
-  const ticked = session ? tickPhases(tickRoundPhase(session)) : null
+  let ticked: SessionState | null = null
+  if (session) {
+    try {
+      ticked = tickPhases(tickRoundPhase(session))
+    } catch (err) {
+      // WHY: never let a tick error swallow the broadcast — log to timeline and
+      // fall back to the pre-tick session so participants still get an update.
+      const stack = err instanceof Error ? err.stack ?? err.message : String(err)
+      ticked = pushTimeline(session, "session_created", { engine_error: true, stack })
+      if (process.env.NODE_ENV !== "production") {
+        console.error("[session-store] tick failure", err)
+      }
+    }
+  }
   const snapshot: PublicState = { session: ticked }
   for (const l of listeners) l({ type: "state", data: snapshot })
 }
@@ -204,6 +219,12 @@ export function toParticipantState(session: SessionState): SessionState {
     // WHY: participants must judge reliability themselves during play — the fact-check reveal
     // waits until the review phase.
     const { reliability: _r, groundTruthAnnotations: _g, ...safe } = inject
+    const leak = safe as { reliability?: unknown; groundTruthAnnotations?: unknown }
+    if (leak.reliability !== undefined || leak.groundTruthAnnotations !== undefined) {
+      const msg = `[toParticipantState] ground-truth leak on inject ${safe.id}`
+      if (process.env.NODE_ENV !== "production") throw new Error(msg)
+      console.warn(msg)
+    }
     return safe
   }
   return {
@@ -420,9 +441,11 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
       updated = pushTimeline(updated, "round_changed", { roundIndex })
       for (const p of autoPushed) {
         updated = pushTimeline(updated, "inject_pushed", { roundIndex, inject: p.inject })
+        updated = evalInjectTriggeredPrompts(updated, p.inject)
       }
       updated = mergeInjectRoutePlan(updated, round.injects.map(i => i.id))
       updated = withRoundPhaseState(updated, roundIndex, now)
+      updated = anchorIncidentOnRoundIfNeeded(updated, roundNumber, now)
       if (updated.graph) {
         const chasers = evaluateChasersOnRoundStart(updated.graph, updated, roundNumber)
         if (chasers.length > 0) {
@@ -442,6 +465,7 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
           }
           for (const p of chasePushes) {
             updated = pushTimeline(updated, "inject_pushed", { roundIndex, inject: p.inject, chaser: true })
+            updated = evalChaserTriggeredPrompts(updated, p.inject)
           }
           updated = mergeInjectRoutePlan(updated, chasers.map(c => c.id))
         }
@@ -584,8 +608,23 @@ function withIncidentDetectedAt(session: SessionState, now: number): SessionStat
   if (meldplicht && !meldplicht.enabled) return session
   const when = meldplicht?.incidentDetectedAt ?? 'start'
   if (when === 'start') return { ...session, incidentDetectedAt: now }
-  // For 'round_1'/'round_2'/'round_3' start-based, we still anchor at session start for now;
-  // shift-forward happens in a per-round hook later if needed.
+  // WHY: when the scenario anchors on a specific round, leave incidentDetectedAt
+  // unset until that round begins (see anchorIncidentOnRoundIfNeeded).
+  if (session.incidentDetectedAt) return session
+  return session
+}
+
+// Anchor the meldplicht clock to the round the graph names (round_1|round_2|round_3),
+// but only the first time we enter that round.
+function anchorIncidentOnRoundIfNeeded(session: SessionState, roundNumber: number, now: number): SessionState {
+  const meldplicht = session.graph?.meldplicht
+  if (!meldplicht || !meldplicht.enabled) return session
+  if (session.incidentDetectedAt) return session
+  const when = meldplicht.incidentDetectedAt ?? 'start'
+  const map: Record<string, number> = { round_1: 1, round_2: 2, round_3: 3 }
+  const targetRound = map[when]
+  if (!targetRound) return session
+  if (roundNumber < targetRound) return session
   return { ...session, incidentDetectedAt: now }
 }
 
@@ -823,6 +862,7 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
       currentDiscussionPhaseIndex: undefined,
     }
     updated = withRoundPhaseState(updated, nextIdx, now)
+    updated = anchorIncidentOnRoundIfNeeded(updated, nextIdx + 1, now)
     updated = pushTimeline(updated, "round_changed", { roundIndex: nextIdx })
     await dbSetSession(updated)
     broadcastState(updated)
@@ -881,6 +921,7 @@ export async function pushInject(input: { roundIndex: number; injectId: string }
 
   let updated: SessionState = { ...session, pushedInjects }
   updated = pushTimeline(updated, didAdvance ? "inject_advanced" : "inject_pushed", { roundIndex: input.roundIndex, inject })
+  updated = evalInjectTriggeredPrompts(updated, inject)
   await dbSetSession(updated)
   broadcastState(updated)
   emit("push_inject", { inject, roundIndex: input.roundIndex })
@@ -1206,6 +1247,22 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
         }
       }
     }
+  }
+
+  // Meldplicht prompt trigger: decision touches notification_duty.
+  if (action.supervisionAreas?.includes('notification_duty')) {
+    const label = `${action.label}`.toLowerCase()
+    const inferredType: NotificationType = /vroegtijdig|24u|24 uur|waarschuwing/.test(label)
+      ? 'ncsc_24h'
+      : /avg|ap|persoonsgeg|datalek/.test(label)
+        ? 'ap_72h'
+        : 'ncsc_72h'
+    updated = spawnMeldplichtPrompt(updated, {
+      type: inferredType,
+      trigger: 'decision_taken',
+      sourceId: action.id,
+      summary: `Besluit: ${action.label}`,
+    })
   }
 
   await dbSetSession(updated)
@@ -1977,9 +2034,14 @@ export async function submitNotification(input: {
     submittedAt: now,
     score: { completeness: draftCompleteness(draft), onTime, submittedBeforeChaser: beforeChaser },
   }
+  const prompts = session.meldplichtPrompts ?? []
+  const closedPrompts = prompts.map(p =>
+    (p.type === draft.type && (p.status === 'open' || p.status === 'drafted')) ? { ...p, status: 'submitted' as const } : p,
+  )
   const updated: SessionState = {
     ...session,
     notifications: list.map(n => (n.id === draft.id ? submitted : n)),
+    meldplichtPrompts: closedPrompts,
   }
   await dbSetSession(updated)
   broadcastState(updated)
@@ -2001,6 +2063,117 @@ function draftCompleteness(draft: NotificationDraft): number {
   const fields = [c.suspectMalicious, c.crossBorderImpact, c.responsibleContact, c.initialImpactAssessment, c.iocs, c.mitigations]
   const filled = fields.filter(f => (f?.trim().length ?? 0) >= 20).length
   return filled / fields.length
+}
+
+// ─── Meldplicht prompt spawning ───────────────────────────────
+
+function spawnMeldplichtPrompt(
+  session: SessionState,
+  input: {
+    type: NotificationType
+    trigger: MeldplichtPromptTrigger
+    sourceId?: string
+    summary: string
+    now?: number
+  },
+): SessionState {
+  const meldplicht = session.graph?.meldplicht
+  if (meldplicht && !meldplicht.enabled) return session
+  const enabledFor = (t: NotificationType): boolean => {
+    if (!meldplicht) return true
+    if (t === 'ncsc_24h') return meldplicht.ncsc24hEnabled
+    if (t === 'ncsc_72h') return meldplicht.ncsc72hEnabled
+    if (t === 'ncsc_final') return meldplicht.ncscFinalEnabled
+    if (t === 'ap_72h') return meldplicht.apEnabled
+    return true
+  }
+  if (!enabledFor(input.type)) return session
+  const roundNumber = (session.currentRound ?? 0) + 1
+  const existing = session.meldplichtPrompts ?? []
+  // Dedupe: one prompt per (type, roundNumber) unless the previous is closed (submitted or dismissed).
+  const dupe = existing.find(p => p.type === input.type && p.roundNumber === roundNumber && (p.status === 'open' || p.status === 'drafted'))
+  if (dupe) return session
+  const now = input.now ?? Date.now()
+  const prompt: MeldplichtPrompt = {
+    id: genId("mp"),
+    type: input.type,
+    roundNumber,
+    triggeredAt: now,
+    triggerReason: {
+      kind: input.trigger,
+      sourceId: input.sourceId,
+      summary: input.summary,
+    },
+    status: 'open',
+  }
+  return { ...session, meldplichtPrompts: [...existing, prompt] }
+}
+
+function evalInjectTriggeredPrompts(session: SessionState, inject: Inject): SessionState {
+  let next = session
+  const areas = inject.supervisionAreas ?? []
+  if (inject.nis2Relevant && areas.includes('notification_duty')) {
+    next = spawnMeldplichtPrompt(next, {
+      type: 'ncsc_24h',
+      trigger: 'inject_flagged',
+      sourceId: inject.id,
+      summary: `Aanleiding: ${inject.title}`,
+    })
+    const looksLikeAvg = inject.type === 'regulatory'
+      || /avg|persoonsgeg|datalek|autoriteit persoonsgegevens|ap /i.test(`${inject.title} ${inject.content}`)
+    if (looksLikeAvg) {
+      next = spawnMeldplichtPrompt(next, {
+        type: 'ap_72h',
+        trigger: 'inject_flagged',
+        sourceId: inject.id,
+        summary: `Aanleiding: ${inject.title}`,
+      })
+    }
+  }
+  return next
+}
+
+function evalChaserTriggeredPrompts(session: SessionState, chaser: Inject): SessionState {
+  const areas = chaser.supervisionAreas ?? []
+  if (!areas.includes('notification_duty')) return session
+  const inferredType: NotificationType = /vroegtijdige|24u|24 uur|ncsc-csirt/i.test(`${chaser.title} ${chaser.content}`)
+    ? 'ncsc_24h'
+    : /ap |autoriteit persoonsgegevens|avg/i.test(`${chaser.title} ${chaser.content}`)
+      ? 'ap_72h'
+      : 'ncsc_72h'
+  return spawnMeldplichtPrompt(session, {
+    type: inferredType,
+    trigger: 'chaser_fired',
+    sourceId: chaser.id,
+    summary: `Chaser: ${chaser.title}`,
+  })
+}
+
+export async function dismissMeldplichtPrompt(input: { promptId: string }): Promise<{ ok: boolean }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false }
+  const list = session.meldplichtPrompts ?? []
+  const updated: SessionState = {
+    ...session,
+    meldplichtPrompts: list.map(p => p.id === input.promptId ? { ...p, status: 'dismissed' } : p),
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true }
+}
+
+export async function triggerMeldplichtManual(input: { type: NotificationType; summary?: string }): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  const updated = spawnMeldplichtPrompt(session, {
+    type: input.type,
+    trigger: 'facilitator_manual',
+    summary: input.summary ?? 'Facilitator vraagt om meldplicht-moment',
+  })
+  if (updated === session) return { ok: true }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true }
 }
 
 export async function setSessionFlag(key: string, value: boolean): Promise<{ ok: boolean }> {
@@ -2025,7 +2198,7 @@ export async function updateRetainerActivation(input: {
     updatedAt: now,
   }
   const flags = { ...(session.flags ?? {}) }
-  if (merged.dialedAt) flags["retainer_activated"] = true
+  if (merged.dialedAt) flags[RETAINER_ACTIVATED_FLAG] = true
   const updated: SessionState = { ...session, retainerState: merged, flags }
   await dbSetSession(updated)
   broadcastState(updated)

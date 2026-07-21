@@ -69,6 +69,10 @@ export interface ChaserCondition {
   afterRoundNumber?: number
 }
 
+// WHY: single source of truth for the retainer-activation flag so authors and
+// engine code stay in sync when the identifier is customised later.
+export const RETAINER_ACTIVATED_FLAG = 'retainer_activated' as const
+
 export interface ChaserNodeData {
   kind: "chaser"
   inject: InjectNodeData

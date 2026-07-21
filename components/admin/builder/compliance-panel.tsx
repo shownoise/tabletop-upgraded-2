@@ -25,6 +25,17 @@ type Tab = 'coverage' | 'meldplicht' | 'retainer' | 'preview'
 export function CompliancePanel({ open, onOpenChange, graph, onGraphPatch, onFocusNode, onAutoFixCoverage }: Props) {
   const [tab, setTab] = useState<Tab>('coverage')
 
+  // WHY: close the Sheet before focusing a node so setCenter can animate on an
+  // unobstructed canvas (the right-side Sheet would otherwise sit over the target).
+  const focusThenClose = (id: string) => {
+    onOpenChange(false)
+    setTimeout(() => onFocusNode?.(id), 220)
+  }
+  const autoFixThenClose = (areaId: string) => {
+    onOpenChange(false)
+    setTimeout(() => onAutoFixCoverage?.(areaId), 220)
+  }
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-[520px] sm:w-[520px] flex flex-col gap-3 overflow-hidden">
@@ -44,7 +55,7 @@ export function CompliancePanel({ open, onOpenChange, graph, onGraphPatch, onFoc
           ))}
         </div>
         <div className="flex-1 overflow-y-auto">
-          {tab === 'coverage' && <CoverageTab graph={graph} onFocusNode={onFocusNode} onAutoFix={onAutoFixCoverage} />}
+          {tab === 'coverage' && <CoverageTab graph={graph} onFocusNode={onFocusNode ? focusThenClose : undefined} onAutoFix={onAutoFixCoverage ? autoFixThenClose : undefined} />}
           {tab === 'meldplicht' && <MeldplichtTab graph={graph} onGraphPatch={onGraphPatch} />}
           {tab === 'retainer' && <RetainerTab graph={graph} onGraphPatch={onGraphPatch} />}
           {tab === 'preview' && <PreviewTab graph={graph} />}
