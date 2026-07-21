@@ -18,6 +18,8 @@ import { FactCheckReview } from "./fact-check-review"
 import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
+import { NotificationDrafter } from "./notification-drafter"
+import { RetainerActivationPanel } from "./retainer-activation-panel"
 import { SpecialModal } from "./special-modal"
 import { PhaseTimer, PhaseSegments } from "./phase-timer"
 import { Empty } from "@/components/ui/empty"
@@ -1153,6 +1155,16 @@ export function PlayView() {
                 ))}
               </ul>
             </div>
+
+            {/* Meldplicht drafter — visible when scenario has meldplicht enabled */}
+            {participantId && (session.graph?.meldplicht?.enabled ?? true) && (
+              <NotificationDrafter session={session} participantId={participantId} />
+            )}
+
+            {/* IR-retainer activation — visible when scenario has retainer profile authored */}
+            {participantId && (session.graph?.irRetainerProfile || session.config.irRetainerProfile) && (
+              <RetainerActivationPanel session={session} participantId={participantId} />
+            )}
 
             {/* IR / Crisis Playbook — always shown when authored on the scenario graph */}
             <IrPlaybookPanel session={session} participantRole={participantRole} />

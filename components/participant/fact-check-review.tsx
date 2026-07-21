@@ -2,8 +2,9 @@
 
 import { useMemo } from "react"
 import { Check, X, Minus } from "lucide-react"
-import type { FactCheckTag, SessionState } from "@/lib/types"
+import type { FactCheckTag, InjectAnnotation, InjectSpanAnnotation, SessionState } from "@/lib/types"
 import { computeFactCheckScore } from "@/lib/engine/fact-check-score"
+import { splitTextByAnnotations } from "@/components/shared/span-annotator"
 
 interface Props {
   session: SessionState
@@ -26,13 +27,27 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
   const score = useMemo(() => computeFactCheckScore(session), [session])
 
   const targets = useMemo(() => {
-    const out: Array<{ round: number; injectId: string; title: string; truth: FactCheckTag }> = []
+    const out: Array<{
+      round: number
+      injectId: string
+      title: string
+      truth: FactCheckTag
+      content: string
+      groundTruth: InjectSpanAnnotation[]
+    }> = []
     session.scenario.rounds.forEach((r, ri) => {
       if (typeof roundIndex === "number" && ri !== roundIndex) return
       for (const inj of r.injects) {
         const truth = normalizeReliability(inj.reliability)
         if (!truth) continue
-        out.push({ round: ri + 1, injectId: inj.id, title: inj.title, truth })
+        out.push({
+          round: ri + 1,
+          injectId: inj.id,
+          title: inj.title,
+          truth,
+          content: inj.content,
+          groundTruth: inj.groundTruthAnnotations ?? [],
+        })
       }
     })
     return out
@@ -41,6 +56,7 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
   if (targets.length === 0) return null
 
   const me = score.perParticipant[participantId] ?? { correct: 0, total: 0, score: 0 }
+  const myAnn = score.perParticipantAnnotations[participantId] ?? { matched: 0, total: 0, score: 0 }
   const teamAvgPct = Math.round(score.teamAverage * 100)
   const myPct = me.total > 0 ? Math.round(me.score * 100) : 0
 
@@ -49,7 +65,7 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
       <header className="flex items-center justify-between">
         <span className="font-mono text-xs uppercase tracking-widest text-tt-accent">Fact-check review</span>
         <span className="font-mono text-[10px] text-tt-dim">
-          Jij: {me.correct}/{me.total} ({myPct}%) · Team gem.: {teamAvgPct}%
+          Jij: {me.correct}/{me.total} markeringen{myAnn.total > 0 ? ` · ${myAnn.matched}/${myAnn.total} spans correct` : ""} ({myPct}%) · Team gem.: {teamAvgPct}%
         </span>
       </header>
       <ul className="flex flex-col divide-y divide-tt-border/50">
@@ -99,6 +115,74 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
           )
         })}
       </ul>
+      {targets.some(t => t.groundTruth.length > 0) && (
+        <div className="mt-3 flex flex-col gap-3 border-t border-tt-border/50 pt-3">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-tt-dim">Span-diff: jouw markeringen vs waarheid</span>
+          {targets.filter(t => t.groundTruth.length > 0).map(t => {
+            const myAnns = (session.injectAnnotations ?? []).filter(a => a.injectId === t.injectId && a.participantId === participantId)
+            return (
+              <SpanDiff
+                key={t.injectId}
+                title={t.title}
+                round={t.round}
+                content={t.content}
+                mine={myAnns}
+                truth={t.groundTruth}
+              />
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const UNDERLINE_MINE: Record<FactCheckTag, string> = {
+  fact: "decoration-emerald-500/70",
+  assumption: "decoration-yellow-500/70",
+  misleading: "decoration-red-500/70",
+}
+
+function SpanDiff({
+  title, round, content, mine, truth,
+}: {
+  title: string
+  round: number
+  content: string
+  mine: InjectAnnotation[]
+  truth: InjectSpanAnnotation[]
+}) {
+  const myAsGeneric = mine.map(a => ({ id: a.id, start: a.start, end: a.end, tag: a.tag as FactCheckTag }))
+  const truthAsGeneric = truth.map(a => ({ id: a.id, start: a.start, end: a.end, tag: a.tag as FactCheckTag }))
+  const mineSegs = splitTextByAnnotations<FactCheckTag>(content, myAsGeneric)
+  const truthSegs = splitTextByAnnotations<FactCheckTag>(content, truthAsGeneric)
+  return (
+    <div className="rounded border border-tt-border/60 p-2">
+      <div className="mb-1 flex items-center justify-between text-[10px] font-mono text-tt-dim">
+        <span>R{round} · {title}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-widest text-tt-dim">Jouw markeringen</div>
+          <div className="whitespace-pre-wrap leading-relaxed">
+            {mineSegs.map((s, i) => {
+              const slice = content.slice(s.start, s.end)
+              if (!s.tag) return <span key={i}>{slice}</span>
+              return <span key={i} className={`underline decoration-2 ${UNDERLINE_MINE[s.tag]}`}>{slice}</span>
+            })}
+          </div>
+        </div>
+        <div>
+          <div className="mb-1 text-[10px] uppercase tracking-widest text-tt-dim">Waarheid</div>
+          <div className="whitespace-pre-wrap leading-relaxed">
+            {truthSegs.map((s, i) => {
+              const slice = content.slice(s.start, s.end)
+              if (!s.tag) return <span key={i}>{slice}</span>
+              return <span key={i} className={`underline decoration-2 ${UNDERLINE_MINE[s.tag]}`}>{slice}</span>
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

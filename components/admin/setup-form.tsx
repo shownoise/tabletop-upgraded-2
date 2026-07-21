@@ -15,10 +15,11 @@ import {
 } from "@/components/ui/select"
 import { ROLE_META } from "@/lib/types"
 import type {
-  ExerciseConfig, SimulationMode, AiIntensity, SpecialsMode,
+  ExerciseConfig, IrRetainerProfile, SimulationMode, AiIntensity, SpecialsMode,
   ITMaturity, SecurityCapability, TeamStructure,
   DifficultyLevel, Role, ScenarioType, DecisionFramework, ModuleId, GoalId,
 } from "@/lib/types"
+import { Input } from "@/components/ui/input"
 import type { ScenarioGraph } from "@/lib/graph/types"
 import { analyzeGraph, type GraphAnalysis } from "@/lib/graph/analyze"
 import type { TemplateModuleSlot } from "@/lib/types/scenario-instance"
@@ -1030,6 +1031,20 @@ export function SetupForm() {
         )}
       </div>
 
+      {/* Section 6b — IR-retainer profiel */}
+      <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs uppercase tracking-wider text-primary">IR-retainer profiel</span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Operationele details voor de retainer-test. Optioneel — als leeg gelaten, gebruikt de sessie wat op de scenario-graph staat.
+        </p>
+        <IrRetainerProfileEditor
+          value={config.irRetainerProfile}
+          onChange={p => update("irRetainerProfile", p)}
+        />
+      </div>
+
       {/* Section 7 — Special events */}
       <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
         <div className="flex items-center gap-2">
@@ -1142,6 +1157,59 @@ function FieldRow(props: { label: string; hint?: string; children: React.ReactNo
       <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{props.label}</Label>
       {props.children}
       {props.hint && <p className="text-xs text-muted-foreground">{props.hint}</p>}
+    </div>
+  )
+}
+
+function IrRetainerProfileEditor({
+  value,
+  onChange,
+}: {
+  value: IrRetainerProfile | undefined
+  onChange: (v: IrRetainerProfile | undefined) => void
+}) {
+  const p: IrRetainerProfile = value ?? {
+    name: "",
+    activationNumber: "",
+    authorizedActivators: [],
+    slaMinutesToFirstContact: 30,
+    handoffChecklist: [],
+    scopeIncludes: [],
+    scopeExcludes: [],
+  }
+  function patch(next: Partial<IrRetainerProfile>) {
+    onChange({ ...p, ...next })
+  }
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <FieldRow label="Naam retainer-partij">
+        <Input value={p.name} onChange={e => patch({ name: e.target.value })} />
+      </FieldRow>
+      <FieldRow label="24/7 nummer">
+        <Input value={p.activationNumber} onChange={e => patch({ activationNumber: e.target.value })} placeholder="+31 ..." />
+      </FieldRow>
+      <FieldRow label="E-mail (optioneel)">
+        <Input value={p.activationEmail ?? ""} onChange={e => patch({ activationEmail: e.target.value || undefined })} />
+      </FieldRow>
+      <FieldRow label="SLA minuten tot eerste contact">
+        <Input type="number" min={0} value={p.slaMinutesToFirstContact} onChange={e => patch({ slaMinutesToFirstContact: Number(e.target.value) })} />
+      </FieldRow>
+      <FieldRow label="Geautoriseerde activators (komma-gescheiden)">
+        <Input
+          value={p.authorizedActivators.join(", ")}
+          onChange={e => patch({ authorizedActivators: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
+          placeholder="CISO, IT Manager, CEO"
+        />
+      </FieldRow>
+      <FieldRow label="Overdrachtchecklist (één per regel)">
+        <Textarea rows={3} value={p.handoffChecklist.join("\n")} onChange={e => patch({ handoffChecklist: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })} />
+      </FieldRow>
+      <FieldRow label="Scope includes (één per regel)">
+        <Textarea rows={2} value={p.scopeIncludes.join("\n")} onChange={e => patch({ scopeIncludes: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })} />
+      </FieldRow>
+      <FieldRow label="Scope excludes (één per regel)">
+        <Textarea rows={2} value={p.scopeExcludes.join("\n")} onChange={e => patch({ scopeExcludes: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })} />
+      </FieldRow>
     </div>
   )
 }

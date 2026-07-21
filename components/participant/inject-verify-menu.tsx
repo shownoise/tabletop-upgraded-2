@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { ShieldCheck } from "lucide-react"
+import { useEffect, useState } from "react"
+import { CircleDot, ShieldCheck } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { FactCheckTag } from "@/lib/types"
 
@@ -9,6 +9,8 @@ interface Props {
   currentTag?: FactCheckTag
   disabled?: boolean
   onTag: (tag: FactCheckTag) => void | Promise<void>
+  showFirstHint?: boolean
+  onDismissHint?: () => void
 }
 
 const TAG_META: Record<FactCheckTag, { label: string; help: string; color: string; dot: string }> = {
@@ -17,9 +19,11 @@ const TAG_META: Record<FactCheckTag, { label: string; help: string; color: strin
   misleading: { label: "Misleidend", help: "Ik denk dat dit niet klopt",                   color: "text-red-500",     dot: "bg-red-500" },
 }
 
-export function InjectVerifyMenu({ currentTag, disabled, onTag }: Props) {
+export function InjectVerifyMenu({ currentTag, disabled, onTag, showFirstHint, onDismissHint }: Props) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [hintVisible, setHintVisible] = useState(!!showFirstHint)
+  useEffect(() => { setHintVisible(!!showFirstHint) }, [showFirstHint])
 
   async function pick(tag: FactCheckTag) {
     if (busy || disabled) return
@@ -27,12 +31,17 @@ export function InjectVerifyMenu({ currentTag, disabled, onTag }: Props) {
     try {
       await onTag(tag)
       setOpen(false)
+      if (hintVisible) { setHintVisible(false); onDismissHint?.() }
     } finally {
       setBusy(false)
     }
   }
 
-  const dotClass = currentTag ? TAG_META[currentTag].dot : "bg-transparent"
+  function handleTriggerClick() {
+    if (hintVisible) { setHintVisible(false); onDismissHint?.() }
+  }
+
+  const meta = currentTag ? TAG_META[currentTag] : null
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -40,15 +49,31 @@ export function InjectVerifyMenu({ currentTag, disabled, onTag }: Props) {
         <button
           type="button"
           disabled={disabled}
-          className={`relative inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest transition-colors ${
-            currentTag ? "border-tt-accent/40 text-tt-accent" : "border-tt-border text-tt-dim hover:text-tt-bright"
+          onClick={handleTriggerClick}
+          aria-label={meta ? `Verifieer: ${meta.label}` : "Klik om te verifiëren"}
+          className={`relative inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] transition-colors ${
+            meta ? "border-tt-border text-tt-dim" : "border-tt-border text-tt-dim hover:text-tt-bright"
           } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
-          aria-label="Verify"
         >
-          <ShieldCheck className="size-3" />
-          <span>Verify</span>
-          {currentTag && (
-            <span className={`inline-block size-1.5 rounded-full ${dotClass}`} />
+          {meta ? (
+            <>
+              <CircleDot className={`size-3 ${meta.color}`} />
+              <span>{meta.label}</span>
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="size-3" />
+              <span>Verifieer</span>
+            </>
+          )}
+          {hintVisible && !meta && (
+            <span
+              role="tooltip"
+              aria-label="Klik om te verifiëren"
+              className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded border border-tt-accent/40 bg-tt-surface px-2 py-1 text-[10px] text-tt-accent shadow"
+            >
+              Klik om te verifiëren — waar of niet?
+            </span>
           )}
         </button>
       </PopoverTrigger>

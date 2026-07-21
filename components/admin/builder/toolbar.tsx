@@ -19,6 +19,7 @@ import type { ScenarioType } from "@/lib/types"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { PreviewDialog } from "./preview-dialog"
 import { WizardDialog } from "./wizard-dialog"
+import { CompliancePanel } from "./compliance-panel"
 
 interface Props {
   graph: ScenarioGraph
@@ -26,6 +27,9 @@ interface Props {
   onScenarioTypeChange: (t: ScenarioType) => void
   onIrRetainerChange: (name: string | undefined) => void
   onPlaybookChange: (playbook: string | undefined) => void
+  onGraphPatch?: (patch: Partial<ScenarioGraph>) => void
+  onFocusNode?: (nodeId: string) => void
+  onAutoFixCoverage?: (areaId: string) => void
   onSave: () => Promise<void>
   onLoad: (g: ScenarioGraph) => void
   onNew: () => void
@@ -47,6 +51,9 @@ export function Toolbar({
   onScenarioTypeChange,
   onIrRetainerChange,
   onPlaybookChange,
+  onGraphPatch,
+  onFocusNode,
+  onAutoFixCoverage,
   onSave,
   onLoad,
   onNew,
@@ -59,6 +66,7 @@ export function Toolbar({
   const [previewOpen, setPreviewOpen] = useState(false)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [playbookOpen, setPlaybookOpen] = useState(false)
+  const [complianceOpen, setComplianceOpen] = useState(false)
   const [loadable, setLoadable] = useState<ScenarioGraph[] | null>(null)
   const [issues, setIssues] = useState<GraphIssue[] | null>(null)
   const [publishing, setPublishing] = useState(false)
@@ -111,6 +119,7 @@ export function Toolbar({
         <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>Templates</Button>
         <Button size="sm" variant="outline" onClick={openLoad}>Load</Button>
         <Button size="sm" variant="outline" onClick={() => setPlaybookOpen(true)}>Playbook / IR</Button>
+        <Button size="sm" variant="outline" onClick={() => setComplianceOpen(true)}>Compliance</Button>
         <Button size="sm" variant="outline" onClick={handleValidate}>Validate</Button>
         <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>Preview</Button>
         <Button size="sm" variant="outline" onClick={onSave} disabled={saving}>
@@ -212,6 +221,15 @@ export function Toolbar({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CompliancePanel
+        open={complianceOpen}
+        onOpenChange={setComplianceOpen}
+        graph={graph}
+        onGraphPatch={onGraphPatch}
+        onFocusNode={onFocusNode}
+        onAutoFixCoverage={onAutoFixCoverage}
+      />
 
       <Dialog open={issues !== null} onOpenChange={o => !o && setIssues(null)}>
         <DialogContent className="max-w-lg">

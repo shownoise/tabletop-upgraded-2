@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { ROLE_META } from "@/lib/types"
 import type { AssessmentDimensionKey, Role, RoleAction } from "@/lib/types"
+import { SUPERVISION_AREAS, type SupervisionArea } from "@/lib/engine/supervision"
 
 const ALL_ROLES = Object.keys(ROLE_META) as Role[]
 const DIMENSIONS: AssessmentDimensionKey[] = [
@@ -216,6 +217,35 @@ export function RoleActionsEditor({ value, onChange, suggestedIdPrefix = "act" }
                   />
                   <span>Alleen naar indiener (anders naar hele team)</span>
                 </label>
+              </div>
+            </details>
+            <details className="text-[11px]">
+              <summary className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground cursor-pointer">
+                Testgebieden (toezichthouder) ({action.supervisionAreas?.length ?? 0})
+              </summary>
+              <div className="mt-1 grid grid-cols-1 gap-1">
+                {SUPERVISION_AREAS.map(a => {
+                  const on = (action.supervisionAreas ?? []).includes(a.id)
+                  return (
+                    <label key={a.id} className="flex items-start gap-2 text-[11px]">
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => {
+                          const next: SupervisionArea[] = on
+                            ? (action.supervisionAreas ?? []).filter(x => x !== a.id)
+                            : [...(action.supervisionAreas ?? []), a.id]
+                          update(idx, { supervisionAreas: next.length ? next : undefined })
+                        }}
+                        className="size-3 mt-0.5"
+                      />
+                      <span>
+                        <span className="font-mono text-[10px] text-muted-foreground">{a.numberLabel}.</span>{" "}
+                        <span>{a.label}</span>
+                      </span>
+                    </label>
+                  )
+                })}
               </div>
             </details>
           </div>

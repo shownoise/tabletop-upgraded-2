@@ -220,6 +220,18 @@ interface FactCheckFooterProps {
 
 function FactCheckFooter(props: FactCheckFooterProps) {
   const { participantId, myTag, totalTags, hasSplit, reviewPhase, onTag } = props
+  const [showHint, setShowHint] = useState(false)
+  useEffect(() => {
+    if (typeof window === "undefined" || !participantId) return
+    if (myTag) return
+    const key = `tabletop:verify-hint:${participantId}`
+    if (window.localStorage.getItem(key) !== "seen") setShowHint(true)
+  }, [participantId, myTag])
+  function dismissHint() {
+    if (typeof window === "undefined" || !participantId) return
+    window.localStorage.setItem(`tabletop:verify-hint:${participantId}`, "seen")
+    setShowHint(false)
+  }
   if (!participantId) return null
   return (
     <div className="flex items-center justify-between gap-2 rounded-b-none border border-t-0 border-tt-border/60 px-4 py-2 bg-tt-surface">
@@ -228,7 +240,13 @@ function FactCheckFooter(props: FactCheckFooterProps) {
           ? `${totalTags} markering${totalTags === 1 ? "" : "en"}${hasSplit ? " · uitgesplitst" : ""}`
           : "Nog niet gemarkeerd"}
       </span>
-      <InjectVerifyMenu currentTag={myTag} disabled={reviewPhase} onTag={onTag} />
+      <InjectVerifyMenu
+        currentTag={myTag}
+        disabled={reviewPhase}
+        onTag={onTag}
+        showFirstHint={showHint && !myTag}
+        onDismissHint={dismissHint}
+      />
     </div>
   )
 }

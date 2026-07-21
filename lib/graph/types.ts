@@ -8,9 +8,12 @@ import type {
   ScenarioType,
   AssessmentDimensionKey,
   BobPhase,
+  IrRetainerProfile,
+  NotificationType,
 } from "@/lib/types"
+import type { SupervisionArea } from "@/lib/engine/supervision"
 
-export type GraphNodeType = "start" | "round" | "inject" | "decision" | "special" | "outcome"
+export type GraphNodeType = "start" | "round" | "inject" | "decision" | "special" | "outcome" | "chaser"
 export type GraphEdgeType = "sequence" | "branch" | "outcome" | "inject"
 
 export interface StartNodeData {
@@ -54,6 +57,22 @@ export interface DecisionNodeData {
   // Facilitator kan Volgende ronde klikken zonder dat er is gekozen.
   // Deelnemer-keuze telt alleen voor scoring, niet voor branching.
   advancesGraph?: boolean
+  supervisionAreas?: SupervisionArea[]
+}
+
+export interface ChaserCondition {
+  kind: 'notification_missing' | 'decision_not_taken' | 'flag'
+  type?: NotificationType
+  roleActionId?: string
+  key?: string
+  value?: boolean
+  afterRoundNumber?: number
+}
+
+export interface ChaserNodeData {
+  kind: "chaser"
+  inject: InjectNodeData
+  condition: ChaserCondition
 }
 
 export interface SpecialNodeData {
@@ -84,6 +103,7 @@ export type GraphNodeData =
   | DecisionNodeData
   | SpecialNodeData
   | OutcomeNodeData
+  | ChaserNodeData
 
 export interface GraphNode {
   id: string
@@ -102,6 +122,26 @@ export interface GraphEdge {
   label?: string
 }
 
+export interface MeldplichtConfig {
+  enabled: boolean
+  incidentDetectedAt: 'start' | 'round_1' | 'round_2' | 'round_3'
+  ncsc24hEnabled: boolean
+  ncsc72hEnabled: boolean
+  ncscFinalEnabled: boolean
+  apEnabled: boolean
+  chasersEnabled: boolean
+}
+
+export const DEFAULT_MELDPLICHT: MeldplichtConfig = {
+  enabled: true,
+  incidentDetectedAt: 'round_1',
+  ncsc24hEnabled: true,
+  ncsc72hEnabled: true,
+  ncscFinalEnabled: false,
+  apEnabled: true,
+  chasersEnabled: true,
+}
+
 export interface ScenarioGraph {
   id: string
   name: string
@@ -116,4 +156,6 @@ export interface ScenarioGraph {
   // Crisis playbook / IR plan — verschijnt rechts bij elke participant tijdens de sessie.
   // Bevat opzettelijk zowel bruikbare als misleidende info (BOB-training: pas op wat je gelooft).
   irPlaybook?: string
+  meldplicht?: MeldplichtConfig
+  irRetainerProfile?: IrRetainerProfile
 }

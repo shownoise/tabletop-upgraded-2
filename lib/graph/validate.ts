@@ -1,4 +1,5 @@
 import type { DecisionNodeData, GraphNode, InjectNodeData, RoundNodeData, ScenarioGraph } from "./types"
+import { computeCoverage } from "@/lib/engine/supervision"
 
 export interface GraphIssue {
   severity: "error" | "warning"
@@ -135,6 +136,52 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
 
   if (roundNodes.length === 0) {
     issues.push({ severity: "error", message: "Scenario has no rounds." })
+  }
+
+  // Coverage warnings
+  const coverage = computeCoverage(graph)
+  const uncovered = coverage.filter(c => c.coverageLevel === 'none')
+  if (uncovered.length > 0) {
+    issues.push({
+      severity: "warning",
+      message: `Coverage: ${uncovered.length} testgebieden onbedekt (${uncovered.map(c => c.meta.numberLabel).join(", ")}).`,
+    })
+  }
+
+  const meldplicht = graph.meldplicht
+  if (meldplicht?.enabled) {
+    const notificationTagged = graph.nodes.some(n => {
+      const d = n.data as { supervisionAreas?: string[]; roleActions?: { supervisionAreas?: string[] }[] }
+      if ((d.supervisionAreas ?? []).includes('notification_duty')) return true
+      return (d.roleActions ?? []).some(a => (a.supervisionAreas ?? []).includes('notification_duty'))
+    })
+    if (!notificationTagged) {
+      issues.push({ severity: "warning", message: "Meldplicht staat aan maar geen enkele node/actie is getagd met 'notification_duty'." })
+    }
+    if (meldplicht.chasersEnabled) {
+      const hasChaser = graph.nodes.some(n => n.type === "chaser")
+      if (!hasChaser) {
+        issues.push({ severity: "warning", message: "Chasers staan aan maar er is geen chaser-node in de graph." })
+      }
+    }
+  }
+
+  const outcomeNodes = graph.nodes.filter(n => n.type === "outcome")
+  for (const o of outcomeNodes) {
+    const incoming = graph.edges.filter(e => e.target === o.id)
+    if (incoming.length === 0) {
+      issues.push({ severity: "warning", nodeId: o.id, message: "Outcome heeft geen inkomende decision-paden — onbereikbaar bij spel." })
+    }
+  }
+
+  for (const n of graph.nodes) {
+    if (n.type !== 'special') continue
+    const sd = n.data as { type?: string }
+    if (sd.type === 'ir_retainer_activation') {
+      if (!graph.irRetainerProfile) {
+        issues.push({ severity: "warning", nodeId: n.id, message: "IR-retainer activation node zonder retainer profile op de graph." })
+      }
+    }
   }
 
   return issues

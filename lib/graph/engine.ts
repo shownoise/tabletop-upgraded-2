@@ -1,5 +1,6 @@
-import type { Inject, Role, Round, SpecialType } from "@/lib/types"
+import type { Inject, NotificationDraft, Role, Round, SessionState, SpecialType } from "@/lib/types"
 import type {
+  ChaserNodeData,
   DecisionNodeData,
   InjectNodeData,
   OutcomeNodeData,
@@ -136,4 +137,42 @@ export function stepFromNode(
   }
 
   return { nextNodeId: next.id, outputs }
+}
+
+export function evaluateChasersOnRoundStart(
+  graph: ScenarioGraph,
+  session: SessionState,
+  roundNumber: number,
+): Inject[] {
+  const meldplicht = graph.meldplicht
+  if (meldplicht && !meldplicht.chasersEnabled) return []
+  const results: Inject[] = []
+  for (const node of graph.nodes) {
+    if (node.type !== "chaser") continue
+    const data = node.data as ChaserNodeData
+    if (typeof data.condition.afterRoundNumber === "number" && data.condition.afterRoundNumber > roundNumber) continue
+    if (!conditionTrue(data, session)) continue
+    const { kind: _kind, ...injectFields } = data.inject
+    results.push({ id: `${node.id}-chase`, ...injectFields })
+  }
+  return results
+}
+
+function conditionTrue(chaser: ChaserNodeData, session: SessionState): boolean {
+  const cond = chaser.condition
+  if (cond.kind === "notification_missing") {
+    if (!cond.type) return false
+    const notes = session.notifications ?? []
+    return !notes.some((n: NotificationDraft) => n.type === cond.type && !!n.submittedAt)
+  }
+  if (cond.kind === "decision_not_taken") {
+    if (!cond.roleActionId) return false
+    return !(session.submittedDecisions ?? []).some(d => d.actionId === cond.roleActionId)
+  }
+  if (cond.kind === "flag") {
+    if (!cond.key) return false
+    const value = (session.flags ?? {})[cond.key] ?? false
+    return cond.value === undefined ? !!value : value === cond.value
+  }
+  return false
 }

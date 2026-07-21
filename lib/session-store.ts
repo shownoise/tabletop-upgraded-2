@@ -5,7 +5,7 @@
 
 import { randomBytes } from "crypto"
 import { generateScenario } from "./scenario-generator"
-import { stepFromNode, type EngineTrigger, type StepResult } from "./graph/engine"
+import { evaluateChasersOnRoundStart, stepFromNode, type EngineTrigger, type StepResult } from "./graph/engine"
 import type { DecisionNodeData } from "./graph/types"
 import {
   dbDeleteScenarioGraph,
@@ -19,9 +19,10 @@ import type { ScenarioGraph } from "./graph/types"
 import type {
   ActivePhaseState, ExerciseConfig, FactCheckEntry, FactCheckTag, FacilitatorRoundScore,
   GovernanceFlag, Inject, InjectAnnotation, InjectRoutePlan, InjectType,
-  LearningObjective, LiveEvent, LiveEventName, Participant, PublicState, Role, RoleAction,
+  LearningObjective, LiveEvent, LiveEventName, NotificationDraft, NotificationType,
+  Participant, PublicState, RetainerActivationState, Role, RoleAction,
   RoleDocument, RoundPhase, RoundPhaseState, Scenario, SessionState, SimulationMode, SpecialEvent,
-  SpecialMessage, SpecialScore, SpecialType, StreamMessage, SubmittedDecision, TimelineEvent,
+  SpecialMessage, SpecialScore, SpecialType, StreamMessage, SubmittedDecision, SupervisionReportEdits, TimelineEvent,
   TimelineEventType, Urgency,
 } from "./types"
 import { ROLE_FALLBACK } from "./types"
@@ -422,6 +423,29 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
       }
       updated = mergeInjectRoutePlan(updated, round.injects.map(i => i.id))
       updated = withRoundPhaseState(updated, roundIndex, now)
+      if (updated.graph) {
+        const chasers = evaluateChasersOnRoundStart(updated.graph, updated, roundNumber)
+        if (chasers.length > 0) {
+          const chasePushes = chasers.map(inj => ({ inject: inj, roundIndex, pushedAt: now }))
+          const flagUpdates: Record<string, boolean> = { ...(updated.flags ?? {}) }
+          for (const c of chasers) {
+            // best-effort: mark chaser as fired keyed by inject id
+            flagUpdates[`chaser_${c.id}_fired`] = true
+            // also mark notification chasers by type using suffix in title if identifiable — else generic
+            if (c.title.includes("NCSC") && c.title.toLowerCase().includes("vroeg")) flagUpdates["chaser_ncsc_24h_fired"] = true
+            if (c.title.includes("Autoriteit Persoonsgegevens") || c.title.includes("AP")) flagUpdates["chaser_ap_72h_fired"] = true
+          }
+          updated = {
+            ...updated,
+            pushedInjects: [...updated.pushedInjects, ...chasePushes],
+            flags: flagUpdates,
+          }
+          for (const p of chasePushes) {
+            updated = pushTimeline(updated, "inject_pushed", { roundIndex, inject: p.inject, chaser: true })
+          }
+          updated = mergeInjectRoutePlan(updated, chasers.map(c => c.id))
+        }
+      }
     } else if (output.kind === "trigger_special") {
       const mode = updated.config.specialsMode
       if (!mode || mode === "off") continue
@@ -539,6 +563,7 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
       updated = withInjectRoutePlan(updated)
       updated = withRoundPhaseState(updated, updated.currentRound, now)
       updated = pushTimeline(updated, "session_started", { roundIndex: updated.currentRound })
+      updated = withIncidentDetectedAt(updated, now)
       return updated
     }
     if (s.scenario.rounds.length === 0) return null
@@ -547,10 +572,21 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
     updated = withInjectRoutePlan(updated)
     updated = withRoundPhaseState(updated, 0, now)
     updated = pushTimeline(updated, "session_started", { roundIndex: 0 })
+    updated = withIncidentDetectedAt(updated, now)
     return updated
   })
   if (result.ok) emit("start_session", { roundIndex: 0 })
   return result
+}
+
+function withIncidentDetectedAt(session: SessionState, now: number): SessionState {
+  const meldplicht = session.graph?.meldplicht
+  if (meldplicht && !meldplicht.enabled) return session
+  const when = meldplicht?.incidentDetectedAt ?? 'start'
+  if (when === 'start') return { ...session, incidentDetectedAt: now }
+  // For 'round_1'/'round_2'/'round_3' start-based, we still anchor at session start for now;
+  // shift-forward happens in a per-round hook later if needed.
+  return { ...session, incidentDetectedAt: now }
 }
 
 function withInjectRoutePlan(session: SessionState): SessionState {
@@ -1883,6 +1919,125 @@ export async function submitFacilitatorRoundScore(
   const existing = (session.facilitatorRoundScores ?? []).filter(s => s.roundIndex !== roundIndex)
   const entry: FacilitatorRoundScore = { roundIndex, score, scoredAt: new Date().toISOString() }
   const updated: SessionState = { ...session, facilitatorRoundScores: [...existing, entry] }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true }
+}
+
+export async function upsertNotificationDraft(input: {
+  participantId: string
+  type: NotificationType
+  draftId?: string
+  content: NotificationDraft["content"]
+}): Promise<{ ok: boolean; error?: string; draftId?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  const list = session.notifications ?? []
+  const existing = input.draftId
+    ? list.find(n => n.id === input.draftId)
+    : list.find(n => n.type === input.type && !n.submittedAt)
+  const draft: NotificationDraft = existing
+    ? { ...existing, content: input.content }
+    : {
+        id: genId("note"),
+        type: input.type,
+        createdBy: input.participantId,
+        createdAt: Date.now(),
+        content: input.content,
+      }
+  const updated: SessionState = {
+    ...session,
+    notifications: existing
+      ? list.map(n => (n.id === existing.id ? draft : n))
+      : [...list, draft],
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true, draftId: draft.id }
+}
+
+export async function submitNotification(input: {
+  participantId: string
+  draftId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  const list = session.notifications ?? []
+  const draft = list.find(n => n.id === input.draftId)
+  if (!draft) return { ok: false, error: "Melding niet gevonden." }
+  if (draft.submittedAt) return { ok: true }
+  const now = Date.now()
+  const chaserKey = `chaser_${draft.type}_fired`
+  const beforeChaser = !(session.flags?.[chaserKey])
+  const anchor = session.incidentDetectedAt ?? session.startedAt ?? draft.createdAt
+  const deadline = anchor + notificationDeadlineMs(draft.type)
+  const onTime = now <= deadline
+  const submitted: NotificationDraft = {
+    ...draft,
+    submittedAt: now,
+    score: { completeness: draftCompleteness(draft), onTime, submittedBeforeChaser: beforeChaser },
+  }
+  const updated: SessionState = {
+    ...session,
+    notifications: list.map(n => (n.id === draft.id ? submitted : n)),
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true }
+}
+
+function notificationDeadlineMs(type: NotificationType): number {
+  const H = 60 * 60 * 1000
+  switch (type) {
+    case 'ncsc_24h': return 24 * H
+    case 'ncsc_72h': return 72 * H
+    case 'ap_72h':   return 72 * H
+    case 'ncsc_final': return 30 * 24 * H
+  }
+}
+
+function draftCompleteness(draft: NotificationDraft): number {
+  const c = draft.content
+  const fields = [c.suspectMalicious, c.crossBorderImpact, c.responsibleContact, c.initialImpactAssessment, c.iocs, c.mitigations]
+  const filled = fields.filter(f => (f?.trim().length ?? 0) >= 20).length
+  return filled / fields.length
+}
+
+export async function setSessionFlag(key: string, value: boolean): Promise<{ ok: boolean }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false }
+  const updated: SessionState = { ...session, flags: { ...(session.flags ?? {}), [key]: value } }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true }
+}
+
+export async function updateRetainerActivation(input: {
+  participantId: string
+  patch: Partial<RetainerActivationState>
+}): Promise<{ ok: boolean }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false }
+  const now = Date.now()
+  const merged: RetainerActivationState = {
+    ...(session.retainerState ?? { updatedAt: now }),
+    ...input.patch,
+    updatedAt: now,
+  }
+  const flags = { ...(session.flags ?? {}) }
+  if (merged.dialedAt) flags["retainer_activated"] = true
+  const updated: SessionState = { ...session, retainerState: merged, flags }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true }
+}
+
+export async function updateSupervisionReportEdits(
+  edits: SupervisionReportEdits,
+): Promise<{ ok: boolean }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false }
+  const updated: SessionState = { ...session, supervisionReportEdits: edits }
   await dbSetSession(updated)
   broadcastState(updated)
   return { ok: true }

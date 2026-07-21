@@ -526,7 +526,7 @@ sommige passages zijn gedateerd of onjuist. Verifieer feiten vóór je erop hand
           content: "Volgens bronnen zijn tientallen klanten getroffen. NoordZorg heeft een AP-melding gedaan. De organisatie zelf zou nog geen commentaar hebben gegeven.",
           source: "NOS", senderName: "Sanne Visser", timestamp: "22:00",
           targetTeam: "all", deliverySeconds: 0,
-          reliability: "unverified",
+          reliability: "assumption",
         },
       },
       {

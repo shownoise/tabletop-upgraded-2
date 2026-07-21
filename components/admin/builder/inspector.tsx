@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Node } from "@xyflow/react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -20,6 +20,7 @@ import type {
   FacilitatorNotes,
   InjectChannel,
   InjectReliability,
+  InjectSpanAnnotation,
   InjectType,
   LearningObjective,
   Role,
@@ -27,6 +28,8 @@ import type {
   SpecialType,
   Urgency,
 } from "@/lib/types"
+import { SUPERVISION_AREAS, type SupervisionArea } from "@/lib/engine/supervision"
+import { getSelectionRange, selectionRectRelativeTo, splitTextByAnnotations } from "@/components/shared/span-annotator"
 import { RoleActionsEditor } from "./editors/role-actions-editor"
 import { FacilitatorNotesEditor } from "./editors/facilitator-notes-editor"
 import { LearningObjectivesEditor } from "./editors/learning-objectives-editor"
@@ -309,6 +312,8 @@ function Section({ title, count, children }: { title: string; count?: number; ch
 
 function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: InjectNodeData) => void }) {
   const [local, setLocal] = useState<InjectNodeData>(data)
+  const [markSpans, setMarkSpans] = useState(false)
+  const [participantPreview, setParticipantPreview] = useState(false)
   useEffect(() => { setLocal(data) }, [data])
 
   function commit(next: InjectNodeData) {
@@ -318,15 +323,47 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-3 rounded border border-border bg-background/40 px-2 py-1.5">
+        <label className="flex items-center gap-1 text-[11px]">
+          <input
+            type="checkbox"
+            checked={markSpans}
+            onChange={e => setMarkSpans(e.target.checked)}
+            className="size-3"
+          />
+          <span>Markeer spans</span>
+        </label>
+        <label className="flex items-center gap-1 text-[11px]">
+          <input
+            type="checkbox"
+            checked={participantPreview}
+            onChange={e => setParticipantPreview(e.target.checked)}
+            className="size-3"
+          />
+          <span>Test kijk (participant preview)</span>
+        </label>
+      </div>
       <Field label="Title">
         <Input value={local.title} onChange={e => commit({ ...local, title: e.target.value })} />
       </Field>
       <Field label="Content">
-        <Textarea
-          rows={5}
-          value={local.content}
-          onChange={e => commit({ ...local, content: e.target.value })}
-        />
+        {markSpans ? (
+          <InjectSpanEditor
+            content={local.content}
+            annotations={local.groundTruthAnnotations ?? []}
+            onChange={anns => commit({ ...local, groundTruthAnnotations: anns.length ? anns : undefined })}
+          />
+        ) : participantPreview ? (
+          <div className="whitespace-pre-wrap rounded border border-border bg-background px-2 py-1.5 text-xs">
+            {local.content || <span className="text-muted-foreground italic">— leeg —</span>}
+          </div>
+        ) : (
+          <Textarea
+            rows={5}
+            value={local.content}
+            onChange={e => commit({ ...local, content: e.target.value })}
+          />
+        )}
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Type">
@@ -382,7 +419,6 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
             <option value="">— niet gespecificeerd —</option>
             <option value="fact">✓ Feit (bevestigd)</option>
             <option value="assumption">? Aanname</option>
-            <option value="unverified">⚠ Ongeverifieerd</option>
             <option value="misleading">✗ Misleidend (verborgen voor participant)</option>
           </select>
           <p className="mt-1 font-mono text-[10px] text-muted-foreground leading-snug">
@@ -455,6 +491,13 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
             <span>NIS2 relevant</span>
           </label>
         </div>
+      </Section>
+
+      <Section title="Testgebieden (toezichthouder)" count={local.supervisionAreas?.length ?? 0}>
+        <SupervisionAreasSelect
+          value={local.supervisionAreas ?? []}
+          onChange={v => commit({ ...local, supervisionAreas: v.length ? v : undefined })}
+        />
       </Section>
     </div>
   )
@@ -622,6 +665,12 @@ function DecisionForm({
           </div>
         ))}
       </div>
+      <Section title="Testgebieden (toezichthouder)" count={local.supervisionAreas?.length ?? 0}>
+        <SupervisionAreasSelect
+          value={local.supervisionAreas ?? []}
+          onChange={v => commit({ ...local, supervisionAreas: v.length ? v : undefined })}
+        />
+      </Section>
     </div>
   )
 }
@@ -804,6 +853,153 @@ function StringListEditor({
         onClick={() => onChange([...value, ""])}
         className="h-7 self-start"
       >+ Voeg toe</Button>
+    </div>
+  )
+}
+
+const SPAN_TAG_STYLE: Record<InjectReliability, { underline: string; dot: string; label: string }> = {
+  fact:       { underline: "decoration-emerald-500/60", dot: "bg-emerald-500", label: "Feit" },
+  assumption: { underline: "decoration-yellow-500/60", dot: "bg-yellow-500",  label: "Aanname" },
+  misleading: { underline: "decoration-red-500/60",    dot: "bg-red-500",     label: "Misleidend" },
+}
+
+function InjectSpanEditor({
+  content,
+  annotations,
+  onChange,
+}: {
+  content: string
+  annotations: InjectSpanAnnotation[]
+  onChange: (next: InjectSpanAnnotation[]) => void
+}) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [toolbar, setToolbar] = useState<{ x: number; y: number; start: number; end: number } | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  function handleMouseUp() {
+    const sel = getSelectionRange(rootRef.current)
+    if (!sel) { setToolbar(null); return }
+    const rect = selectionRectRelativeTo(rootRef.current)
+    if (!rect) { setToolbar(null); return }
+    setToolbar({ ...rect, ...sel })
+  }
+
+  function addAnnotation(tag: InjectReliability) {
+    if (!toolbar) return
+    const id = `sp_${Math.random().toString(36).slice(2, 8)}`
+    onChange([...annotations, { id, start: toolbar.start, end: toolbar.end, tag }])
+    setToolbar(null)
+    window.getSelection()?.removeAllRanges()
+  }
+
+  function removeAnnotation(id: string) {
+    onChange(annotations.filter(a => a.id !== id))
+    setEditingId(null)
+  }
+
+  function updateAnnotation(id: string, patch: Partial<InjectSpanAnnotation>) {
+    onChange(annotations.map(a => a.id === id ? { ...a, ...patch } : a))
+  }
+
+  const segs = splitTextByAnnotations<InjectReliability>(content, annotations)
+  const editing = editingId ? annotations.find(a => a.id === editingId) ?? null : null
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="text-[10px] text-muted-foreground">
+        Selecteer een woord of zin en klik op een label om te markeren.
+      </div>
+      <div
+        ref={rootRef}
+        onMouseUp={handleMouseUp}
+        className="relative whitespace-pre-wrap rounded border border-border bg-background px-2 py-1.5 text-xs leading-relaxed select-text"
+      >
+        {segs.map((seg, i) => {
+          const slice = content.slice(seg.start, seg.end)
+          if (!seg.tag || !seg.annotationId) return <span key={i}>{slice}</span>
+          const style = SPAN_TAG_STYLE[seg.tag]
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setEditingId(seg.annotationId!) }}
+              className={`underline decoration-2 ${style.underline} cursor-pointer bg-transparent p-0 text-inherit font-inherit`}
+              title="Klik om te bewerken"
+            >
+              {slice}
+            </button>
+          )
+        })}
+        {toolbar && (
+          <div
+            className="absolute z-20 -translate-x-1/2 -translate-y-full rounded-md border border-border bg-popover shadow-md flex items-center gap-1 px-1.5 py-1"
+            style={{ left: toolbar.x, top: toolbar.y }}
+          >
+            {(["fact", "assumption", "misleading"] as InjectReliability[]).map(tag => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => addAnnotation(tag)}
+                className="rounded px-1.5 py-0.5 text-[10px] font-mono hover:bg-accent"
+                title={SPAN_TAG_STYLE[tag].label}
+              >
+                <span className={`inline-block size-1.5 rounded-full ${SPAN_TAG_STYLE[tag].dot} mr-1 align-middle`} />
+                {SPAN_TAG_STYLE[tag].label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {editing && (
+        <div className="flex flex-col gap-1 rounded border border-border bg-background/60 p-2 text-[11px]">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] uppercase text-muted-foreground">
+              {SPAN_TAG_STYLE[editing.tag].label} — "{content.slice(editing.start, editing.end).slice(0, 40)}"
+            </span>
+            <div className="flex gap-1">
+              <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => setEditingId(null)}>Sluit</Button>
+              <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-destructive" onClick={() => removeAnnotation(editing.id)}>Verwijder</Button>
+            </div>
+          </div>
+          <Textarea
+            rows={2}
+            value={editing.authorNote ?? ""}
+            onChange={e => updateAnnotation(editing.id, { authorNote: e.target.value || undefined })}
+            placeholder="Optionele toelichting (zichtbaar in review)"
+            className="text-[11px]"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SupervisionAreasSelect({
+  value,
+  onChange,
+}: {
+  value: SupervisionArea[]
+  onChange: (next: SupervisionArea[]) => void
+}) {
+  function toggle(id: SupervisionArea) {
+    onChange(value.includes(id) ? value.filter(v => v !== id) : [...value, id])
+  }
+  return (
+    <div className="grid grid-cols-1 gap-1">
+      {SUPERVISION_AREAS.map(a => (
+        <label key={a.id} className="flex items-start gap-2 text-[11px]">
+          <input
+            type="checkbox"
+            checked={value.includes(a.id)}
+            onChange={() => toggle(a.id)}
+            className="size-3 mt-0.5"
+          />
+          <span>
+            <span className="font-mono text-[10px] text-muted-foreground">{a.numberLabel}.</span>{" "}
+            <span>{a.label}</span>
+          </span>
+        </label>
+      ))}
     </div>
   )
 }

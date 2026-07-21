@@ -1,5 +1,6 @@
 import type { ScenarioGraph } from "./types"
 import { nis2ShowcaseExample } from "./examples-nis2"
+import { buildNis2Showcase } from "./examples-nis2-showcase"
 
 function id(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}`
@@ -1147,6 +1148,12 @@ export interface Example {
 }
 
 export const EXAMPLES: Example[] = [
+  {
+    key: "nis2_showcase",
+    label: "NIS2 showcase: Ransomware MSP",
+    description: "Deep-branching demo met chasers, retainer-mechaniek en 6 uitkomsten.",
+    build: buildNis2Showcase,
+  },
   {
     key: "nis2",
     label: "★ NIS2 Compliance Test — jaarlijkse workshop",

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { FactCheckTag } from "@/lib/types"
 import { api } from "@/lib/api-client"
 
@@ -34,6 +34,19 @@ export function InjectAnnotator({ injectId, participantId, content, annotations 
   const rootRef = useRef<HTMLDivElement>(null)
   const [toolbar, setToolbar] = useState<{ x: number; y: number; start: number; end: number } | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
+  const [showHelp, setShowHelp] = useState(false)
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setToolbar(null)
+        setShowHelp(false)
+        window.getSelection()?.removeAllRanges()
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   function handleMouseUp() {
     const root = rootRef.current
@@ -127,6 +140,19 @@ export function InjectAnnotator({ injectId, participantId, content, annotations 
               aria-label={tag}
             />
           ))}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setShowHelp(v => !v) }}
+            className="ml-1 flex size-4 items-center justify-center rounded-full border border-tt-border text-[9px] text-tt-dim hover:text-tt-bright"
+            aria-label="Uitleg"
+          >
+            ?
+          </button>
+          {showHelp && (
+            <span className="absolute -bottom-6 left-0 whitespace-nowrap rounded border border-tt-border bg-tt-surface px-2 py-0.5 text-[10px] text-tt-dim shadow">
+              Markeer een woord of zin die je verdacht vindt
+            </span>
+          )}
         </div>
       )}
     </div>

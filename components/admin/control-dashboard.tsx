@@ -18,6 +18,8 @@ import { SpecialsPanel } from "./specials-panel"
 import { GraphPathPanel } from "./graph-path-panel"
 import { InjectRoutePlan } from "./inject-route-plan"
 import { FactCheckPanel } from "./fact-check-panel"
+import { NotificationTracker } from "./notification-tracker"
+import { SupervisionReportView } from "./supervision-report"
 import { buildTeamRoles } from "@/lib/team-roster"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
@@ -900,6 +902,12 @@ export function ControlDashboard() {
           </div>
         )}
 
+        {/* Toezichthouder-rapport — beschikbaar zodra sessie loopt */}
+        <ToezichthouderReportPanel />
+
+        {/* Notification tracker — meldplicht drafts live */}
+        <NotificationTracker session={session} />
+
         {/* Main layout: inject controls + sidebar */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Inject controls */}
@@ -1010,6 +1018,25 @@ export function ControlDashboard() {
           </aside>
         </div>
       </main>
+    </div>
+  )
+}
+
+function ToezichthouderReportPanel() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-primary">Toezichthouder-rapport</span>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="rounded border border-primary/40 px-2 py-0.5 text-[10px] font-mono uppercase text-primary hover:bg-primary/10"
+        >
+          {open ? "Verberg" : "Toon rapport"}
+        </button>
+      </div>
+      {open && <SupervisionReportView />}
     </div>
   )
 }

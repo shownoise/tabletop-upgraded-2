@@ -1,5 +1,6 @@
-import type { ExerciseConfig, FactCheckTag, InjectType, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, Urgency } from "./types"
+import type { ExerciseConfig, FactCheckTag, InjectType, NotificationDraft, NotificationType, RetainerActivationState, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, SupervisionReportEdits, Urgency } from "./types"
 import type { AssessmentDimensionId, SessionAssessment } from "./engine/types"
+import type { SupervisionReport } from "./engine/supervision"
 
 async function post<T = unknown>(url: string, body?: unknown): Promise<T> {
   let res: Response
@@ -90,4 +91,20 @@ export const api = {
     post<{ ok: true; annotationId?: string }>("/api/session/annotate-inject", input),
   removeAnnotation: (input: { participantId: string; annotationId: string }) =>
     post<{ ok: true }>("/api/session/annotate-inject/remove", input),
+  listNotifications: () =>
+    get<{ notifications: NotificationDraft[] }>("/api/session/notifications"),
+  upsertNotification: (input: { participantId: string; type: NotificationType; draftId?: string; content: NotificationDraft["content"]; submit?: boolean }) =>
+    post<{ ok: true; draftId?: string }>("/api/session/notifications", input),
+  getSupervisionReport: () =>
+    get<{ report: SupervisionReport }>("/api/session/supervision-report"),
+  updateSupervisionReport: async (edits: SupervisionReportEdits) => {
+    const res = await fetch("/api/session/supervision-report", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ edits }),
+    })
+    return (await res.json()) as { ok: true }
+  },
+  updateRetainer: (input: { participantId: string; patch: Partial<RetainerActivationState> }) =>
+    post<{ ok: true }>("/api/session/retainer-activation", input),
 }

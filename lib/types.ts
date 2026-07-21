@@ -1,5 +1,6 @@
 import type { GoalId, AssessmentEvent } from "@/lib/engine/types"
 import type { ScenarioGraph } from "@/lib/graph/types"
+import type { SupervisionArea } from "@/lib/engine/supervision"
 export type { GoalId }
 
 export type Role =
@@ -178,6 +179,50 @@ export interface RoleAction {
     reliability?: InjectReliability
     onlyToSubmitter?: boolean
   }
+  supervisionAreas?: SupervisionArea[]
+}
+
+export interface IrRetainerProfile {
+  name: string
+  activationNumber: string
+  activationEmail?: string
+  authorizedActivators: string[]
+  slaMinutesToFirstContact: number
+  handoffChecklist: string[]
+  scopeIncludes: string[]
+  scopeExcludes: string[]
+}
+
+export type NotificationType = 'ncsc_24h' | 'ncsc_72h' | 'ncsc_final' | 'ap_72h'
+
+export interface NotificationDraft {
+  id: string
+  type: NotificationType
+  createdBy: string
+  createdAt: number
+  submittedAt?: number
+  content: {
+    suspectMalicious?: string
+    crossBorderImpact?: string
+    responsibleContact?: string
+    initialImpactAssessment?: string
+    iocs?: string
+    mitigations?: string
+    otherFields?: Record<string, string>
+  }
+  score?: {
+    completeness: number
+    onTime: boolean
+    submittedBeforeChaser: boolean
+  }
+}
+
+export interface RetainerActivationState {
+  chosenActivator?: string
+  chosenActivatorAuthorized?: boolean
+  dialedAt?: number
+  handoffCompleted?: string[]
+  updatedAt: number
 }
 
 export interface SubmittedDecision {
@@ -331,7 +376,15 @@ export type EmotionalTone =
   | 'menacing'
   | 'professional'
 
-export type InjectReliability = 'fact' | 'assumption' | 'unverified' | 'misleading'
+export type InjectReliability = 'fact' | 'assumption' | 'misleading'
+
+export interface InjectSpanAnnotation {
+  id: string
+  start: number
+  end: number
+  tag: InjectReliability
+  authorNote?: string
+}
 export type BobPhase = 'beeldvorming' | 'oordeel' | 'besluit'
 
 export interface Inject {
@@ -354,7 +407,8 @@ export interface Inject {
   // revealed in the review phase.
   reliability?: InjectReliability
   // Optional per-span ground truth for annotation-level scoring (Phase D.11).
-  groundTruthAnnotations?: Array<{ start: number; end: number; tag: FactCheckTag }>
+  groundTruthAnnotations?: InjectSpanAnnotation[]
+  supervisionAreas?: SupervisionArea[]
 }
 
 export interface FacilitatorNotes {
@@ -471,6 +525,7 @@ export interface ExerciseConfig {
   goalId?: GoalId
   graphId?: string
   irRetainerName?: string
+  irRetainerProfile?: IrRetainerProfile
   phaseAutoAdvance?: 'off' | 'fixed_durations' | 'fit_to_round'
 }
 
@@ -623,6 +678,37 @@ export interface SessionState {
   factChecks?: FactCheckEntry[]
   // Inline text-highlight annotations on inject bodies (private per participant).
   injectAnnotations?: InjectAnnotation[]
+  // Notification duty (Cbw/AVG meldplicht) — active gameplay.
+  notifications?: NotificationDraft[]
+  // Anchor for meldplicht deadline countdowns.
+  incidentDetectedAt?: number
+  // Boolean flags for chaser conditions and generic scenario state.
+  flags?: Record<string, boolean>
+  // IR-retainer activation mini-flow state.
+  retainerState?: RetainerActivationState
+  // Auditor-edited fields on the supervision report (chains, lessons).
+  supervisionReportEdits?: SupervisionReportEdits
+}
+
+export interface SupervisionReportEdits {
+  lessonEdits?: Record<string, Partial<{
+    correctiveAction: string
+    owner: string
+    deadline: string
+    priority: 'critical' | 'high' | 'medium' | 'low'
+    status: 'open' | 'in_progress' | 'blocked' | 'closed'
+    proofOfClosure: string
+    retest: string
+  }>>
+  chainEdits?: Record<string, Partial<{
+    correctiveAction: string
+    owner: string
+    deadline: string
+    proofOfClosure: string
+    retest: string
+    priority: 'critical' | 'high' | 'medium' | 'low'
+    status: 'open' | 'in_progress' | 'blocked' | 'closed'
+  }>>
 }
 
 export interface PublicState {

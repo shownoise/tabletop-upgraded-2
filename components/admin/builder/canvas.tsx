@@ -184,7 +184,7 @@ function fromFlowEdges(edges: Edge[]): GraphEdge[] {
 function InnerCanvas() {
   const router = useRouter()
   const initial = useMemo(() => initialGraph(), [])
-  const [graphMeta, setGraphMeta] = useState<Pick<ScenarioGraph, "id" | "name" | "version" | "scenarioType" | "createdAt" | "irRetainerName" | "irPlaybook">>(
+  const [graphMeta, setGraphMeta] = useState<Pick<ScenarioGraph, "id" | "name" | "version" | "scenarioType" | "createdAt" | "irRetainerName" | "irPlaybook" | "meldplicht" | "irRetainerProfile">>(
     { id: initial.id, name: initial.name, version: initial.version, scenarioType: initial.scenarioType, createdAt: initial.createdAt },
   )
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(toFlowNodes(initial))
@@ -197,7 +197,35 @@ function InnerCanvas() {
   const [templatesPickerOpen, setTemplatesPickerOpen] = useState(false)
 
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, setCenter } = useReactFlow()
+
+  const handleFocusNode = useCallback((nodeId: string) => {
+    const n = nodes.find(x => x.id === nodeId)
+    if (!n) return
+    setCenter(n.position.x, n.position.y, { duration: 400, zoom: 1.2 })
+    setSelectedId(nodeId)
+  }, [nodes, setCenter])
+
+  const handleAutoFixCoverage = useCallback((areaId: string) => {
+    const id = `dec_${areaId}_${Math.random().toString(36).slice(2, 6)}`
+    const newFlowNode: Node = {
+      id,
+      type: "decision",
+      position: { x: 100, y: 100 + Math.random() * 200 },
+      data: {
+        kind: "decision",
+        prompt: `Beslissing over ${areaId.replace(/_/g, " ")}`,
+        measuredBy: "participant_choice",
+        options: [
+          { id: `opt_${Math.random().toString(36).slice(2, 6)}`, label: "Optie A" },
+          { id: `opt_${Math.random().toString(36).slice(2, 6)}`, label: "Optie B" },
+        ],
+        supervisionAreas: [areaId as never],
+      } as unknown as Record<string, unknown>,
+    }
+    setNodes(prev => [...prev, newFlowNode])
+    setSelectedId(id)
+  }, [setNodes])
 
   const selectedNode = useMemo(() => nodes.find(n => n.id === selectedId) ?? null, [nodes, selectedId])
 
@@ -353,6 +381,7 @@ function InnerCanvas() {
     setGraphMeta({
       id: g.id, name: g.name, version: g.version, scenarioType: g.scenarioType, createdAt: g.createdAt,
       irRetainerName: g.irRetainerName, irPlaybook: g.irPlaybook,
+      meldplicht: g.meldplicht, irRetainerProfile: g.irRetainerProfile,
     })
     setNodes(toFlowNodes(g))
     setEdges(toFlowEdges(g))
@@ -484,6 +513,9 @@ function InnerCanvas() {
         onScenarioTypeChange={t => setGraphMeta(g => ({ ...g, scenarioType: t as ScenarioType }))}
         onIrRetainerChange={n => setGraphMeta(g => ({ ...g, irRetainerName: n }))}
         onPlaybookChange={p => setGraphMeta(g => ({ ...g, irPlaybook: p }))}
+        onGraphPatch={patch => setGraphMeta(g => ({ ...g, ...patch }))}
+        onFocusNode={handleFocusNode}
+        onAutoFixCoverage={handleAutoFixCoverage}
         onSave={handleSave}
         onLoad={handleLoad}
         onNew={handleNew}
