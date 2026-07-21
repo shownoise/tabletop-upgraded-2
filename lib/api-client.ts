@@ -44,7 +44,7 @@ export const api = {
     post<{ ok: true; sessionId: string; joinCode: string; aiGenerated?: boolean }>("/api/session/create", config),
   joinSession: (input: { name: string; joinCode: string; role?: Role; existingParticipantId?: string }) =>
     post<{ ok: true; participantId: string; sessionId: string }>("/api/session/join", input),
-  startSession: () => post<{ ok: true }>("/api/session/start"),
+  startSession: (opts?: { force?: boolean }) => post<{ ok: true }>("/api/session/start", opts ?? {}),
   nextRound: () => post<{ ok: true }>("/api/session/next-round"),
   prevRound: () => post<{ ok: true }>("/api/session/prev-round"),
   pushInject: (input: { roundIndex: number; injectId: string }) =>
@@ -78,6 +78,8 @@ export const api = {
     post<{ assessment: SessionAssessment }>("/api/session/debrief"),
   setDiscussionPhase: (input: { roundNumber: number; phaseIndex: number; action?: 'set' | 'extend' }) =>
     post<{ ok: true }>("/api/session/discussion-phase", input),
+  setPhaseAutoAdvancePaused: (paused: boolean) =>
+    post<{ ok: true }>("/api/session/phase-pause", { paused }),
   markReady: (participantId: string) =>
     post<{ ok: true }>("/api/session/ready", { participantId }),
 }

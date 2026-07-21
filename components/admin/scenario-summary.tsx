@@ -16,10 +16,10 @@ export function ScenarioSummary({ session }: { session: SessionState }) {
         <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border pt-4 font-mono text-xs md:grid-cols-4">
           <Meta label="Sector" value={config.sector} />
           <Meta label="Size" value={config.companySize} />
-          <Meta label="IR maturity" value={config.irMaturity} />
+          <Meta label="IT maturity" value={config.itMaturity ?? ""} />
           <Meta label="Type" value={config.scenarioType} />
           <Meta label="Duration" value={config.duration} />
-          <Meta label="Teams" value={config.teams} />
+          <Meta label="Team structure" value={config.teamStructure ?? ""} />
           <Meta label="Crown jewels" value={config.crownJewels} className="col-span-2" />
           <Meta label="Critical systems" value={config.criticalSystems} className="col-span-2" />
         </dl>

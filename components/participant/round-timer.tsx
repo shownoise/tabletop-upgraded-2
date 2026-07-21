@@ -24,10 +24,24 @@ function useCountdown(roundStartedAt: number | undefined, timerMinutes: number, 
   return secondsLeft
 }
 
-function timerColor(secondsLeft: number): string {
-  if (secondsLeft < 30)  return "var(--tt-red)"
-  if (secondsLeft < 120) return "var(--tt-warn)"
+function timerColor(secondsLeft: number, totalSeconds: number): string {
+  const frac = totalSeconds > 0 ? secondsLeft / totalSeconds : 1
+  if (frac < 0.15 || secondsLeft < 30) return "var(--tt-red)"
+  if (frac < 0.4) return "var(--tt-warn)"
   return "var(--tt-green)"
+}
+
+export function timerPhase(secondsLeft: number, totalSeconds: number): "green" | "yellow" | "red" {
+  const frac = totalSeconds > 0 ? secondsLeft / totalSeconds : 1
+  if (frac < 0.15 || secondsLeft < 30) return "red"
+  if (frac < 0.4) return "yellow"
+  return "green"
+}
+
+export function timerPhaseText(phase: "green" | "yellow" | "red"): string {
+  if (phase === "red") return "BESLIS NU"
+  if (phase === "yellow") return "Discussieer + beslis binnenkort"
+  return "Overleg loopt"
 }
 
 export function RoundTimer({ roundStartedAt, timerMinutes, status, lang }: RoundTimerProps) {
@@ -36,8 +50,9 @@ export function RoundTimer({ roundStartedAt, timerMinutes, status, lang }: Round
 
   const mins  = Math.floor(secondsLeft / 60)
   const secs  = secondsLeft % 60
-  const frac  = timerMinutes > 0 ? secondsLeft / (timerMinutes * 60) : 0
-  const color = timerColor(secondsLeft)
+  const total = timerMinutes * 60
+  const frac  = total > 0 ? secondsLeft / total : 0
+  const color = timerColor(secondsLeft, total)
   const isUrgent = secondsLeft < 30
   const r     = 36
   const circ  = 2 * Math.PI * r
@@ -89,8 +104,10 @@ export function RoundTimerCompact({
 
   const mins  = Math.floor(secondsLeft / 60)
   const secs  = secondsLeft % 60
-  const color = timerColor(secondsLeft)
-  const isUrgent = secondsLeft < 30
+  const total = timerMinutes * 60
+  const color = timerColor(secondsLeft, total)
+  const phase = timerPhase(secondsLeft, total)
+  const isUrgent = phase === "red"
 
   return (
     <div
@@ -112,10 +129,16 @@ export function RoundTimerCompact({
         {tr(lang, "roundTimer")}
       </span>
       <span
-        className="font-mono text-sm tabular-nums font-bold"
+        className={`font-mono text-base tabular-nums font-bold ${isUrgent ? "animate-pulse" : ""}`}
         style={{ color }}
       >
         {String(mins).padStart(2, "0")}:{String(secs).padStart(2, "0")}
+      </span>
+      <span
+        className="font-mono text-[9px] uppercase tracking-widest hidden sm:inline"
+        style={{ color }}
+      >
+        {timerPhaseText(phase)}
       </span>
       {onTogglePause && (
         <button

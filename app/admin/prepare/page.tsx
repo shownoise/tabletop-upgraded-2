@@ -71,18 +71,21 @@ export default function PreparePage() {
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const hasGraph = !!session?.graph
+  const targetView = hasGraph ? "/admin/story" : "/admin/dashboard"
+
   useEffect(() => {
     if (session?.status === "active" || session?.status === "ended") {
-      router.replace("/admin/dashboard")
+      router.replace(targetView)
     }
-  }, [session?.status, router])
+  }, [session?.status, router, targetView])
 
   async function startSession() {
     setStarting(true)
     setError(null)
     try {
       await api.startSession()
-      router.push("/admin/dashboard")
+      router.push(targetView)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Start failed")
       setStarting(false)
@@ -226,23 +229,74 @@ export default function PreparePage() {
           </section>
         )}
 
+        {/* Join code — share with participants */}
+        <div className="flex flex-col gap-3 rounded-xl border border-primary/40 bg-primary/10 px-6 py-5">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-primary">Join code</span>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="font-mono text-4xl font-bold tracking-[0.3em] text-primary">
+              {session.joinCode}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(session.joinCode)
+                } catch { /* ignore */ }
+              }}
+            >
+              Copy
+            </Button>
+            <a
+              href={typeof window !== "undefined" ? `${window.location.origin}/join?code=${session.joinCode}` : `/join?code=${session.joinCode}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            >
+              Open /join
+            </a>
+          </div>
+          <p className="font-mono text-[11px] text-muted-foreground">
+            Deel deze code met deelnemers. Zij gaan naar <span className="font-mono text-foreground">/join</span>, vullen de code in en kiezen hun rol.
+          </p>
+        </div>
+
         {/* Start CTA at bottom */}
         <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 px-6 py-5">
           <p className="font-mono text-xs text-muted-foreground">
             Share the join code with your team, then start the session when everyone is in the lobby.
-            The join code is visible on the dashboard.
+            {hasGraph && " This is a graph-driven scenario — you'll be routed to the simplified Story view."}
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Button onClick={startSession} disabled={starting} className="gap-2 font-mono uppercase tracking-wider">
               <Play className="size-3.5" />
               {starting ? "Starting…" : "Start session"}
             </Button>
-            <Link
-              href="/admin/dashboard"
-              className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Go to lobby <ChevronRight className="size-3" />
-            </Link>
+            {hasGraph ? (
+              <>
+                <Link
+                  href="/admin/story"
+                  className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
+                >
+                  Open Story view
+                </Link>
+                <Link
+                  href="/admin/dashboard"
+                  className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Classic dashboard <ChevronRight className="size-3" />
+                </Link>
+              </>
+            ) : (
+              <Link
+                href="/admin/dashboard"
+                className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Go to lobby <ChevronRight className="size-3" />
+              </Link>
+            )}
           </div>
         </div>
 

@@ -5,7 +5,17 @@
 
 import { randomBytes } from "crypto"
 import { generateScenario } from "./scenario-generator"
-import { dbGetSession, dbSetSession } from "./db"
+import { stepFromNode, type EngineTrigger, type StepResult } from "./graph/engine"
+import type { DecisionNodeData } from "./graph/types"
+import {
+  dbDeleteScenarioGraph,
+  dbGetSession,
+  dbListScenarioGraphs,
+  dbLoadScenarioGraph,
+  dbSaveScenarioGraph,
+  dbSetSession,
+} from "./db"
+import type { ScenarioGraph } from "./graph/types"
 import type {
   ActivePhaseState, ExerciseConfig, FacilitatorRoundScore, GovernanceFlag, Inject, InjectType,
   LearningObjective, LiveEvent, LiveEventName, Participant, PublicState, Role, RoleAction,
@@ -13,7 +23,7 @@ import type {
   SpecialScore, SpecialType, StreamMessage, SubmittedDecision, TimelineEvent, TimelineEventType, Urgency,
 } from "./types"
 import { ROLE_FALLBACK } from "./types"
-import type { AssessmentEvent } from "./engine/types"
+import type { AssessmentEvent, AssessmentDimensionId } from "./engine/types"
 import { BOB_PHASES, OODA_PHASES } from "./engine/facilitator-support"
 
 function remapMissingRoles(scenario: Scenario, selectedRoles: Role[]): Scenario {
@@ -69,8 +79,72 @@ function genJoinCode(len = 6) {
 // ─── Broadcast ────────────────────────────────────────────────
 
 function broadcastState(session: SessionState | null) {
-  const snapshot: PublicState = { session }
+  // Callers that pass a session are responsible for persistence. We still
+  // re-tick here in case a fresh phase boundary crossed between mutation and
+  // broadcast; the update propagates to SSE listeners immediately but skips
+  // the extra write to keep broadcasts cheap (next mutation will persist).
+  const ticked = session ? tickPhases(session) : null
+  const snapshot: PublicState = { session: ticked }
   for (const l of listeners) l({ type: "state", data: snapshot })
+}
+
+// ─── Phase auto-advance (Phase 10) ─────────────────────────────
+
+function computeEffectivePhaseSeconds(session: SessionState, phaseIndex: number): number | undefined {
+  const phases = session.config.decisionFramework === "ooda" ? OODA_PHASES : BOB_PHASES
+  const phase = phases[phaseIndex]
+  if (!phase) return undefined
+  const mode = session.config.phaseAutoAdvance ?? "fit_to_round"
+  if (mode !== "fit_to_round") return phase.durationSeconds
+  const round = session.scenario.rounds[session.currentRound]
+  const roundMinutes = round?.timerMinutes ?? session.config.timerPerRound ?? 10
+  const roundBudget = roundMinutes * 60
+  const total = phases.reduce((acc, p) => acc + p.durationSeconds, 0)
+  if (total <= 0) return phase.durationSeconds
+  const k = roundBudget / total
+  return Math.max(30, Math.round(phase.durationSeconds * k))
+}
+
+function tickPhases(session: SessionState): SessionState {
+  if (session.graph) return session
+  if (session.phaseAutoAdvancePaused) return session
+  const mode = session.config.phaseAutoAdvance ?? "fit_to_round"
+  if (mode === "off") return session
+  const cur = session.activeDiscussionPhase
+  if (!cur) return session
+  const phases = session.config.decisionFramework === "ooda" ? OODA_PHASES : BOB_PHASES
+  const phase = phases[cur.phaseIndex]
+  if (!phase) return session
+
+  const effectiveSec = computeEffectivePhaseSeconds(session, cur.phaseIndex)
+  if (!effectiveSec) return session
+  const elapsedMs = Date.now() - cur.phaseStartedAt
+  const budgetMs = effectiveSec * 1000
+  if (elapsedMs < budgetMs) return session
+
+  const nextIdx = cur.phaseIndex + 1
+  if (nextIdx >= phases.length) return session
+
+  const nextPhase = phases[nextIdx]
+  const advanced: SessionState = {
+    ...session,
+    activeDiscussionPhase: {
+      roundNumber: cur.roundNumber,
+      phaseIndex: nextIdx,
+      phaseStartedAt: cur.phaseStartedAt + budgetMs,
+      extended: false,
+    },
+    currentDiscussionPrompt: nextPhase.participantPrompt,
+    currentDiscussionPhaseIndex: nextIdx,
+  }
+  const withTimeline = pushTimeline(advanced, "discussion_phase_changed", {
+    roundNumber: cur.roundNumber,
+    phaseIndex: nextIdx,
+    phaseName: nextPhase.name,
+    auto: true,
+  })
+  emit("discussion_phase_changed", { phaseIndex: nextIdx, phaseName: nextPhase.name, auto: true })
+  return withTimeline
 }
 
 function emit(name: LiveEventName, payload: Record<string, unknown>) {
@@ -125,12 +199,20 @@ export function toParticipantState(session: SessionState): SessionState {
     specialEvents: session.specialEvents ?? [],
     // All documents included — filtered by role in the participant's own UI
     documents: session.documents ?? [],
-    // Strip facilitator-only phase state; expose only the participant-safe prompt + index
-    activeDiscussionPhase: undefined,
+    // Expose the raw activeDiscussionPhase (includes phaseStartedAt) so participant
+    // clients can render a live countdown without needing to reverse-engineer it.
+    activeDiscussionPhase: session.activeDiscussionPhase,
     currentDiscussionPrompt: session.activeDiscussionPhase
       ? (session.config.decisionFramework === 'ooda' ? OODA_PHASES : BOB_PHASES)[session.activeDiscussionPhase.phaseIndex]?.participantPrompt
       : undefined,
     currentDiscussionPhaseIndex: session.activeDiscussionPhase?.phaseIndex,
+    currentDiscussionPhaseEffectiveSeconds: session.activeDiscussionPhase
+      ? computeEffectivePhaseSeconds(session, session.activeDiscussionPhase.phaseIndex)
+      : undefined,
+    currentDiscussionPhasePaused: session.phaseAutoAdvancePaused,
+    // Hide the full graph and internal traversal state from participants
+    graph: undefined,
+    graphState: undefined,
   }
 }
 
@@ -171,11 +253,18 @@ export async function getSession(): Promise<SessionState | null> {
   return dbGetSession()
 }
 
-export async function createSession(config: ExerciseConfig, scenario?: Scenario, mode?: SimulationMode, documents?: RoleDocument[]): Promise<SessionState> {
+export async function createSession(
+  config: ExerciseConfig,
+  scenario?: Scenario,
+  mode?: SimulationMode,
+  documents?: RoleDocument[],
+  graph?: ScenarioGraph,
+): Promise<SessionState> {
   const raw = scenario ?? generateScenario(config)
   const resolvedScenario = config.selectedRoles?.length
     ? remapMissingRoles(raw, config.selectedRoles)
     : raw
+  const startNodeId = graph?.nodes.find(n => n.type === "start")?.id
   const session: SessionState = {
     id: genId("ses"),
     joinCode: genJoinCode(),
@@ -197,6 +286,10 @@ export async function createSession(config: ExerciseConfig, scenario?: Scenario,
     submittedDecisions: [],
     governanceFlags: [],
     documents: documents ?? [],
+    graph,
+    graphState: graph && startNodeId
+      ? { currentNodeId: startNodeId, pathHistory: [startNodeId], branchLog: [] }
+      : undefined,
   }
   await dbSetSession(session)
   broadcastState(session)
@@ -209,19 +302,139 @@ export async function resetSession(): Promise<void> {
   broadcastState(null)
 }
 
-async function mutate(fn: (s: SessionState) => SessionState | null): Promise<{ ok: boolean; error?: string }> {
+async function mutate(fn: (s: SessionState) => SessionState | null | { error: string }): Promise<{ ok: boolean; error?: string }> {
   const session = await dbGetSession()
   if (!session) return { ok: false, error: "No active session." }
   const updated = fn(session)
   if (updated === null) return { ok: false, error: "Mutation returned null." }
-  await dbSetSession(updated)
-  broadcastState(updated)
+  if (typeof updated === "object" && updated !== null && "error" in updated && !("participants" in updated)) {
+    return { ok: false, error: updated.error }
+  }
+  const ticked = tickPhases(updated as SessionState)
+  await dbSetSession(ticked)
+  broadcastState(ticked)
   return { ok: true }
 }
 
 function pushTimeline(session: SessionState, type: TimelineEventType, data: Record<string, unknown>): SessionState {
   const ev: TimelineEvent = { id: genId("tl"), timestamp: Date.now(), type, data }
   return { ...session, timeline: [...session.timeline, ev] }
+}
+
+function applyEngineStep(session: SessionState, step: StepResult): SessionState {
+  let updated: SessionState = { ...session }
+  if (updated.graphState && step.nextNodeId && step.nextNodeId !== updated.graphState.currentNodeId) {
+    updated = {
+      ...updated,
+      graphState: {
+        ...updated.graphState,
+        currentNodeId: step.nextNodeId,
+        pathHistory: [...updated.graphState.pathHistory, step.nextNodeId],
+      },
+    }
+  }
+
+  for (const output of step.outputs) {
+    if (output.kind === "start_round") {
+      const roundNumber = updated.scenario.rounds.length + 1
+      const round = { ...output.round, round_number: roundNumber }
+      const roundIndex = roundNumber - 1
+      const now = Date.now()
+      // Auto-push. Injects with deliverySeconds > 0 get a future pushedAt so the client can drip them in over time.
+      const autoPushed = round.injects.map(inject => ({
+        inject,
+        roundIndex,
+        pushedAt: now + (inject.deliverySeconds ?? 0) * 1000,
+      }))
+      updated = {
+        ...updated,
+        scenario: { ...updated.scenario, rounds: [...updated.scenario.rounds, round] },
+        currentRound: roundIndex,
+        roundStartedAt: now,
+        roundPhase: "inject",
+        activeDiscussionPhase: undefined,
+        currentDiscussionPrompt: undefined,
+        currentDiscussionPhaseIndex: undefined,
+        pushedInjects: [...updated.pushedInjects, ...autoPushed],
+      }
+      updated = pushTimeline(updated, "round_changed", { roundIndex })
+      for (const p of autoPushed) {
+        updated = pushTimeline(updated, "inject_pushed", { roundIndex, inject: p.inject })
+      }
+    } else if (output.kind === "trigger_special") {
+      const mode = updated.config.specialsMode
+      if (!mode || mode === "off") continue
+      const assigned = output.assignedRole
+        ? updated.participants.find(p => p.role === output.assignedRole)
+        : assignSpecialParticipant(updated, output.type)
+      const firstTurn = SCRIPTED_TURNS[output.type]?.[0]
+      const openingMsg: SpecialMessage | undefined = firstTurn
+        ? {
+            id: genId("sm"),
+            sender: "counterpart",
+            text: firstTurn.counterpartMessage,
+            timestamp: new Date().toISOString(),
+            choices: firstTurn.choices,
+          }
+        : undefined
+      const special: SpecialEvent = {
+        id: genId("sp"),
+        type: output.type,
+        mode: mode as "static" | "ai",
+        status: "active",
+        assignedParticipantId: assigned?.id,
+        assignedParticipantName: assigned?.name,
+        assignedRole: assigned?.role,
+        triggeredAt: Date.now(),
+        messages: openingMsg ? [openingMsg] : [],
+        totalScore: 0,
+        currentTurnIndex: 0,
+      }
+      updated = {
+        ...updated,
+        specialEvents: [...(updated.specialEvents ?? []), special],
+      }
+      updated = pushTimeline(updated, "special_triggered", { specialId: special.id, type: output.type, assignedTo: assigned?.name })
+    } else if (output.kind === "set_outcome") {
+      updated = {
+        ...updated,
+        status: "ended",
+        graphState: updated.graphState ? {
+          ...updated.graphState,
+          finalOutcome: {
+            key: output.outcome.key,
+            label: output.outcome.label,
+            narrative: output.outcome.narrative,
+            scoreImpact: output.outcome.scoreImpact,
+          },
+        } : undefined,
+      }
+      // Log outcome scoring against its linked dimension for the rapport
+      if (output.outcome.linkedDimension && typeof output.outcome.scoreImpact === "number") {
+        const normalized = Math.max(0, Math.min(100, 50 + output.outcome.scoreImpact * 5))
+        const ev: AssessmentEvent = {
+          timestamp: Date.now(),
+          dimensionId: output.outcome.linkedDimension as AssessmentDimensionId,
+          roundNumber: updated.currentRound,
+          value: normalized,
+          source: "system",
+          note: `Outcome: ${output.outcome.label}`,
+          lesson: output.outcome.lessonLearned,
+          scoreImpact: output.outcome.scoreImpact,
+        }
+        updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), ev] }
+      }
+      updated = pushTimeline(updated, "session_ended", { outcome: output.outcome.key })
+    }
+  }
+
+  return updated
+}
+
+function triggerEngine(session: SessionState, trigger: EngineTrigger): SessionState {
+  if (!session.graph || !session.graphState) return session
+  const step = stepFromNode(session.graph, session.graphState.currentNodeId, trigger)
+  return applyEngineStep(session, step)
 }
 
 // ─── Session operations ───────────────────────────────────────
@@ -258,6 +471,13 @@ export async function joinSession(input: { name: string; joinCode: string; role?
 
 export async function startSession(): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(s => {
+    if (s.graph && s.graphState) {
+      const now = Date.now()
+      let updated = triggerEngine(s, { kind: "auto" })
+      updated = { ...updated, status: "active" as const, startedAt: now }
+      updated = pushTimeline(updated, "session_started", { roundIndex: updated.currentRound })
+      return updated
+    }
     if (s.scenario.rounds.length === 0) return null
     const now = Date.now()
     let updated: SessionState = { ...s, status: "active" as const, currentRound: 0, roundStartedAt: now, startedAt: now }
@@ -271,6 +491,32 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
 export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> {
   const session = await dbGetSession()
   if (!session) return { ok: false, error: "No active session." }
+
+  if (session.graph && session.graphState) {
+    let updated: SessionState
+    try {
+      updated = triggerEngine(session, { kind: "facilitator_next" })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return { ok: false, error: msg }
+    }
+    if (updated.status === "ended") {
+      await dbSetSession(updated)
+      broadcastState(updated)
+      emit("session_ended", {})
+      return { ok: true }
+    }
+    if (updated.currentRound !== session.currentRound) {
+      await dbSetSession(updated)
+      broadcastState(updated)
+      emit("next_round", { roundIndex: updated.currentRound })
+      return { ok: true }
+    }
+    // No round advance — likely landed on a decision awaiting a participant choice
+    await dbSetSession(updated)
+    broadcastState(updated)
+    return { ok: true }
+  }
 
   if (session.currentRound < session.scenario.rounds.length - 1) {
     const nextIdx = session.currentRound + 1
@@ -321,11 +567,24 @@ export async function pushInject(input: { roundIndex: number; injectId: string }
 
   const inject = round.injects.find(i => i.id === input.injectId)
   if (!inject) return { ok: false, error: "Invalid inject." }
-  if (session.pushedInjects.some(p => p.inject.id === inject.id)) return { ok: false, error: "Already pushed." }
 
-  const pushed = { inject, roundIndex: input.roundIndex, pushedAt: Date.now() }
-  let updated = { ...session, pushedInjects: [...session.pushedInjects, pushed] }
-  updated = pushTimeline(updated, "inject_pushed", { roundIndex: input.roundIndex, inject })
+  const existingIdx = session.pushedInjects.findIndex(p => p.inject.id === inject.id)
+  const now = Date.now()
+
+  let pushedInjects = session.pushedInjects
+  let didAdvance = false
+  if (existingIdx >= 0) {
+    const existing = session.pushedInjects[existingIdx]
+    if (existing.pushedAt <= now) return { ok: false, error: "Already delivered." }
+    pushedInjects = [...session.pushedInjects]
+    pushedInjects[existingIdx] = { ...existing, pushedAt: now }
+    didAdvance = true
+  } else {
+    pushedInjects = [...session.pushedInjects, { inject, roundIndex: input.roundIndex, pushedAt: now }]
+  }
+
+  let updated: SessionState = { ...session, pushedInjects }
+  updated = pushTimeline(updated, didAdvance ? "inject_advanced" : "inject_pushed", { roundIndex: input.roundIndex, inject })
   await dbSetSession(updated)
   broadcastState(updated)
   emit("push_inject", { inject, roundIndex: input.roundIndex })
@@ -363,9 +622,10 @@ export async function pushSurpriseInject(input: {
 
 export async function setPhase(phase: RoundPhase): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(s => {
-    // Auto-initialize BOB/OODA phase 0 when switching to discussion so participants
-    // immediately see a prompt instead of a blank screen.
-    if (phase === 'discussion' && !s.activeDiscussionPhase) {
+    // Graph-driven sessions use the round's bobPhase + facilitator notes for guidance;
+    // avoid overlaying the generic BOB/OODA framework on top.
+    const isGraphDriven = !!s.graph
+    if (phase === 'discussion' && !s.activeDiscussionPhase && !isGraphDriven) {
       const phases = s.config.decisionFramework === 'ooda' ? OODA_PHASES : BOB_PHASES
       const firstPhase = phases[0]
       if (firstPhase) {
@@ -393,6 +653,11 @@ export async function setPhase(phase: RoundPhase): Promise<{ ok: boolean; error?
 
 export async function assignRole(input: { participantId: string; role: Role }): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(s => {
+    const claimant = s.participants.find(p => p.id === input.participantId)
+    if (!claimant) return { error: "Participant not found." }
+    // Role is already held by someone else — reject the claim rather than silently overwriting.
+    const holder = s.participants.find(p => p.role === input.role && p.id !== input.participantId)
+    if (holder) return { error: `Rol is al geclaimd door ${holder.name}.` }
     const participants = s.participants.map(p =>
       p.id === input.participantId ? { ...p, role: input.role } : p
     )
@@ -425,6 +690,11 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
 
   const action: RoleAction | undefined = round.roleActions?.find(a => a.id === input.actionId)
   if (!action) return { ok: false, error: "Invalid action." }
+
+  // C2: reject decisions submitted during briefing or review — only allow during discussion/decision.
+  if (session.roundPhase === 'inject' || session.roundPhase === 'review') {
+    return { ok: false, error: `Beslissingen kunnen niet worden ingediend tijdens de '${session.roundPhase}' fase.` }
+  }
 
   const role = participant.role
   const isWrongRole = action.allowedRoles.length > 0 && !action.allowedRoles.includes(role)
@@ -482,12 +752,14 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     })
   }
 
-  // Check learning objectives triggered by this decision
+  // Check learning objectives triggered by this decision.
+  // C4 (partial): require a minimum reasoning length so trivial submissions don't auto-tick objectives.
+  const reasoningQualified = (input.reasoning?.trim().length ?? 0) >= 20
   const updatedRounds = session.scenario.rounds.map((r, ri) => {
     if (ri !== input.roundIndex || !r.learningObjectives) return r
     const updatedObjectives = r.learningObjectives.map(obj => {
       if (obj.achieved || obj.measuredBy !== 'decision') return obj
-      if (obj.triggerActionIds?.includes(input.actionId)) {
+      if (reasoningQualified && obj.triggerActionIds?.includes(input.actionId)) {
         return { ...obj, achieved: true, achievedAt: new Date().toISOString() }
       }
       return obj
@@ -502,10 +774,12 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     governanceFlags: [...existingFlags, ...newFlags],
   }
 
-  // Auto-score decision_speed on the first decision per round
+  // C3: score decision_speed once per participant per round (not once per round).
   if (session.config.goalId && session.roundStartedAt) {
     const alreadyScored = (session.assessmentEvents ?? []).some(
-      e => e.dimensionId === 'decision_speed' && e.roundNumber === input.roundIndex
+      e => e.dimensionId === 'decision_speed'
+        && e.roundNumber === input.roundIndex
+        && e.participantId === input.participantId
     )
     if (!alreadyScored) {
       const deltaMin = (Date.now() - session.roundStartedAt) / 60000
@@ -516,8 +790,112 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
         value: speedValue,
         source: 'system',
         timestamp: Date.now(),
+        participantId: input.participantId,
       }
       updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), speedEvent] }
+    }
+  }
+
+  // Score the action itself if it has scoring metadata
+  if (action.linkedDimension && typeof action.scoreImpact === "number") {
+    const normalized = Math.max(0, Math.min(100, 50 + action.scoreImpact * 5))
+    const ev: AssessmentEvent = {
+      timestamp: Date.now(),
+      dimensionId: action.linkedDimension as AssessmentDimensionId,
+      roundNumber: input.roundIndex,
+      value: normalized,
+      source: "system",
+      note: `Action: ${action.label} (${participant.name})`,
+      participantId: input.participantId,
+      lesson: action.lessonLearned,
+      scoreImpact: action.scoreImpact,
+    }
+    updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), ev] }
+  }
+
+  // Auto-penalize responses to misleading signals (BOB-training)
+  if (action.respondsToMisleading) {
+    const penalty: AssessmentEvent = {
+      timestamp: Date.now(),
+      dimensionId: "framework_adherence",
+      roundNumber: input.roundIndex,
+      value: 20,
+      source: "system",
+      note: `Reactie op misleidend signaal: ${action.label}`,
+      participantId: input.participantId,
+      lesson: `Actie gebaseerd op ongeverifieerd/misleidend signaal. BOB-vergissing: aanname behandeld als feit. Vraag altijd 'wat weten we zeker?' voor je handelt.`,
+      scoreImpact: -6,
+    }
+    updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), penalty] }
+  }
+
+  // Push a response inject when action has one (e.g. "Consult IR retainer")
+  if (action.pushesInject) {
+    const pi = action.pushesInject
+    const responseInject: Inject = {
+      id: genId("resp"),
+      type: "intel",
+      channel: pi.channel ?? "email",
+      title: pi.title,
+      content: pi.content,
+      urgency: "medium",
+      source: updated.graph?.irRetainerName ?? "IR-retainer",
+      senderName: updated.graph?.irRetainerName ?? "IR-retainer",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      targetRoles: pi.onlyToSubmitter && participant.role ? [participant.role] : undefined,
+      targetTeam: pi.onlyToSubmitter ? undefined : "all",
+      reliability: pi.reliability,
+    }
+    const pushed = { inject: responseInject, roundIndex: input.roundIndex, pushedAt: Date.now() }
+    updated = {
+      ...updated,
+      pushedInjects: [...updated.pushedInjects, pushed],
+    }
+    updated = pushTimeline(updated, "inject_pushed", { roundIndex: input.roundIndex, inject: responseInject })
+  }
+
+  if (updated.graph && updated.graphState) {
+    const currentNode = updated.graph.nodes.find(n => n.id === updated.graphState!.currentNodeId)
+    if (currentNode?.type === "decision") {
+      const dd = currentNode.data as DecisionNodeData
+      const option = dd.options.find(o => o.roleActionId === input.actionId)
+      if (option) {
+        // Score the decision option
+        if (option.linkedDimension && typeof option.scoreImpact === "number") {
+          const normalized = Math.max(0, Math.min(100, 50 + option.scoreImpact * 5))
+          const ev: AssessmentEvent = {
+            timestamp: Date.now(),
+            dimensionId: option.linkedDimension as AssessmentDimensionId,
+            roundNumber: input.roundIndex,
+            value: normalized,
+            source: "system",
+            note: `Decision: ${option.label}`,
+            participantId: input.participantId,
+            lesson: option.lessonLearned,
+            scoreImpact: option.scoreImpact,
+          }
+          updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), ev] }
+        }
+        // If decision has advancesGraph:false, only score — don't move currentNodeId
+        const advances = dd.advancesGraph !== false
+        if (advances) {
+          updated = triggerEngine(updated, { kind: "decision_made", handle: option.id })
+        }
+        if (updated.graphState) {
+          updated = {
+            ...updated,
+            graphState: {
+              ...updated.graphState,
+              branchLog: [...updated.graphState.branchLog, {
+                nodeId: currentNode.id,
+                choseHandle: option.id,
+                trigger: "participant_decision",
+                triggeredAt: Date.now(),
+              }],
+            },
+          }
+        }
+      }
     }
   }
 
@@ -925,6 +1303,12 @@ export async function submitApForm(input: {
   return { ok: true }
 }
 
+const SPECIAL_DIMENSION_MAP: Record<SpecialType, AssessmentDimensionId | undefined> = {
+  ransomware_negotiation: 'decision_quality',
+  journalist_qa: 'communication_clarity',
+  ap_notification: 'compliance_awareness',
+}
+
 function applySpecialCompletion(session: SessionState, completedSpecial: SpecialEvent): SessionState {
   const entry: SpecialScore = {
     type: completedSpecial.type,
@@ -945,11 +1329,54 @@ function applySpecialCompletion(session: SessionState, completedSpecial: Special
       }),
     }
   })
-  return {
+
+  // D4: also record the special's outcome as an assessment event so debrief + report reflect it.
+  const nextEvents = [...(session.assessmentEvents ?? [])]
+  const dimensionId = SPECIAL_DIMENSION_MAP[completedSpecial.type]
+  if (session.config.goalId && dimensionId) {
+    const raw = completedSpecial.totalScore ?? 0
+    const normalized = Math.max(0, Math.min(100, Math.round((raw + 8) * 6.25)))
+    nextEvents.push({
+      timestamp: Date.now(),
+      dimensionId,
+      roundNumber: session.currentRound,
+      value: normalized,
+      source: 'system',
+      note: `Special: ${completedSpecial.type} (raw score ${raw})`,
+      participantId: completedSpecial.assignedParticipantId,
+    })
+  }
+
+  let updated: SessionState = {
     ...session,
     scenario: { ...session.scenario, rounds: updatedRounds },
     specialScores: [...(session.specialScores ?? []), entry],
+    assessmentEvents: nextEvents,
   }
+
+  if (updated.graph && updated.graphState) {
+    const currentNode = updated.graph.nodes.find(n => n.id === updated.graphState!.currentNodeId)
+    if (currentNode?.type === "special") {
+      const stepBefore = updated.graphState.currentNodeId
+      updated = triggerEngine(updated, { kind: "special_completed", score: completedSpecial.totalScore ?? 0 })
+      if (updated.graphState && updated.graphState.currentNodeId !== stepBefore) {
+        updated = {
+          ...updated,
+          graphState: {
+            ...updated.graphState,
+            branchLog: [...updated.graphState.branchLog, {
+              nodeId: currentNode.id,
+              choseHandle: updated.graphState.currentNodeId,
+              trigger: "special_score",
+              triggeredAt: Date.now(),
+            }],
+          },
+        }
+      }
+    }
+  }
+
+  return updated
 }
 
 export async function completeSpecial(specialId: string): Promise<{ ok: boolean; error?: string }> {
@@ -978,9 +1405,16 @@ export async function addAssessmentEvent(
   const session = await dbGetSession()
   if (!session) return { ok: false, error: "No active session." }
   const newEvent: AssessmentEvent = { ...event, timestamp: Date.now() }
+  // D7: dedupe by (dimensionId, roundNumber, source, participantId) — latest write wins.
+  const filtered = (session.assessmentEvents ?? []).filter(e => !(
+    e.dimensionId === newEvent.dimensionId &&
+    e.roundNumber === newEvent.roundNumber &&
+    e.source === newEvent.source &&
+    e.participantId === newEvent.participantId
+  ))
   const updated: SessionState = {
     ...session,
-    assessmentEvents: [...(session.assessmentEvents ?? []), newEvent],
+    assessmentEvents: [...filtered, newEvent],
   }
   await dbSetSession(updated)
   broadcastState(updated)
@@ -1031,6 +1465,28 @@ export async function setDiscussionPhase(
   return { ok: true }
 }
 
+export async function setPhaseAutoAdvancePaused(paused: boolean): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  const wasPaused = !!session.phaseAutoAdvancePaused
+  let updated: SessionState = { ...session, phaseAutoAdvancePaused: paused }
+  // Un-pausing: reset phaseStartedAt so we don't skip the missed portion — pick up
+  // where we left off. If we tracked the elapsed-at-pause time we'd use that; the
+  // simplest safe behavior is to reset to now.
+  if (wasPaused && !paused && session.activeDiscussionPhase) {
+    updated = {
+      ...updated,
+      activeDiscussionPhase: {
+        ...session.activeDiscussionPhase,
+        phaseStartedAt: Date.now(),
+      },
+    }
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true }
+}
+
 export async function markParticipantReady(participantId: string): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(session => {
     const participants = session.participants.map(p =>
@@ -1040,6 +1496,108 @@ export async function markParticipantReady(participantId: string): Promise<{ ok:
   })
   if (result.ok) emit('participant_ready', { participantId })
   return result
+}
+
+// ─── Scenario graphs ──────────────────────────────────────────
+
+export async function facilitatorSkipDecision(): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  if (!session.graph || !session.graphState) return { ok: false, error: "Session has no graph." }
+  const node = session.graph.nodes.find(n => n.id === session.graphState!.currentNodeId)
+  if (!node || node.type !== "decision") return { ok: false, error: "Current node is not a decision." }
+  const dd = node.data as DecisionNodeData
+  // Use the FIRST option as fallback branch — recorded as "team was not decisive"
+  const fallback = dd.options[0]
+  if (!fallback) return { ok: false, error: "Decision has no options to fall back to." }
+
+  // Penalize decision-speed
+  const penalty: AssessmentEvent = {
+    timestamp: Date.now(),
+    dimensionId: "decision_speed",
+    roundNumber: session.currentRound,
+    value: 20,
+    source: "facilitator",
+    note: `Beslissing overgeslagen door facilitator: ${dd.prompt.slice(0, 60)}`,
+    lesson: "Team was niet decisief binnen de beschikbare tijd. Facilitator koos een default-pad. Snelheid is een NIS2-plicht — trage besluitvorming = compliance-risico.",
+    scoreImpact: -4,
+  }
+
+  let updated: SessionState = { ...session, assessmentEvents: [...(session.assessmentEvents ?? []), penalty] }
+  updated = triggerEngine(updated, { kind: "decision_made", handle: fallback.id })
+  if (updated.graphState) {
+    updated = {
+      ...updated,
+      graphState: {
+        ...updated.graphState,
+        branchLog: [...updated.graphState.branchLog, {
+          nodeId: node.id,
+          choseHandle: fallback.id,
+          trigger: "facilitator_manual",
+          triggeredAt: Date.now(),
+        }],
+      },
+    }
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  if (updated.status === "ended") emit("session_ended", {})
+  else emit("next_round", { roundIndex: updated.currentRound })
+  return { ok: true }
+}
+
+export async function facilitatorPickGraphOption(input: {
+  nodeId: string
+  optionId: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  if (!session.graph || !session.graphState) return { ok: false, error: "Session has no graph." }
+  if (session.graphState.currentNodeId !== input.nodeId) {
+    return { ok: false, error: "Current graph node has moved on." }
+  }
+  const node = session.graph.nodes.find(n => n.id === input.nodeId)
+  if (!node || node.type !== "decision") return { ok: false, error: "Node is not a decision." }
+  const dd = node.data as DecisionNodeData
+  if (!dd.options.some(o => o.id === input.optionId)) {
+    return { ok: false, error: "Unknown option id." }
+  }
+  let updated = triggerEngine(session, { kind: "decision_made", handle: input.optionId })
+  if (updated.graphState) {
+    updated = {
+      ...updated,
+      graphState: {
+        ...updated.graphState,
+        branchLog: [...updated.graphState.branchLog, {
+          nodeId: input.nodeId,
+          choseHandle: input.optionId,
+          trigger: "facilitator_manual",
+          triggeredAt: Date.now(),
+        }],
+      },
+    }
+  }
+  await dbSetSession(updated)
+  broadcastState(updated)
+  if (updated.status === "ended") emit("session_ended", {})
+  else emit("next_round", { roundIndex: updated.currentRound })
+  return { ok: true }
+}
+
+export async function saveScenarioGraph(graph: ScenarioGraph): Promise<void> {
+  await dbSaveScenarioGraph(graph)
+}
+
+export async function loadScenarioGraph(id: string): Promise<ScenarioGraph | null> {
+  return dbLoadScenarioGraph(id)
+}
+
+export async function listScenarioGraphs(_ownerId?: string): Promise<ScenarioGraph[]> {
+  return dbListScenarioGraphs()
+}
+
+export async function deleteScenarioGraph(id: string): Promise<void> {
+  await dbDeleteScenarioGraph(id)
 }
 
 export async function submitFacilitatorRoundScore(

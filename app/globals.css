@@ -207,4 +207,14 @@
   .animate-marquee {
     animation: marquee 20s linear infinite;
   }
+  @keyframes node-enter {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0)    scale(1); }
+  }
+  .rf-node-enter {
+    animation: node-enter 180ms ease-out;
+  }
+  @keyframes rf-edge-dash {
+    to { stroke-dashoffset: -20; }
+  }
 }

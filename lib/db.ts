@@ -16,6 +16,7 @@
 
 import type { SessionState } from "./types"
 import type { ScenarioTemplate } from "./template-types"
+import type { ScenarioGraph } from "./graph/types"
 
 // ─────────────────────────────────────────────────────────────
 // Keys
@@ -25,7 +26,10 @@ const KEYS = {
   session: "ctt:session",
   templates: "ctt:templates",
   users: "ctt:users",
+  graphIndex: "scenario-graph-index",
 } as const
+
+function graphKey(id: string) { return `scenario-graph:${id}` }
 
 // ─────────────────────────────────────────────────────────────
 // KV client (lazy-loaded so build doesn't fail without env vars)
@@ -47,9 +51,15 @@ async function getKV() {
 
 const globalAny = globalThis as any
 if (!globalAny.__ctt_mem__) {
-  globalAny.__ctt_mem__ = { session: null, templates: [], users: [] }
+  globalAny.__ctt_mem__ = { session: null, templates: [], users: [], graphs: {} }
 }
-const mem: { session: SessionState | null; templates: ScenarioTemplate[]; users: StoredUser[] } = globalAny.__ctt_mem__
+if (!globalAny.__ctt_mem__.graphs) globalAny.__ctt_mem__.graphs = {}
+const mem: {
+  session: SessionState | null
+  templates: ScenarioTemplate[]
+  users: StoredUser[]
+  graphs: Record<string, ScenarioGraph>
+} = globalAny.__ctt_mem__
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -156,6 +166,50 @@ export async function dbSaveUser(user: StoredUser): Promise<void> {
   const idx = mem.users.findIndex(u => u.id === user.id)
   if (idx >= 0) mem.users[idx] = user
   else mem.users.push(user)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Scenario graph store
+// ─────────────────────────────────────────────────────────────
+
+export async function dbSaveScenarioGraph(graph: ScenarioGraph): Promise<void> {
+  const kv = await getKV()
+  if (kv) {
+    await kv.set(graphKey(graph.id), graph)
+    const index = (await kv.get<string[]>(KEYS.graphIndex)) ?? []
+    if (!index.includes(graph.id)) {
+      await kv.set(KEYS.graphIndex, [...index, graph.id])
+    }
+    return
+  }
+  mem.graphs[graph.id] = graph
+}
+
+export async function dbLoadScenarioGraph(id: string): Promise<ScenarioGraph | null> {
+  const kv = await getKV()
+  if (kv) return (await kv.get<ScenarioGraph>(graphKey(id))) ?? null
+  return mem.graphs[id] ?? null
+}
+
+export async function dbListScenarioGraphs(): Promise<ScenarioGraph[]> {
+  const kv = await getKV()
+  if (kv) {
+    const index = (await kv.get<string[]>(KEYS.graphIndex)) ?? []
+    const graphs = await Promise.all(index.map(id => kv.get<ScenarioGraph>(graphKey(id))))
+    return graphs.filter((g): g is ScenarioGraph => !!g)
+  }
+  return Object.values(mem.graphs)
+}
+
+export async function dbDeleteScenarioGraph(id: string): Promise<void> {
+  const kv = await getKV()
+  if (kv) {
+    await kv.del(graphKey(id))
+    const index = (await kv.get<string[]>(KEYS.graphIndex)) ?? []
+    await kv.set(KEYS.graphIndex, index.filter(gid => gid !== id))
+    return
+  }
+  delete mem.graphs[id]
 }
 
 /**

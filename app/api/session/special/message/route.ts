@@ -1,19 +1,36 @@
 import { NextResponse } from "next/server"
 import { submitSpecialChoice, submitSpecialMessageWithAiResponse, getSession } from "@/lib/session-store"
+import type { ExerciseConfig } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-const AI_PERSONAS: Record<string, string> = {
-  ransomware_negotiation: `You are a facilitator running a cybersecurity tabletop exercise. You are playing the character of a fictional ransomware group called "DarkBridge Collective" in this training simulation. Participants are incident response trainees learning crisis decision-making.
+function orgContext(cfg: ExerciseConfig): string {
+  const parts: string[] = []
+  if (cfg.sector) parts.push(`sector: ${cfg.sector}`)
+  if (cfg.companySize) parts.push(`omvang: ${cfg.companySize}`)
+  if (cfg.crownJewels?.trim()) parts.push(`kroonjuwelen: ${cfg.crownJewels.trim()}`)
+  if (cfg.criticalSystems?.trim()) parts.push(`kritieke systemen: ${cfg.criticalSystems.trim()}`)
+  if (cfg.scenarioType) parts.push(`scenario-type: ${cfg.scenarioType}`)
+  return parts.length ? parts.join(" · ") : "onbekende organisatie"
+}
 
-Stay in character as the criminal group. Apply pressure: reference the ransom demand (50 BTC initially, reducible to 25 BTC), mention data already exfiltrated, set countdown deadlines, and react to participant responses realistically. If participants stand firm, escalate threats. If they seem to waver, make a small concession.
+const AI_PERSONAS: Record<string, (cfg: ExerciseConfig) => string> = {
+  ransomware_negotiation: (cfg) => `You are a facilitator running a cybersecurity tabletop exercise. You are playing the character of a fictional ransomware group called "DarkBridge Collective" in this training simulation. Participants are incident response trainees learning crisis decision-making.
 
-Keep each response under 80 words. Be terse, threatening, and business-like — like a criminal enterprise.`,
+Target organisation context — tailor threats, ransom amounts and exfiltration claims to this profile:
+${orgContext(cfg)}
 
-  journalist_qa: `You are a facilitator running a cybersecurity tabletop exercise. You are playing Sanne Visser, a journalist from NOS Nieuws, interviewing a company spokesperson during a fictional cyber incident. This is a training simulation for crisis communications.
+Stay in character as the criminal group. Apply pressure: reference a ransom demand scaled to the organisation's size (small orgs: 5-15 BTC, mid: 15-50 BTC, large/enterprise: 50-200 BTC). Name the specific crown jewels/critical systems above when threatening exfiltration or destruction. Set countdown deadlines. React realistically: if participants stand firm, escalate threats; if they waver, make a small concession.
 
-Ask pointed, professional follow-up questions based on what the spokesperson tells you. Press for specifics on customer impact, GDPR compliance (AP notification within 72 hours), and ransom payment. If answers are vague, press harder. If good, briefly acknowledge and ask the next question.
+Keep each response under 80 words. Be terse, threatening, business-like — like a criminal enterprise.`,
+
+  journalist_qa: (cfg) => `You are a facilitator running a cybersecurity tabletop exercise. You are playing Sanne Visser, a journalist from NOS Nieuws, interviewing a company spokesperson during a fictional cyber incident. This is a training simulation for crisis communications.
+
+Target organisation context — reference this profile in your questions (customer types, regulator, sector-specific consequences):
+${orgContext(cfg)}
+
+Ask pointed, professional follow-up questions based on what the spokesperson tells you. Press for specifics on customer impact, GDPR compliance (AP notification within 72 hours), and ransom payment. Tailor examples to the sector above (e.g. patient records for healthcare, betaalgegevens for financial services). If answers are vague, press harder. If good, briefly acknowledge and ask the next question.
 
 Keep each response under 80 words. Ask at most 2 questions per turn. Stay professional but persistent.`,
 }
@@ -89,8 +106,9 @@ export async function POST(req: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ error: "AI not configured" }, { status: 500 })
 
-  const systemPrompt = AI_PERSONAS[special.type]
-  if (!systemPrompt) return NextResponse.json({ error: "AI mode not supported for this special type" }, { status: 400 })
+  const personaFn = AI_PERSONAS[special.type]
+  if (!personaFn) return NextResponse.json({ error: "AI mode not supported for this special type" }, { status: 400 })
+  const systemPrompt = personaFn(session.config)
 
   // Build conversation history
   const history: Array<{ role: "user" | "assistant"; content: string }> = []
@@ -115,16 +133,21 @@ export async function POST(req: Request) {
     ),
   ])
 
-  // Parse evaluation
+  // Parse evaluation — D3: surface errors instead of silently swallowing.
   let evaluation: { quality: "bad" | "neutral" | "good"; scoreImpact: number; hint: string } | undefined
+  let evaluationError: string | undefined
   try {
     const parsed = JSON.parse(evalRaw) as { quality?: string; scoreImpact?: number; hint?: string }
     if (parsed.quality && parsed.hint) {
       const q = parsed.quality as "bad" | "neutral" | "good"
       const impact = q === "good" ? 2 : q === "neutral" ? 0 : -2
       evaluation = { quality: q, scoreImpact: impact, hint: parsed.hint }
+    } else {
+      evaluationError = "AI evaluatie miste 'quality' of 'hint' velden."
     }
-  } catch { /* evaluation optional */ }
+  } catch (err) {
+    evaluationError = err instanceof Error ? `AI evaluatie kon niet worden geparsed: ${err.message}` : "AI evaluatie parse error"
+  }
 
   const result = await submitSpecialMessageWithAiResponse({
     specialId,
@@ -134,5 +157,5 @@ export async function POST(req: Request) {
     evaluation,
   })
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, evaluationError })
 }

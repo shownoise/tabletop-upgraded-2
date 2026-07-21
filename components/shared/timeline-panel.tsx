@@ -64,6 +64,10 @@ function labelFor(ev: TimelineEvent): string {
       return "Special event"
     case "special_completed":
       return "Special completed"
+    case "inject_advanced":
+      return "Inject pushed earlier"
+    case "discussion_phase_changed":
+      return "Discussion phase"
   }
 }
 
@@ -88,5 +92,11 @@ function descFor(ev: TimelineEvent): string {
       return `${ev.data.specialType ?? "Special"} triggered`
     case "special_completed":
       return `${ev.data.specialType ?? "Special"} completed`
+    case "inject_advanced": {
+      const inj = ev.data.inject as { title?: string } | undefined
+      return inj?.title ? `${inj.title} — pushed earlier` : "Inject advanced"
+    }
+    case "discussion_phase_changed":
+      return typeof ev.data.phaseName === "string" ? `Next: ${ev.data.phaseName}` : "Phase advanced"
   }
 }

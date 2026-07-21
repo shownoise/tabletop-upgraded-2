@@ -1,4 +1,5 @@
 import type { GoalId, AssessmentEvent } from "@/lib/engine/types"
+import type { ScenarioGraph } from "@/lib/graph/types"
 export type { GoalId }
 
 export type Role =
@@ -144,6 +145,16 @@ export const ROLE_FALLBACK: Partial<Record<Role, Role[]>> = {
 export type SimulationMode = 'event' | 'training'
 export type RoundPhase = 'inject' | 'discussion' | 'decision' | 'review'
 
+export type AssessmentDimensionKey =
+  | 'decision_speed'
+  | 'decision_quality'
+  | 'escalation_timing'
+  | 'communication_clarity'
+  | 'compliance_awareness'
+  | 'mandate_clarity'
+  | 'dilemma_participation'
+  | 'framework_adherence'
+
 export interface RoleAction {
   id: string
   label: string
@@ -152,6 +163,21 @@ export interface RoleAction {
   isRecommended?: boolean
   irPlanAligned: boolean
   consequence?: string
+  scoreImpact?: number
+  linkedDimension?: AssessmentDimensionKey
+  lessonLearned?: string
+  // BOB-training: markeer een actie als reactie op een misleidend signaal.
+  // Submitten telt automatisch negatief op framework_adherence.
+  respondsToMisleading?: boolean
+  // "Consulteer IR-retainer"-mechanic: als actie wordt gesubmit, wordt er
+  // automatisch een respons-inject naar de indiener + team gepusht.
+  pushesInject?: {
+    title: string
+    content: string
+    channel?: InjectChannel
+    reliability?: InjectReliability
+    onlyToSubmitter?: boolean
+  }
 }
 
 export interface SubmittedDecision {
@@ -305,6 +331,9 @@ export type EmotionalTone =
   | 'menacing'
   | 'professional'
 
+export type InjectReliability = 'fact' | 'assumption' | 'unverified' | 'misleading'
+export type BobPhase = 'beeldvorming' | 'oordeel' | 'besluit'
+
 export interface Inject {
   id: string
   type: InjectType
@@ -319,6 +348,10 @@ export interface Inject {
   targetTeam?: 'all' | 'crisis_management' | 'technical_it'
   targetRoles?: Role[]   // if set, ONLY these roles see this inject (overrides targetTeam)
   nis2Relevant?: boolean
+  // Drip delivery: if > 0, this inject appears X seconds after the round starts (client-side reveal).
+  deliverySeconds?: number
+  // BOB-training: how reliable is this info? Participants see a badge (except 'misleading' — no badge, they must detect).
+  reliability?: InjectReliability
 }
 
 export interface FacilitatorNotes {
@@ -410,17 +443,14 @@ export type ExerciseGoal =
   | 'supplier_incident'
   | 'data_breach'
 export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
-export type RealismLevel = 'standard' | 'high' | 'extreme'
 
 export interface ExerciseConfig {
   sector: string
   companySize: string
   criticalSystems: string
   crownJewels: string
-  irMaturity: string
   scenarioType: string
   duration: string
-  teams: string
   irTemplateText?: string
   aiIntensity?: AiIntensity
   specialsMode?: SpecialsMode
@@ -433,11 +463,12 @@ export interface ExerciseConfig {
   roundCount?: number
   timerPerRound?: number
   difficulty?: DifficultyLevel
-  realism?: RealismLevel
-  dynamicBranching?: boolean
   selectedRoles?: Role[]
   decisionFramework?: DecisionFramework
   goalId?: GoalId
+  graphId?: string
+  irRetainerName?: string
+  phaseAutoAdvance?: 'off' | 'fixed_durations' | 'fit_to_round'
 }
 
 export interface Participant {
@@ -469,9 +500,11 @@ export type TimelineEventType =
   | "round_changed"
   | "participant_joined"
   | "inject_pushed"
+  | "inject_advanced"
   | "surprise_inject"
   | "special_triggered"
   | "special_completed"
+  | "discussion_phase_changed"
 
 export interface TimelineEvent {
   id: string
@@ -487,6 +520,25 @@ export interface RoleDocument {
   type: 'policy' | 'checklist' | 'template' | 'plan' | 'reference'
   content: string   // markdown-lite text shown to participant
   referenceTag?: string  // e.g. 'insurance', 'gdpr', 'ransom' — matches inject/decision context
+}
+
+export interface GraphBranchLogEntry {
+  nodeId: string
+  choseHandle: string
+  trigger: 'participant_decision' | 'facilitator_manual' | 'special_score'
+  triggeredAt: number
+}
+
+export interface GraphRuntimeState {
+  currentNodeId: string
+  pathHistory: string[]
+  branchLog: GraphBranchLogEntry[]
+  finalOutcome?: {
+    key: string
+    label: string
+    narrative: string
+    scoreImpact?: number
+  }
 }
 
 export interface SessionState {
@@ -515,6 +567,14 @@ export interface SessionState {
   activeDiscussionPhase?: ActivePhaseState
   currentDiscussionPrompt?: string
   currentDiscussionPhaseIndex?: number
+  // Runtime scaled duration for the active discussion phase (server computes,
+  // clients render). Populated only when a phase is active.
+  currentDiscussionPhaseEffectiveSeconds?: number
+  currentDiscussionPhasePaused?: boolean
+  phaseAutoAdvancePaused?: boolean
+  // Graph runtime — populated when the session was created from a scenario graph.
+  graph?: ScenarioGraph
+  graphState?: GraphRuntimeState
 }
 
 export interface PublicState {

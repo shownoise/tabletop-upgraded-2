@@ -7,6 +7,8 @@ import { ROLE_META } from "@/lib/types"
 import { api } from "@/lib/api-client"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
+import { GraphReportSection } from "./graph-report-section"
+import { LessonsLearnedSection } from "./lessons-learned-section"
 
 function ScoreCard({ label, value, color }: { label: string; value: number; color: "primary" | "amber" | "destructive" }) {
   const colorClass = {
@@ -168,9 +170,15 @@ export function ReportView({ lang }: Props) {
     <div className="flex flex-col gap-8 print:gap-6">
       {/* Header */}
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <FileText className="size-5 text-primary" />
-          <h1 className="text-2xl font-semibold tracking-tight">{tr(lang, "reportTitle")}</h1>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <FileText className="size-5 text-primary" />
+            <h1 className="text-2xl font-semibold tracking-tight">{tr(lang, "reportTitle")}</h1>
+          </div>
+          <div className="flex items-center gap-2 print:hidden">
+            <PrintReportButton />
+            <DownloadReportButton />
+          </div>
         </div>
         <p className="text-muted-foreground">{tr(lang, "reportSub")}</p>
         <div className="flex items-center gap-3 mt-1">
@@ -181,6 +189,12 @@ export function ReportView({ lang }: Props) {
           </span>
         </div>
       </div>
+
+      {/* Scenario graph path (only when session was graph-driven) */}
+      <GraphReportSection />
+
+      {/* Lessons learned aggregated by dimension */}
+      <LessonsLearnedSection />
 
       {/* Executive Summary */}
       <section>
@@ -454,6 +468,54 @@ export function ReportView({ lang }: Props) {
           </div>
         </section>
       )}
+    </div>
+  )
+}
+
+function PrintReportButton() {
+  return (
+    <button
+      type="button"
+      onClick={() => window.print()}
+      className="rounded-md border border-border bg-card px-3 py-1.5 font-mono text-xs uppercase tracking-wider hover:border-primary/40 print:hidden"
+      title="Print naar PDF (browser dialog)"
+    >
+      Print / PDF
+    </button>
+  )
+}
+
+function DownloadReportButton() {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleDownload() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/session/state", { cache: "no-store" })
+      const data = await res.json() as { session?: import("@/lib/types").SessionState }
+      if (!data.session) throw new Error("No session data")
+      const { downloadReport } = await import("@/lib/report/export")
+      downloadReport(data.session)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={busy}
+        className="rounded-md border border-primary bg-primary text-primary-foreground px-3 py-1.5 font-mono text-xs uppercase tracking-wider hover:opacity-90 disabled:opacity-50"
+      >
+        {busy ? "Exporteren…" : "Download rapport"}
+      </button>
+      {error && <span className="text-[10px] text-destructive">{error}</span>}
     </div>
   )
 }

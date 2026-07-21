@@ -417,16 +417,19 @@ async function generateWithAI(
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as Partial<ExerciseConfig> & { mode?: string; moduleSlots?: unknown; decisionFramework?: unknown }
+  const body = (await req.json()) as Partial<ExerciseConfig> & {
+    mode?: string
+    moduleSlots?: unknown
+    decisionFramework?: unknown
+    graph?: import("@/lib/graph/types").ScenarioGraph
+  }
   const config: ExerciseConfig = {
     sector: body.sector?.toString() ?? "",
     companySize: body.companySize?.toString() ?? "",
     criticalSystems: body.criticalSystems?.toString() ?? "",
     crownJewels: body.crownJewels?.toString() ?? "",
-    irMaturity: body.irMaturity?.toString() ?? "",
     scenarioType: body.scenarioType?.toString() ?? "",
     duration: body.duration?.toString() ?? "",
-    teams: body.teams?.toString() ?? "",
     irTemplateText: body.irTemplateText?.toString(),
     aiIntensity: (body.aiIntensity as AiIntensity | undefined) ?? "off",
     specialsMode: (body.specialsMode as SpecialsMode | undefined) ?? "off",
@@ -439,10 +442,11 @@ export async function POST(req: Request) {
     roundCount: typeof body.roundCount === "number" ? body.roundCount : undefined,
     timerPerRound: typeof body.timerPerRound === "number" ? body.timerPerRound : undefined,
     difficulty: body.difficulty,
-    realism: body.realism,
-    dynamicBranching: typeof body.dynamicBranching === "boolean" ? body.dynamicBranching : undefined,
     selectedRoles: Array.isArray(body.selectedRoles) ? body.selectedRoles as Role[] : undefined,
     goalId: typeof body.goalId === "string" ? body.goalId as GoalId : undefined,
+    graphId: typeof body.graphId === "string" ? body.graphId : undefined,
+    decisionFramework: (body.decisionFramework === "ooda" || body.decisionFramework === "bob") ? body.decisionFramework : undefined,
+    phaseAutoAdvance: (body.phaseAutoAdvance === "off" || body.phaseAutoAdvance === "fixed_durations" || body.phaseAutoAdvance === "fit_to_round") ? body.phaseAutoAdvance : undefined,
   }
   const mode: SimulationMode = body.mode === "event" ? "event" : "training"
 
@@ -455,46 +459,85 @@ export async function POST(req: Request) {
       try {
         send({ stage: "building_prompt", pct: 10, label: "Scenario opbouwen..." })
 
-        const intensity = config.aiIntensity ?? "off"
-        if (intensity !== "off") {
-          send({ stage: "calling_ai", pct: 30, label: "AI genereert scenario..." })
-        }
+        let scenario: Scenario | null = null
+        let aiSuccess: { scenario: Scenario; intensity: AiIntensity; warnings?: string[] } | null = null
+        let loadedGraph: import("@/lib/graph/types").ScenarioGraph | null = null
 
-        const aiResult = await generateWithAI(config, mode, {
-          moduleSlots: body.moduleSlots,
-          decisionFramework: body.decisionFramework,
-        })
+        if (config.graphId || body.graph) {
+          send({ stage: "loading_graph", pct: 40, label: "Scenario-grafiek laden..." })
+          const { loadScenarioGraph, saveScenarioGraph } = await import("@/lib/session-store")
+          const { compileLinearGraph } = await import("@/lib/graph/compile")
 
-        const aiError = aiResult && 'aiError' in aiResult ? aiResult.aiError : undefined
-        const aiSuccess = aiResult && 'scenario' in aiResult ? aiResult : null
-
-        if (aiError) {
-          send({ stage: "error", message: aiError })
-          return
-        }
-
-        send({ stage: "parsing", pct: 75, label: "Resultaat verwerken..." })
-
-        let scenario = aiSuccess?.scenario ?? null
-        if (!scenario) {
-          try {
-            const { generateScenario } = await import("@/lib/scenario-generator")
-            scenario = generateScenario(config)
-          } catch (fallbackErr) {
-            const msg = fallbackErr instanceof Error ? fallbackErr.message : "Fallback generation failed"
-            console.error("[create] fallback scenario error:", msg)
-            send({ stage: "error", message: `Scenario generatie mislukt: ${msg}` })
+          // Prefer inline graph (from client) — avoids cross-instance KV lookups.
+          // Fall back to server-side lookup if only graphId was sent.
+          let graph = body.graph ?? null
+          if (!graph && config.graphId) {
+            graph = await loadScenarioGraph(config.graphId)
+          }
+          if (!graph) {
+            send({ stage: "error", message: "Scenario graph not found — probeer eerst 'Save' in de builder." })
             return
+          }
+          // Persist inline graph so subsequent server-side lookups work (e.g. debrief).
+          if (body.graph) {
+            try { await saveScenarioGraph(body.graph) } catch { /* ignore */ }
+          }
+          loadedGraph = graph
+          try {
+            const compiled = compileLinearGraph(graph)
+            scenario = { scenario_title: compiled.scenario_title, scenario_summary: compiled.scenario_summary, rounds: [] }
+          } catch (compileErr) {
+            const msg = compileErr instanceof Error ? compileErr.message : "Graph compile failed"
+            send({ stage: "error", message: msg })
+            return
+          }
+        } else {
+          const intensity = config.aiIntensity ?? "off"
+          if (intensity !== "off") {
+            send({ stage: "calling_ai", pct: 30, label: "AI genereert scenario..." })
+          }
+
+          const aiResult = await generateWithAI(config, mode, {
+            moduleSlots: body.moduleSlots,
+            decisionFramework: body.decisionFramework,
+          })
+
+          const aiError = aiResult && 'aiError' in aiResult ? aiResult.aiError : undefined
+          aiSuccess = aiResult && 'scenario' in aiResult ? aiResult : null
+
+          if (aiError) {
+            send({ stage: "error", message: aiError })
+            return
+          }
+
+          send({ stage: "parsing", pct: 75, label: "Resultaat verwerken..." })
+
+          scenario = aiSuccess?.scenario ?? null
+          if (!scenario) {
+            try {
+              const { generateScenario } = await import("@/lib/scenario-generator")
+              scenario = generateScenario(config)
+            } catch (fallbackErr) {
+              const msg = fallbackErr instanceof Error ? fallbackErr.message : "Fallback generation failed"
+              console.error("[create] fallback scenario error:", msg)
+              send({ stage: "error", message: `Scenario generatie mislukt: ${msg}` })
+              return
+            }
           }
         }
 
         send({ stage: "saving", pct: 90, label: "Sessie opslaan..." })
 
+        if (!scenario) {
+          send({ stage: "error", message: "Scenario generatie mislukt: leeg resultaat" })
+          return
+        }
+
         const { generateDocuments } = await import("@/lib/document-generator")
         const documents = generateDocuments(config)
 
         const { createSession } = await import("@/lib/session-store")
-        const session = await createSession(config, scenario, mode, documents)
+        const session = await createSession(config, scenario, mode, documents, loadedGraph ?? undefined)
 
         send({
           stage: "done",

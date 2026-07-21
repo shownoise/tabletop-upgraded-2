@@ -17,6 +17,7 @@ import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
 import { SpecialModal } from "./special-modal"
+import { PhaseTimer, PhaseSegments } from "./phase-timer"
 import { Empty } from "@/components/ui/empty"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
@@ -62,6 +63,11 @@ class DecisionBoundary extends Component<{ children: ReactNode }, { crashed: boo
 }
 
 // ─── Framework explanation ────────────────────────────────────
+
+const PARTICIPANT_PHASE_NAMES: Record<'bob' | 'ooda', string[]> = {
+  bob:  ['Beeldvorming', 'Oordeelsvorming', 'Besluitvorming'],
+  ooda: ['Observe', 'Orient', 'Decide', 'Act'],
+}
 
 const FRAMEWORK_DESCRIPTIONS: Partial<Record<string, string>> = {
   bob:     "Discussies volgen BOB: Beeldvorming (wat weten we?), Oordeelsvorming (wat zijn onze opties?) en Besluitvorming (wat besluiten we?). Het crisisteam bewaakt zelf de overgang naar de volgende fase via de knop in het scherm.",
@@ -241,9 +247,39 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
       </button>
       {expanded && (
         <div className="px-4 pb-4 flex flex-col gap-4 pt-4">
+          {/* BOB fase badge — subtiel, above situation */}
+          {(currentRound as { bobPhase?: string }).bobPhase && (
+            <div className="flex items-center gap-2 -mt-1">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">BOB fase</span>
+              <span className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-tt-accent/40 bg-tt-accent/10 text-tt-accent">
+                {(currentRound as { bobPhase?: string }).bobPhase === "beeldvorming" ? "Beeldvorming — feiten verzamelen"
+                  : (currentRound as { bobPhase?: string }).bobPhase === "oordeel" ? "Oordeelsvorming — opties wegen"
+                  : "Besluitvorming — kiezen"}
+              </span>
+            </div>
+          )}
+
           <p className="font-mono text-xs leading-relaxed text-tt-bright whitespace-pre-wrap">
             {stripMarkdown(currentRound.situation_update)}
           </p>
+
+          {/* Opening prompts — kickstart voor het overleg */}
+          {(currentRound as { openingPrompts?: string[] }).openingPrompts &&
+           ((currentRound as { openingPrompts?: string[] }).openingPrompts?.length ?? 0) > 0 && (
+            <div className="border border-tt-accent/30 bg-tt-accent/5 px-3 py-2">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-tt-accent mb-1.5">
+                Meteen te bespreken
+              </p>
+              <ul className="flex flex-col gap-1">
+                {(currentRound as { openingPrompts?: string[] }).openingPrompts!.map((p, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="font-mono text-[10px] text-tt-accent shrink-0">•</span>
+                    <span className="font-mono text-[11px] text-tt-bright">{p}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {currentRound.learningObjectives && currentRound.learningObjectives.length > 0 && (
             <div className="flex flex-col gap-1.5 border-t border-tt-border pt-3">
@@ -441,6 +477,165 @@ function RoleDocumentsPanel({ docs }: { docs: RoleDocument[] }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// ─── Soft-decision ticket ───
+function DecisionTicket({ session }: { session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]> }) {
+  const graphState = (session as unknown as { graphState?: { currentNodeId: string } }).graphState
+  const graph = (session as unknown as { graph?: { nodes: Array<{ id: string; type: string; data: unknown }> } }).graph
+  if (!graph || !graphState) return null
+  const currentNode = graph.nodes.find(n => n.id === graphState.currentNodeId)
+  if (!currentNode || currentNode.type !== "decision") return null
+  const dd = currentNode.data as {
+    prompt: string
+    measuredBy: string
+    advancesGraph?: boolean
+    options: Array<{ id: string; label: string; roleActionId?: string }>
+  }
+  const isFacilitator = dd.measuredBy === "facilitator_trigger"
+  const isSoft = dd.advancesGraph === false
+  return (
+    <div className="rounded-xl border-2 border-yellow-500/40 bg-yellow-500/5 px-4 py-3 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-lg">🎯</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-yellow-700 dark:text-yellow-400">
+          {isFacilitator ? "Facilitator neemt besluit" : isSoft ? "Extra keuze — scoring only" : "Team-beslissing gevraagd"}
+        </span>
+      </div>
+      <p className="text-sm font-medium">{dd.prompt}</p>
+      <div className="flex flex-col gap-1">
+        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+          {isFacilitator ? "Wachten op facilitator" : "Selecteer een van deze acties uit je actielijst"}
+        </span>
+        {dd.options.map(opt => (
+          <div key={opt.id} className="flex items-center gap-2 rounded border border-border bg-background px-2 py-1 text-xs">
+            <span className="text-yellow-600 dark:text-yellow-400">→</span>
+            <span className="flex-1">{opt.label}</span>
+            {opt.roleActionId && (
+              <span className="font-mono text-[9px] text-muted-foreground opacity-60">actie: {opt.roleActionId}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Pacing prompt banner (40% + 80% van round timer) ───
+function PacingBanner({ roundStartedAt, timerMinutes }: { roundStartedAt?: number; timerMinutes?: number }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 3000)
+    return () => clearInterval(id)
+  }, [])
+  if (!roundStartedAt || !timerMinutes) return null
+  const totalSec = timerMinutes * 60
+  const elapsedSec = Math.floor((now - roundStartedAt) / 1000)
+  const frac = elapsedSec / totalSec
+
+  // Show banner in specific windows
+  let prompt: { emoji: string; text: string; tone: "info" | "warn" | "critical" } | null = null
+  if (frac >= 0.4 && frac < 0.45) {
+    prompt = { emoji: "💭", text: "Wat is jullie eerste inschatting? Feit vs aanname?", tone: "info" }
+  } else if (frac >= 0.8 && frac < 0.85) {
+    prompt = { emoji: "⚡", text: "Rond het overleg af — beslis binnen 2 minuten.", tone: "warn" }
+  } else if (frac >= 0.95) {
+    prompt = { emoji: "🚨", text: "BESLIS NU — tijd is bijna om.", tone: "critical" }
+  }
+  if (!prompt) return null
+
+  const cls =
+    prompt.tone === "critical" ? "border-destructive/50 bg-destructive/10 text-destructive animate-pulse"
+    : prompt.tone === "warn" ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
+    : "border-primary/40 bg-primary/5 text-primary"
+  return (
+    <div className={`border rounded-md px-4 py-2 flex items-center gap-3 ${cls}`}>
+      <span className="text-lg">{prompt.emoji}</span>
+      <span className="font-mono text-xs uppercase tracking-wider">{prompt.text}</span>
+    </div>
+  )
+}
+
+// ─── IR / Crisis Playbook (right panel) ───
+function IrPlaybookPanel({ session, participantRole }: {
+  session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>
+  participantRole?: Role
+}) {
+  const graph = (session as unknown as { graph?: { irPlaybook?: string; irRetainerName?: string } }).graph
+  const playbook = graph?.irPlaybook
+  const retainer = graph?.irRetainerName
+  const [open, setOpen] = useState(true)
+  if (!playbook) return null
+  return (
+    <div className="rounded-xl border border-tt-accent/30 bg-tt-accent/5 overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-tt-accent/10 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="size-3.5 text-tt-accent" />
+          <span className="font-mono text-[10px] uppercase tracking-wider text-tt-accent">
+            Crisis Playbook{retainer ? ` · ${retainer}` : ""}
+          </span>
+        </div>
+        <ChevronDown className={`size-3.5 text-tt-accent shrink-0 ml-2 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="border-t border-tt-accent/20 px-4 pb-3 pt-2 max-h-[400px] overflow-y-auto">
+          <PlaybookRenderer text={playbook} participantRole={participantRole} />
+          <p className="mt-3 pt-2 border-t border-tt-accent/20 font-mono text-[9px] text-muted-foreground italic">
+            Let op: dit playbook bevat mogelijk verouderde, incomplete of misleidende passages. Verifieer feiten vóór je erop handelt.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Section rules:
+// - `## [role1,role2] Title` → alleen zichtbaar voor participants met een van die rollen
+// - `## Title` → globaal, iedereen ziet het
+function parseSectionRoles(heading: string): { roles: string[] | null; title: string } {
+  const match = heading.match(/^\[([^\]]+)\]\s*(.*)$/)
+  if (!match) return { roles: null, title: heading }
+  const roles = match[1].split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
+  return { roles, title: match[2] }
+}
+
+function PlaybookRenderer({ text, participantRole }: { text: string; participantRole?: Role }) {
+  const lines = text.split("\n")
+  // Group by section (## headers). Filter sections not for this role.
+  const sections: Array<{ heading: string | null; visible: boolean; lines: string[] }> = []
+  let current: { heading: string | null; visible: boolean; lines: string[] } = { heading: null, visible: true, lines: [] }
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      if (current.lines.length || current.heading) sections.push(current)
+      const raw = line.slice(3)
+      const { roles, title } = parseSectionRoles(raw)
+      const visible = !roles || roles.length === 0 || (participantRole ? roles.includes(participantRole) : false)
+      current = { heading: title, visible, lines: [] }
+    } else {
+      current.lines.push(line)
+    }
+  }
+  if (current.lines.length || current.heading) sections.push(current)
+
+  return (
+    <div className="flex flex-col gap-1 text-xs leading-relaxed">
+      {sections.filter(s => s.visible).map((section, si) => (
+        <div key={si} className="flex flex-col gap-0.5">
+          {section.heading && (
+            <h4 className="mt-2 first:mt-0 font-mono text-[10px] uppercase tracking-wider text-tt-accent">{section.heading}</h4>
+          )}
+          {section.lines.map((line, i) => {
+            if (line.startsWith("- ")) return <div key={i} className="flex gap-2"><span className="text-tt-accent shrink-0">›</span><span className="text-tt-bright">{line.slice(2)}</span></div>
+            if (line.trim()) return <p key={i} className="text-tt-bright">{line}</p>
+            return <div key={i} className="h-1" />
+          })}
+        </div>
+      ))}
     </div>
   )
 }
@@ -720,18 +915,32 @@ export function PlayView() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Feed — main column; flex allows order-first on DecisionPanel for mobile */}
           <div className="flex flex-col gap-5 lg:col-span-2">
+            {/* Role picker — visible while participant has no role, OR always in lobby so they can see others' claims */}
+            {participantId && status !== "ended" && (status === "lobby" || !participantRole) && (
+              <RolePickerLobby
+                session={session}
+                participantId={participantId}
+                myRole={participantRole}
+                lang={lang}
+              />
+            )}
+
+            {/* Pacing banner — appears at 40%/80%/95% of round timer */}
+            {currentRound && status === "active" && (
+              <PacingBanner
+                roundStartedAt={session.roundStartedAt}
+                timerMinutes={currentRound.timerMinutes ?? 10}
+              />
+            )}
+
+            {/* Soft-decision ticket — shown when graph is on a Decision node */}
+            {status === "active" && <DecisionTicket session={session} />}
+
             {/* Round situation */}
             {currentRound ? (
               <RoundSituationCard session={session} lang={lang} />
             ) : status === "lobby" ? (
-              participantId ? (
-                <RolePickerLobby
-                  session={session}
-                  participantId={participantId}
-                  myRole={participantRole}
-                  lang={lang}
-                />
-              ) : (
+              !participantId && (
                 <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card/50 py-12 text-center">
                   <div className="flex gap-1.5">
                     {[0,1,2].map(i => <span key={i} className="size-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: `${i*0.3}s` }} />)}
@@ -739,6 +948,15 @@ export function PlayView() {
                   <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "waitingToStart")}</p>
                 </div>
               )
+            ) : status === "active" ? (
+              <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card/50 py-12 text-center">
+                <div className="flex gap-1.5">
+                  {[0,1,2].map(i => <span key={i} className="size-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: `${i*0.3}s` }} />)}
+                </div>
+                <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                  Wachten op eerste ronde…
+                </p>
+              </div>
             ) : (
               <div className="rounded-xl border border-border bg-card/50 py-8 text-center">
                 <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "exerciseEnded")}</p>
@@ -817,6 +1035,22 @@ export function PlayView() {
                           </button>
                         )}
                       </div>
+                      {hasBobOoda && session.activeDiscussionPhase && session.currentDiscussionPhaseEffectiveSeconds && (
+                        <div className="border-b border-tt-border/50 px-4 py-3 flex flex-col gap-2">
+                          <PhaseSegments
+                            totalPhases={totalPhases}
+                            phaseIndex={phaseIndex}
+                          />
+                          <PhaseTimer
+                            phaseName={PARTICIPANT_PHASE_NAMES[framework === 'ooda' ? 'ooda' : 'bob'][phaseIndex] ?? ''}
+                            phaseIndex={phaseIndex}
+                            totalPhases={totalPhases}
+                            startedAt={session.activeDiscussionPhase.phaseStartedAt}
+                            effectiveDurationSeconds={session.currentDiscussionPhaseEffectiveSeconds}
+                            paused={!!session.currentDiscussionPhasePaused}
+                          />
+                        </div>
+                      )}
                       <p className="font-mono text-sm text-tt-bright leading-relaxed p-4">{session.currentDiscussionPrompt}</p>
                       {isLastPhase && (
                         <div className="border-t border-tt-border px-4 py-2.5 flex items-center gap-2 bg-tt-accent/5">
@@ -871,7 +1105,7 @@ export function PlayView() {
             })()}
 
             {/* Inject feed — always shown for context */}
-            <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} />
+            <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} />
           </div>
 
           {/* Sidebar */}
@@ -905,6 +1139,9 @@ export function PlayView() {
                 ))}
               </ul>
             </div>
+
+            {/* IR / Crisis Playbook — always shown when authored on the scenario graph */}
+            <IrPlaybookPanel session={session} participantRole={participantRole} />
 
             {/* Documents — filtered to this participant's role */}
             {participantRole && (() => {

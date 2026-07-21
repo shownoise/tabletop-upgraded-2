@@ -13,6 +13,13 @@ const DIMENSION_LABELS: Record<AssessmentDimensionId, string> = {
   framework_adherence: 'Framework Adherence',
 }
 
+export class DebriefAdviceError extends Error {
+  constructor(message: string, public reason: 'no_api_key' | 'api_error' | 'parse_error' | 'network_error') {
+    super(message)
+    this.name = 'DebriefAdviceError'
+  }
+}
+
 export async function generateDebriefAdvice(
   session: SessionState,
   assessment: SessionAssessment,
@@ -23,6 +30,9 @@ export async function generateDebriefAdvice(
   )
 
   if (scoredDimensions.length === 0) return []
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new DebriefAdviceError('ANTHROPIC_API_KEY missing — cannot generate debrief advice', 'no_api_key')
+  }
 
   const dimensionLines = scoredDimensions
     .map(d => `- ${DIMENSION_LABELS[d]}: ${assessment.dimensionScores[d]}/100`)
@@ -64,15 +74,20 @@ Only include dimensions that were scored. Return an empty advice array if all sc
       }),
     })
 
-    if (!response.ok) return []
+    if (!response.ok) {
+      throw new DebriefAdviceError(`Anthropic API returned ${response.status}`, 'api_error')
+    }
 
     const data = await response.json()
     const text: string = data.content?.[0]?.text ?? ''
     const match = text.match(/\{[\s\S]*\}/)
-    if (!match) return []
+    if (!match) {
+      throw new DebriefAdviceError('No JSON block found in Anthropic response', 'parse_error')
+    }
     const parsed = JSON.parse(match[0])
     return Array.isArray(parsed.advice) ? parsed.advice : []
-  } catch {
-    return []
+  } catch (err) {
+    if (err instanceof DebriefAdviceError) throw err
+    throw new DebriefAdviceError(err instanceof Error ? err.message : 'Unknown debrief error', 'network_error')
   }
 }

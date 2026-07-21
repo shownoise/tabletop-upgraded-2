@@ -15,6 +15,7 @@ import { api } from "@/lib/api-client"
 import { InjectControls } from "./inject-controls"
 import { DecisionsView } from "./decisions-view"
 import { SpecialsPanel } from "./specials-panel"
+import { GraphPathPanel } from "./graph-path-panel"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
@@ -47,18 +48,19 @@ function DiscussionPhaseStepper({
 
   useEffect(() => {
     if (!activePhase || !currentPhase) { setSecondsLeft(null); setTimerExpiredAlert(false); return }
-    const end = activePhase.phaseStartedAt + currentPhase.durationSeconds * 1000
+    const effective = session.currentDiscussionPhaseEffectiveSeconds ?? currentPhase.durationSeconds
+    const end = activePhase.phaseStartedAt + effective * 1000
     const tick = () => {
+      if (session.phaseAutoAdvancePaused) return
       const s = Math.max(0, Math.round((end - Date.now()) / 1000))
       setSecondsLeft(s)
-      // Trigger alert the moment timer hits 0 (only once per phase)
       if (s === 0 && prevSecondsRef.current !== 0) setTimerExpiredAlert(true)
       prevSecondsRef.current = s
     }
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [activePhase?.phaseStartedAt, activePhase?.phaseIndex, currentPhase])
+  }, [activePhase?.phaseStartedAt, activePhase?.phaseIndex, currentPhase, session.currentDiscussionPhaseEffectiveSeconds, session.phaseAutoAdvancePaused])
 
   // Reset alert when phase advances
   useEffect(() => { setTimerExpiredAlert(false); prevSecondsRef.current = null }, [phaseIndex])
@@ -186,6 +188,21 @@ function DiscussionPhaseStepper({
                 className="rounded-lg border border-border bg-background px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors disabled:opacity-50"
               >
                 +2 min
+              </button>
+              <button
+                disabled={working}
+                onClick={async () => {
+                  setWorking(true)
+                  try { await api.setPhaseAutoAdvancePaused(!session.phaseAutoAdvancePaused) } catch { /* ignore */ }
+                  finally { setWorking(false) }
+                }}
+                className={`rounded-lg border px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors disabled:opacity-50 ${
+                  session.phaseAutoAdvancePaused
+                    ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                    : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                {session.phaseAutoAdvancePaused ? "Resume auto-advance" : "Pause auto-advance"}
               </button>
             </div>
           </>
@@ -411,6 +428,9 @@ export function ControlDashboard() {
             <LangToggle lang={lang} setLang={setLang} />
             <ThemeToggle />
             {/* Extra nav buttons */}
+            <Link href="/admin/story" className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors" title="Story mode (simplified)">
+              Story
+            </Link>
             <Link href="/admin/present" className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors" title="Presentation mode">
               <Monitor className="size-3.5" />
             </Link>
@@ -473,7 +493,24 @@ export function ControlDashboard() {
             <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "roundControl")}</span>
             <div className="flex flex-wrap gap-2">
               {isLobby && (
-                <Button size="sm" onClick={() => run("start", () => api.startSession())} disabled={working !== null} className="gap-2 font-mono uppercase tracking-wider">
+                <Button
+                  size="sm"
+                  onClick={() => run("start", async () => {
+                    try {
+                      await api.startSession()
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : String(err)
+                      // 409 → not all participants ready — ask facilitator to confirm.
+                      if (msg.includes("Ready") && window.confirm(`${msg}\n\nToch starten?`)) {
+                        await api.startSession({ force: true })
+                      } else {
+                        throw err
+                      }
+                    }
+                  })}
+                  disabled={working !== null}
+                  className="gap-2 font-mono uppercase tracking-wider"
+                >
                   <Play className="size-3.5" />{tr(lang, "startSession")}
                 </Button>
               )}
@@ -893,6 +930,9 @@ export function ControlDashboard() {
                 ))}
               </ul>
             </div>
+
+            {/* Graph path panel — only for graph-driven sessions */}
+            {session.graph && <GraphPathPanel session={session} />}
 
             {/* Specials panel — shown when mode is not off */}
             {session.config.specialsMode && session.config.specialsMode !== "off" && (

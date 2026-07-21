@@ -15,7 +15,7 @@ export async function POST() {
   }
 
   const { buildSessionAssessment } = await import("@/lib/engine/assessment")
-  const { generateDebriefAdvice } = await import("@/lib/engine/debrief")
+  const { generateDebriefAdvice, DebriefAdviceError } = await import("@/lib/engine/debrief")
 
   const assessment = buildSessionAssessment(
     session.id,
@@ -23,7 +23,17 @@ export async function POST() {
     session.assessmentEvents ?? [],
   )
 
-  assessment.advice = await generateDebriefAdvice(session, assessment)
+  let adviceError: { reason: string; message: string } | undefined
+  try {
+    assessment.advice = await generateDebriefAdvice(session, assessment)
+  } catch (err) {
+    if (err instanceof DebriefAdviceError) {
+      adviceError = { reason: err.reason, message: err.message }
+    } else {
+      adviceError = { reason: 'unknown', message: err instanceof Error ? err.message : 'Unknown error' }
+    }
+    assessment.advice = []
+  }
 
-  return NextResponse.json({ assessment })
+  return NextResponse.json({ assessment, adviceError })
 }

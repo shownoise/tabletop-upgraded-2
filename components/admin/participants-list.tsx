@@ -1,7 +1,8 @@
 "use client"
 
-import { Users } from "lucide-react"
+import { Users, CheckCircle2, Circle } from "lucide-react"
 import type { SessionState } from "@/lib/types"
+import { ROLE_META } from "@/lib/types"
 import { formatTime } from "@/lib/format"
 
 export function ParticipantsList({ session }: { session: SessionState }) {
@@ -23,25 +24,41 @@ export function ParticipantsList({ session }: { session: SessionState }) {
         </div>
       ) : (
         <ul className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto">
-          {list.map((p) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between gap-3 px-5 py-3 md:px-6 animate-fade-in"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-full border border-border bg-background font-mono text-xs uppercase text-muted-foreground">
-                  {p.name.slice(0, 2)}
+          {list.map((p) => {
+            const roleLabel = p.role ? ROLE_META[p.role]?.label ?? p.role : null
+            return (
+              <li
+                key={p.id}
+                className="flex items-center justify-between gap-3 px-5 py-3 md:px-6 animate-fade-in"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex size-8 items-center justify-center rounded-full border border-border bg-background font-mono text-xs uppercase text-muted-foreground">
+                    {p.name.slice(0, 2)}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm">{p.name}</span>
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      joined {formatTime(p.joinedAt)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-sm">{p.name}</span>
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    joined {formatTime(p.joinedAt)}
-                  </span>
+                <div className="flex items-center gap-2">
+                  {roleLabel ? (
+                    <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary">
+                      {roleLabel}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">no role</span>
+                  )}
+                  {p.readyAt ? (
+                    <CheckCircle2 className="size-3.5 text-primary" aria-label="Ready" />
+                  ) : (
+                    <Circle className="size-3.5 text-muted-foreground" aria-label="Not ready" />
+                  )}
                 </div>
-              </div>
-              <span className="size-1.5 rounded-full bg-primary" aria-label="Online" />
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

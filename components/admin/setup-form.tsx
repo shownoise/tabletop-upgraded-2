@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useRef, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, Sparkles, Upload, X, FileText, Plus, Trash2, ChevronUp, ChevronDown, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -19,6 +19,8 @@ import type {
   ITMaturity, SecurityCapability, TeamStructure,
   DifficultyLevel, Role, ScenarioType, DecisionFramework, ModuleId, GoalId,
 } from "@/lib/types"
+import type { ScenarioGraph } from "@/lib/graph/types"
+import { analyzeGraph, type GraphAnalysis } from "@/lib/graph/analyze"
 import type { TemplateModuleSlot } from "@/lib/types/scenario-instance"
 import { DEFAULT_MODULE_SETS } from "@/lib/modules/defaults"
 import { MODULE_DEFINITIONS } from "@/lib/modules/definitions"
@@ -91,10 +93,8 @@ const defaults: ExerciseConfig = {
   companySize: "250–500",
   criticalSystems: "ERP, customer portal, identity provider",
   crownJewels: "Customer PII, financial records",
-  irMaturity: "Developing",
   scenarioType: "Ransomware",
   duration: "90 minutes",
-  teams: "",
   itMaturity: "medium",
   securityCapability: "small_it",
   exerciseGoal: "ransomware_tabletop",
@@ -136,15 +136,32 @@ const PLAN_OPTIONS = [
 
 export function SetupForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const graphIdFromUrl = searchParams.get("graphId") ?? undefined
+  const [graphIdOverride, setGraphIdOverride] = useState<string | undefined>(undefined)
+  const graphId = graphIdOverride === "" ? undefined : (graphIdOverride ?? graphIdFromUrl)
   const [config, setConfig] = useState<ExerciseConfig>(defaults)
+  const [graphName, setGraphName] = useState<string | null>(null)
+  const [graphAnalysis, setGraphAnalysis] = useState<GraphAnalysis | null>(null)
+  const [loadedGraph, setLoadedGraph] = useState<ScenarioGraph | null>(null)
+  const [graphLoadError, setGraphLoadError] = useState<string | null>(null)
   const [mode, setMode] = useState<SimulationMode>("training")
-  const [aiIntensity, setAiIntensity] = useState<AiIntensity>("lean")
+  const [aiIntensity, setAiIntensity] = useState<AiIntensity>(graphId ? "off" : "lean")
   const [specialsMode, setSpecialsMode] = useState<SpecialsMode>("static")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ pct: number; label: string } | null>(null)
   const [irFileName, setIrFileName] = useState<string | null>(null)
+  const [irTruncated, setIrTruncated] = useState<{ original: number; kept: number } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Validation flags — surfaced to the submit button so invalid configs cannot POST.
+  const rounds = config.roundCount ?? 4
+  const timer = config.timerPerRound ?? 15
+  const totalMin = DURATION_MINUTES[config.duration] ?? 90
+  const durationInvalid = rounds * timer > totalMin
+  const rolesInvalid = (config.selectedRoles?.length ?? 0) === 0
+  const submitBlocked = durationInvalid || rolesInvalid
 
   // New: decision framework and module slots
   const [decisionFramework, setDecisionFramework] = useState<DecisionFramework>("bob")
@@ -158,6 +175,61 @@ export function SetupForm() {
   function update<K extends keyof ExerciseConfig>(key: K, value: ExerciseConfig[K]) {
     setConfig((c) => ({ ...c, [key]: value }))
   }
+
+  useEffect(() => {
+    if (!graphId) {
+      setGraphName(null)
+      setGraphAnalysis(null)
+      setLoadedGraph(null)
+      setGraphLoadError(null)
+      return
+    }
+    let cancelled = false
+    setGraphLoadError(null)
+
+    function applyGraph(g: ScenarioGraph) {
+      setLoadedGraph(g)
+      setGraphName(g.name)
+      const analysis = analyzeGraph(g)
+      setGraphAnalysis(analysis)
+      setConfig(c => ({
+        ...c,
+        selectedRoles: analysis.requiredRoles.length > 0 ? analysis.requiredRoles : c.selectedRoles,
+        specialsMode: analysis.suggestedSpecialsMode,
+      }))
+      setSpecialsMode(analysis.suggestedSpecialsMode)
+    }
+
+    // Try localStorage first (works even if the server routes to a fresh instance)
+    try {
+      const cached = window.localStorage.getItem(`scenario-graph:${graphId}`)
+      if (cached) {
+        const g = JSON.parse(cached) as ScenarioGraph
+        if (g?.id === graphId) applyGraph(g)
+      }
+    } catch { /* ignore */ }
+
+    fetch("/api/scenario-graph")
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { graphs?: ScenarioGraph[] }) => {
+        if (cancelled) return
+        const g = data?.graphs?.find(x => x.id === graphId)
+        if (g) {
+          applyGraph(g)
+        } else {
+          // Not on the server — but maybe we already loaded from localStorage above
+          // If we still have nothing loaded, show the error.
+          setLoadedGraph(prev => {
+            if (!prev) setGraphLoadError(`Graph "${graphId}" niet gevonden. Ga terug naar de builder en klik Save.`)
+            return prev
+          })
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setGraphLoadError("Kon graph niet ophalen van de server.")
+      })
+    return () => { cancelled = true }
+  }, [graphId])
 
   function handleDurationChange(dur: string) {
     const [rounds, timer] = DURATION_DEFAULTS[dur] ?? [4, 15]
@@ -226,12 +298,22 @@ export function SetupForm() {
     if (!file) return
     setIrFileName(file.name)
     const text = await file.text()
-    update("irTemplateText", text.slice(0, 12000))
+    const kept = text.slice(0, 12000)
+    setIrTruncated(text.length > 12000 ? { original: text.length, kept: 12000 } : null)
+    update("irTemplateText", kept)
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (submitting) return
+    if (durationInvalid) {
+      setError(`Rondes × timer (${rounds * timer}m) overschrijdt totale duur (${totalMin}m). Verlaag rondes of timer.`)
+      return
+    }
+    if (rolesInvalid) {
+      setError("Selecteer minimaal één rol voordat je de oefening genereert.")
+      return
+    }
     setSubmitting(true)
     setError(null)
     setProgress(null)
@@ -242,10 +324,13 @@ export function SetupForm() {
         body: JSON.stringify({
           ...config,
           mode,
-          aiIntensity,
+          aiIntensity: graphId ? "off" : aiIntensity,
           specialsMode,
           decisionFramework,
           moduleSlots,
+          graphId,
+          // Send full graph inline as fallback — avoids cross-instance lookup issues
+          graph: loadedGraph ?? undefined,
         }),
       })
       if (!res.body) throw new Error("Geen response stream ontvangen")
@@ -283,6 +368,74 @@ export function SetupForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-8">
+      {graphId && (
+        <div className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-4 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <Sparkles className="size-4 text-primary shrink-0" />
+              <p className="font-mono text-xs text-primary">
+                Using scenario graph: <span className="font-bold">{graphName ?? graphId}</span> — velden die door de graph worden bepaald zijn grijs.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!confirm("Graph loskoppelen? Dan wordt de setup weer een gewone AI-oefening en verlies je de graph-koppeling.")) return
+                setGraphIdOverride("")
+                setLoadedGraph(null)
+                setGraphAnalysis(null)
+                setGraphName(null)
+              }}
+              className="rounded border border-primary/40 bg-background px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/10"
+            >
+              Remove graph
+            </button>
+          </div>
+          {graphLoadError && (
+            <p className="font-mono text-[11px] text-destructive">{graphLoadError}</p>
+          )}
+          {graphAnalysis && (
+            <div className="flex flex-col gap-1.5 border-t border-primary/20 pt-2 mt-1">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">
+                  {graphAnalysis.roundCount} round(s)
+                </span>
+                {graphAnalysis.hasDecisions && (
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">
+                    · branching
+                  </span>
+                )}
+                {graphAnalysis.hasOutcomes && (
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">
+                    · outcome-driven
+                  </span>
+                )}
+                {graphAnalysis.specialTypes.length > 0 && (
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">
+                    · specials: {graphAnalysis.specialTypes.join(", ")}
+                  </span>
+                )}
+              </div>
+              {graphAnalysis.requiredRoles.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">Required roles:</span>
+                  {graphAnalysis.requiredRoles.map(r => (
+                    <span key={r} className="rounded border border-primary/40 bg-background px-1.5 py-0.5 font-mono text-[10px] text-primary">
+                      {ROLE_META[r].label}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {graphAnalysis.unmatchedDecisionOptions.length > 0 && (
+                <p className="font-mono text-[10px] text-yellow-600 dark:text-yellow-400">
+                  ⚠ {graphAnalysis.unmatchedDecisionOptions.length} decision option(s) reference an unknown roleAction id — branching may not work automatically.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Step 1 — Exercise goal */}
       <div className="flex flex-col gap-4">
         <SectionHeader label="What do you want to exercise?" />
@@ -361,14 +514,12 @@ export function SetupForm() {
           </Select>
         </FieldRow>
 
-        <div className={aiIntensity === "lean" ? "opacity-40 pointer-events-none select-none" : ""}>
-          <FieldRow label="Company size" hint={aiIntensity === "lean" ? "Niet gebruikt bij Smart mode" : "Headcount band"}>
-            <Select value={config.companySize} onValueChange={(v) => update("companySize", v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{sizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
-          </FieldRow>
-        </div>
+        <FieldRow label="Company size" hint="Headcount band">
+          <Select value={config.companySize} onValueChange={(v) => update("companySize", v)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{sizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+          </Select>
+        </FieldRow>
 
         <FieldRow label="IT maturity" hint="Self-assessed IT capability level">
           <div className="grid grid-cols-3 gap-2">
@@ -400,11 +551,13 @@ export function SetupForm() {
       {/* Section 2 — Exercise setup */}
       <SectionHeader label="Exercise setup" />
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <FieldRow label="Scenario type" hint="The primary attack pattern to simulate">
+        <FieldRow label={`Scenario type${graphId ? " (uit graph)" : ""}`} hint={graphId ? "Wordt bepaald door de scenario graph" : "The primary attack pattern to simulate"}>
+        <div className={graphId ? "opacity-40 pointer-events-none select-none" : ""}>
           <Select value={config.scenarioType} onValueChange={handleScenarioTypeChange}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>{scenarios.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
           </Select>
+        </div>
         </FieldRow>
 
         <FieldRow label="Decision framework" hint="Conversation structure used throughout the exercise">
@@ -441,11 +594,39 @@ export function SetupForm() {
             ))}
           </div>
         </FieldRow>
+
+        <FieldRow label="Timing" hint="How BOB/OODA sub-phases progress during a round">
+          <div className="grid grid-cols-1 gap-2">
+            {([
+              { id: "fit_to_round", label: "Fit to round", desc: "Sub-phases automatically fit the round budget." },
+              { id: "fixed_durations", label: "Fixed", desc: "Use each phase's hardcoded duration." },
+              { id: "off", label: "Manual", desc: "No auto-advance — facilitator clicks to move on." },
+            ] as const).map(opt => {
+              const cur = config.phaseAutoAdvance ?? "fit_to_round"
+              const active = cur === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => update("phaseAutoAdvance", opt.id)}
+                  className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
+                    active ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40"
+                  }`}
+                >
+                  <span className={`font-mono text-xs font-bold w-24 shrink-0 pt-0.5 ${active ? "text-primary" : "text-foreground"}`}>
+                    {opt.label}
+                  </span>
+                  <span className="text-xs text-muted-foreground leading-relaxed">{opt.desc}</span>
+                </button>
+              )
+            })}
+          </div>
+        </FieldRow>
       </div>
 
       {/* Section 3 — Module sequence */}
-      <SectionHeader label="Module sequence" />
-      <div className="flex flex-col gap-3">
+      <SectionHeader label={`Module sequence${graphId ? " (uit graph)" : ""}`} />
+      <div className={`flex flex-col gap-3 ${graphId ? "opacity-40 pointer-events-none select-none" : ""}`}>
         <p className="text-xs text-muted-foreground">
           Voeg modules toe, verwijder ze, of herorden ze. Elk module is een coherent tijdvenster met één leerdoel.
           Per module kun je duur, lens en framework overschrijven.
@@ -754,8 +935,8 @@ export function SetupForm() {
       </div>
 
       {/* Section 5 — Scenario context */}
-      <SectionHeader label="Scenario context" />
-      {aiIntensity === "lean" && (
+      <SectionHeader label={`Scenario context${graphId ? " (uit graph)" : ""}`} />
+      {!graphId && aiIntensity === "lean" && (
         <div className="rounded-lg border border-border bg-card px-4 py-3">
           <p className="font-mono text-[10px] text-muted-foreground">
             <span className="text-primary font-bold">Smart mode</span> — Crown jewels en kritieke systemen worden niet meegestuurd naar het AI-model.
@@ -763,17 +944,17 @@ export function SetupForm() {
           </p>
         </div>
       )}
-      <div className={`grid grid-cols-1 gap-5 md:grid-cols-2 ${aiIntensity === "lean" ? "opacity-40 pointer-events-none select-none" : ""}`}>
-        <FieldRow label="Critical systems" hint={aiIntensity === "lean" ? "Niet gebruikt bij Smart mode" : "Systems whose disruption would materially affect operations"}>
+      <div className={`grid grid-cols-1 gap-5 md:grid-cols-2 ${(!graphId && aiIntensity === "lean") || graphId ? "opacity-40 pointer-events-none select-none" : ""}`}>
+        <FieldRow label="Critical systems" hint={graphId ? "Ingebed in de graph-injects" : aiIntensity === "lean" ? "Niet gebruikt bij Smart mode" : "Systems whose disruption would materially affect operations"}>
           <Textarea value={config.criticalSystems} onChange={(e) => update("criticalSystems", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
         </FieldRow>
-        <FieldRow label="Crown jewels" hint={aiIntensity === "lean" ? "Niet gebruikt bij Smart mode" : "Most sensitive data or assets to protect"}>
+        <FieldRow label="Crown jewels" hint={graphId ? "Ingebed in de graph-injects" : aiIntensity === "lean" ? "Niet gebruikt bij Smart mode" : "Most sensitive data or assets to protect"}>
           <Textarea value={config.crownJewels} onChange={(e) => update("crownJewels", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
         </FieldRow>
       </div>
 
       {/* Section 6 — AI generation */}
-      <div className="flex flex-col gap-4 rounded-lg border border-primary/20 bg-primary/5 p-5">
+      <div className={`flex flex-col gap-4 rounded-lg border border-primary/20 bg-primary/5 p-5 ${graphId ? "opacity-40 pointer-events-none select-none" : ""}`}>
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-primary" />
           <span className="font-mono text-xs uppercase tracking-wider text-primary">AI scenario generation</span>
@@ -832,12 +1013,17 @@ export function SetupForm() {
                   <span className="font-mono text-xs">{irFileName}</span>
                   <button
                     type="button"
-                    onClick={() => { setIrFileName(null); update("irTemplateText", undefined); if (fileRef.current) fileRef.current.value = "" }}
+                    onClick={() => { setIrFileName(null); setIrTruncated(null); update("irTemplateText", undefined); if (fileRef.current) fileRef.current.value = "" }}
                     className="text-muted-foreground hover:text-foreground"
                   >
                     <X className="size-3.5" />
                   </button>
                 </div>
+              )}
+              {irTruncated && (
+                <p className="font-mono text-[10px] text-yellow-600 dark:text-yellow-400">
+                  ⚠ IR plan is afgekapt: {irTruncated.original.toLocaleString()} tekens → eerste {irTruncated.kept.toLocaleString()} bewaard.
+                </p>
               )}
             </div>
           </div>
@@ -888,7 +1074,7 @@ export function SetupForm() {
           {aiIntensity === "off" ? "Template mode — no AI, no API cost." : aiIntensity === "lean" ? `Smart mode (Haiku) — ~€0.002/session${config.irTemplateText ? " · IR plan loaded" : ""}` : `Full mode (Sonnet) — ~€0.05/session${config.irTemplateText ? " · IR plan loaded" : ""}`}
         </p>
         <div className="flex flex-col gap-3">
-          <Button type="submit" size="lg" disabled={submitting} className="gap-2 font-mono uppercase tracking-wider">
+          <Button type="submit" size="lg" disabled={submitting || submitBlocked} className="gap-2 font-mono uppercase tracking-wider">
             {submitting ? (
               <><Loader2 className="size-4 animate-spin" />Genereren…</>
             ) : (

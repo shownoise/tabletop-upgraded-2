@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { AlertTriangle, Check, Loader2, Send, Zap } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { AlertTriangle, Check, Loader2, Send, Zap, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -23,9 +23,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import type { Inject, InjectType, SessionState, Urgency } from "@/lib/types"
+import type { Inject, InjectType, Role, SessionState, Urgency } from "@/lib/types"
+import { ROLE_META } from "@/lib/types"
 import { api } from "@/lib/api-client"
 import { injectTypeLabel, urgencyClasses, urgencyLabel, channelLabel, channelIcon } from "@/lib/format"
+import { resolveInjectRecipients } from "@/lib/inject-routing"
+import { buildTeamRoles } from "@/lib/team-roster"
+
+type DeliveryState = "not_pushed" | "scheduled_future" | "delivered"
 
 const INJECT_TYPES: InjectType[] = ["alert","intel","media","executive","technical","regulatory","social","internal"]
 const URGENCIES: Urgency[] = ["low", "medium", "high", "critical"]
@@ -36,9 +41,20 @@ export function InjectControls({ session, disabled, lang = "en" }: { session: Se
   const isEnded = session.status === "ended"
   const round = currentIndex >= 0 ? session.scenario.rounds[currentIndex] : null
 
-  const pushedIds = new Set(session.pushedInjects.map((p) => p.inject.id))
+  const pushedIndex = new Map(session.pushedInjects.map((p) => [p.inject.id, p]))
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const teamRoles = useMemo(buildTeamRoles, [])
+  const presentRoles = useMemo<Role[]>(
+    () => session.participants.map(p => p.role).filter((r): r is Role => !!r),
+    [session.participants],
+  )
 
   async function handlePush(injectId: string) {
     if (currentIndex < 0) return
@@ -78,14 +94,26 @@ export function InjectControls({ session, disabled, lang = "en" }: { session: Se
 
             <ul className="flex flex-col gap-3">
               {round.injects.map((inject) => {
-                const pushed = pushedIds.has(inject.id)
+                const pushedRec = pushedIndex.get(inject.id)
+                let deliveryState: DeliveryState = "not_pushed"
+                let scheduledInSec: number | undefined
+                if (pushedRec) {
+                  if (pushedRec.pushedAt <= now) deliveryState = "delivered"
+                  else {
+                    deliveryState = "scheduled_future"
+                    scheduledInSec = Math.max(0, Math.round((pushedRec.pushedAt - now) / 1000))
+                  }
+                }
+                const recipients = resolveInjectRecipients({ inject, presentRoles, teamRoles })
                 return (
                   <InjectRow
                     key={inject.id}
                     inject={inject}
-                    pushed={pushed}
+                    deliveryState={deliveryState}
+                    scheduledInSec={scheduledInSec}
+                    recipients={recipients}
                     busy={busy === inject.id}
-                    disabled={disabled || isLobby || isEnded || pushed || busy !== null}
+                    disabled={disabled || isLobby || isEnded || deliveryState === "delivered" || busy !== null}
                     onPush={() => handlePush(inject.id)}
                   />
                 )
@@ -129,10 +157,31 @@ export function InjectControls({ session, disabled, lang = "en" }: { session: Se
   )
 }
 
-function InjectRow(props: { inject: Inject; pushed: boolean; busy: boolean; disabled: boolean; onPush: () => void }) {
-  const { inject, pushed, busy, disabled, onPush } = props
+function InjectRow(props: {
+  inject: Inject
+  deliveryState: DeliveryState
+  scheduledInSec?: number
+  recipients: Role[]
+  busy: boolean
+  disabled: boolean
+  onPush: () => void
+}) {
+  const { inject, deliveryState, scheduledInSec, recipients, busy, disabled, onPush } = props
+  const isDelivered = deliveryState === "delivered"
+  const isScheduled = deliveryState === "scheduled_future"
+  const borderClass = isDelivered
+    ? "border-primary/40 bg-primary/5"
+    : isScheduled
+      ? "border-amber-400/50 bg-amber-500/5"
+      : "border-border"
+  const buttonLabel = isDelivered
+    ? "Delivered"
+    : isScheduled
+      ? `Push earlier${typeof scheduledInSec === "number" ? ` · ${formatSec(scheduledInSec)}` : ""}`
+      : "Push to participants"
+  const ButtonIcon = busy ? Loader2 : isDelivered ? Check : Send
   return (
-    <li className={`flex flex-col gap-3 rounded-md border bg-background p-4 transition-colors ${pushed ? "border-primary/40 bg-primary/5" : "border-border"}`}>
+    <li className={`flex flex-col gap-3 rounded-md border bg-background p-4 transition-colors ${borderClass}`}>
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="outline" className="border-border bg-transparent font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           {injectTypeLabel(inject.type)}
@@ -160,20 +209,39 @@ function InjectRow(props: { inject: Inject; pushed: boolean; busy: boolean; disa
           </p>
         )}
       </div>
+      {recipients.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            <Users className="size-3" /> Levert aan
+          </span>
+          {recipients.map(r => (
+            <Badge key={r} variant="outline" className="border-primary/40 bg-primary/5 font-mono text-[10px] text-primary">
+              {ROLE_META[r]?.label ?? r}
+            </Badge>
+          ))}
+        </div>
+      )}
       <div className="flex items-center justify-end">
         <Button
           size="sm"
-          variant={pushed ? "outline" : "default"}
+          variant={isDelivered ? "outline" : "default"}
           disabled={disabled}
           onClick={onPush}
           className="gap-2 font-mono uppercase tracking-wider"
         >
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : pushed ? <Check className="size-3.5" /> : <Send className="size-3.5" />}
-          {pushed ? "Pushed" : "Push to participants"}
+          <ButtonIcon className={`size-3.5 ${busy ? "animate-spin" : ""}`} />
+          {buttonLabel}
         </Button>
       </div>
     </li>
   )
+}
+
+function formatSec(s: number): string {
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m}m${r > 0 ? ` ${r}s` : ""}`
 }
 
 function SurpriseInjectDialog({ disabled }: { disabled?: boolean }) {

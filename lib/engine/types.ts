@@ -72,6 +72,9 @@ export interface AssessmentEvent {
   value: number
   source: 'facilitator' | 'system' | 'participant_vote'
   note?: string
+  participantId?: string
+  lesson?: string
+  scoreImpact?: number
 }
 
 export interface SessionAssessment {

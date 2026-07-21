@@ -10,22 +10,20 @@ function id(prefix: string) {
 function filterActions(actions: RoleAction[], selectedRoles?: Role[]): RoleAction[] {
   if (!selectedRoles?.length) return actions
   const active = new Set(selectedRoles)
-  return actions
-    .map(action => {
-      if (action.allowedRoles.length === 0) return action
-      const kept = action.allowedRoles.filter(r => active.has(r))
-      if (kept.length > 0) return { ...action, allowedRoles: kept }
-      const remapped = [...new Set(
-        action.allowedRoles.flatMap(r =>
-          (ROLE_FALLBACK[r] ?? []).filter(fb => active.has(fb))
-        )
-      )]
-      return { ...action, allowedRoles: remapped.length > 0 ? remapped : [] }
-    })
-    .filter(action =>
-      action.allowedRoles.length === 0 ||
-      action.allowedRoles.some(r => active.has(r))
-    )
+  return actions.map(action => {
+    if (action.allowedRoles.length === 0) return action
+    const kept = action.allowedRoles.filter(r => active.has(r))
+    if (kept.length > 0) return { ...action, allowedRoles: kept }
+    const remapped = [...new Set(
+      action.allowedRoles.flatMap(r =>
+        (ROLE_FALLBACK[r] ?? []).filter(fb => active.has(fb))
+      )
+    )]
+    // A4: if neither the original allowed roles nor their fallback chain match any active role,
+    // downgrade the action to universal (allowedRoles: []) instead of silently dropping it.
+    // A universal action is visible to every participant so the facilitator can decide.
+    return { ...action, allowedRoles: remapped }
+  })
 }
 
 // Returns true if this org has automated detection tooling (SIEM/EDR)

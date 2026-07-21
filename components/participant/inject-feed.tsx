@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Mail, MessageSquare, MessageCircle, AlertTriangle, Phone,
   Newspaper, Shield, Smartphone, FileText, ShieldAlert,
@@ -8,6 +8,8 @@ import {
 import type { PushedInject, InjectChannel, InjectType, Urgency } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import type { Role } from "@/lib/types"
+import { resolveInjectRecipients } from "@/lib/inject-routing"
+import { buildTeamRoles } from "@/lib/team-roster"
 import { formatTime } from "@/lib/format"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
@@ -90,6 +92,21 @@ function Shell({
           <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border px-1 py-px"
             style={{ color: "var(--tt-blue)", borderColor: "color-mix(in srgb, var(--tt-blue) 40%, transparent)" }}>
             NIS2
+          </span>
+        )}
+        {inject.reliability === "fact" && (
+          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-emerald-500/40 bg-emerald-500/10 text-emerald-500 px-1 py-px">
+            ✓ Feit
+          </span>
+        )}
+        {inject.reliability === "assumption" && (
+          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-yellow-500/40 bg-yellow-500/10 text-yellow-500 px-1 py-px">
+            ? Aanname
+          </span>
+        )}
+        {inject.reliability === "unverified" && (
+          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-orange-500/40 bg-orange-500/10 text-orange-500 px-1 py-px">
+            ⚠ Ongeverifieerd
           </span>
         )}
         {showTeamBadge && (
@@ -370,26 +387,38 @@ export function InjectFeed({
   pushed,
   lang,
   participantRole,
+  participants,
 }: {
   pushed: PushedInject[]
   lang: Lang
   participantRole?: Role
+  participants?: Array<{ role?: Role | null }>
 }) {
-  const participantTeam = participantRole ? ROLE_META[participantRole]?.team : undefined
   const myRoleLabel = participantRole ? ROLE_META[participantRole]?.label : undefined
 
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const teamRoles = useMemo(buildTeamRoles, [])
+  const presentRoles = useMemo<Role[]>(
+    () => (participants ?? []).map(p => p.role).filter((r): r is Role => !!r),
+    [participants],
+  )
+
   const filtered = pushed.filter((p) => {
-    const inject = p.inject
-    // Role-level targeting takes precedence over team-level
-    if (inject.targetRoles && inject.targetRoles.length > 0) {
-      if (!participantRole) return false
-      return inject.targetRoles.includes(participantRole)
+    if (p.pushedAt > now) return false
+    if (myRoleLabel && isSelfReferential(p.inject.senderName, myRoleLabel)) return false
+    if (!participantRole) return true
+    if (presentRoles.length === 0) {
+      const inject = p.inject
+      if (inject.targetRoles?.length) return inject.targetRoles.includes(participantRole)
+      return true
     }
-    // Existing team-level filter
-    const target = inject.targetTeam
-    if (target && target !== "all" && participantTeam && target !== participantTeam) return false
-    if (myRoleLabel && isSelfReferential(inject.senderName, myRoleLabel)) return false
-    return true
+    const recipients = resolveInjectRecipients({ inject: p.inject, presentRoles, teamRoles })
+    return recipients.includes(participantRole)
   })
 
   const sorted = [...filtered].sort((a, b) => b.pushedAt - a.pushedAt)
