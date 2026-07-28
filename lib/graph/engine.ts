@@ -72,9 +72,21 @@ export function stepFromNode(
     }
     nextId = outs[0]?.target ?? null
   } else if (current.type === "decision") {
-    if (trigger.kind !== "decision_made") return { nextNodeId: currentNodeId, outputs: [] }
-    const chosen = graph.edges.find(e => e.source === currentNodeId && e.sourceHandle === trigger.handle)
-    nextId = chosen?.target ?? null
+    const dd = current.data as DecisionNodeData
+    // Soft decision: alleen scoring, geen branch. Volgt de sequence-edge
+    // naar de volgende ronde bij zowel decision_made als facilitator_next
+    // — zodat het spel niet blijft hangen als iemand nog geen keuze had.
+    if (dd.advancesGraph === false) {
+      if (trigger.kind !== "decision_made" && trigger.kind !== "facilitator_next") {
+        return { nextNodeId: currentNodeId, outputs: [] }
+      }
+      const seq = graph.edges.find(e => e.source === currentNodeId && (e.type === "sequence" || !e.sourceHandle))
+      nextId = seq?.target ?? null
+    } else {
+      if (trigger.kind !== "decision_made") return { nextNodeId: currentNodeId, outputs: [] }
+      const chosen = graph.edges.find(e => e.source === currentNodeId && e.sourceHandle === trigger.handle)
+      nextId = chosen?.target ?? null
+    }
   } else if (current.type === "special") {
     if (trigger.kind !== "special_completed") return { nextNodeId: currentNodeId, outputs: [] }
     const data = current.data as SpecialNodeData

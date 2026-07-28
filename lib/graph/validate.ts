@@ -91,6 +91,22 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
     if (node.type !== "decision") continue
     const dd = node.data as DecisionNodeData
     const outgoing = graph.edges.filter(e => e.source === node.id)
+    // Soft decisions (advancesGraph=false) only score — geen branch. Ze hoeven
+    // maar één sequence-edge naar de volgende ronde te hebben. Skip alle
+    // per-option edge checks voor dit soort decisions.
+    if (dd.advancesGraph === false) {
+      if (outgoing.length === 0) {
+        issues.push({ severity: "error", nodeId: node.id, message: "Soft decision heeft geen uitgaande sequence-edge naar de volgende ronde." })
+      }
+      // Nog wél: als er randomly een handle-edge is die verwijst naar een verwijderde optie, dat is een echt bug.
+      for (const edge of outgoing) {
+        if (!edge.sourceHandle) continue
+        if (!dd.options.some(o => o.id === edge.sourceHandle)) {
+          issues.push({ severity: "error", nodeId: node.id, edgeId: edge.id, message: "Edge verwijst naar een verwijderde decision-optie." })
+        }
+      }
+      continue
+    }
     if (outgoing.length < 2) {
       issues.push({ severity: "error", nodeId: node.id, message: "Decision node must have at least 2 outgoing edges." })
     }

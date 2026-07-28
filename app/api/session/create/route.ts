@@ -485,6 +485,17 @@ export async function POST(req: Request) {
           // Substitute {{sector}} etc. in nodes marked dynamic before compile.
           const { applyDynamicFill } = await import("@/lib/graph/dynamic-fill")
           loadedGraph = applyDynamicFill(graph, config)
+          // Then let Claude expand any node with an aiPromptTemplate.
+          // Best-effort: on error the pre-fill content stays.
+          const apiKey = process.env.ANTHROPIC_API_KEY
+          if (apiKey) {
+            const { applyAiRuntimeFill } = await import("@/lib/graph/ai-runtime-fill")
+            try {
+              loadedGraph = await applyAiRuntimeFill(loadedGraph, config, apiKey)
+            } catch (aiErr) {
+              console.warn("[create] AI runtime fill failed:", aiErr instanceof Error ? aiErr.message : String(aiErr))
+            }
+          }
           try {
             const compiled = compileLinearGraph(loadedGraph)
             scenario = { scenario_title: compiled.scenario_title, scenario_summary: compiled.scenario_summary, rounds: [] }

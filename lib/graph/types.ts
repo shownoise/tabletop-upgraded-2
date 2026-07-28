@@ -52,12 +52,18 @@ export interface RoundNodeData {
   facilitatorPerspective?: string
   evaluationAspects?: EvaluationAspect[]
   dynamic?: DynamicFillConfig
+  // Optionele prompt-template die bij sessie-start naar Claude wordt gestuurd.
+  // Ondergaat éérst dynamic-fill van tokens ({{sector}} etc.), daarna wordt
+  // de gerichte prompt naar Claude gestuurd; de response vervangt title +
+  // situation_update. Bij fout blijft de originele tekst staan.
+  aiPromptTemplate?: string
 }
 
 export interface InjectNodeData extends Omit<Inject, "id"> {
   kind: "inject"
   evaluationAspects?: EvaluationAspect[]
   dynamic?: DynamicFillConfig
+  aiPromptTemplate?: string
 }
 
 export type DynamicFillToken = 'sector' | 'companySize' | 'crownJewels' | 'criticalSystems' | 'irRetainerName'

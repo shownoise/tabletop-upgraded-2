@@ -237,6 +237,11 @@ function RoundForm({
         value={local.dynamic}
         onChange={next => commit({ ...local, dynamic: next })}
       />
+      <AiPromptSection
+        kind="round"
+        value={local.aiPromptTemplate}
+        onChange={next => commit({ ...local, aiPromptTemplate: next })}
+      />
       <Field label="Title">
         <Input value={local.title} onChange={e => commit({ ...local, title: e.target.value })} />
       </Field>
@@ -361,6 +366,11 @@ function InjectForm({ data, features, onSave }: { data: InjectNodeData; features
       <DynamicFillSection
         value={local.dynamic}
         onChange={next => commit({ ...local, dynamic: next })}
+      />
+      <AiPromptSection
+        kind="inject"
+        value={local.aiPromptTemplate}
+        onChange={next => commit({ ...local, aiPromptTemplate: next })}
       />
       <div className="flex flex-wrap items-center gap-3 rounded border border-border bg-background/40 px-2 py-1.5">
         {showReliability && (
@@ -548,6 +558,42 @@ function InjectForm({ data, features, onSave }: { data: InjectNodeData; features
         </Section>
       )}
     </div>
+  )
+}
+
+function AiPromptSection({
+  value,
+  onChange,
+  kind,
+}: {
+  value: string | undefined
+  onChange: (next: string | undefined) => void
+  kind: 'round' | 'inject'
+}) {
+  const [open, setOpen] = useState(false)
+  const hasValue = (value ?? "").trim().length > 0
+  const placeholder = kind === 'round'
+    ? "Bijv: Schrijf een openingssituatie voor een ransomware-aanval op een {{sector}}-organisatie, focus op {{criticalSystems}}. Toon van SOC."
+    : "Bijv: Schrijf de eerste ransom-note van de aanvaller aan een {{sector}}-organisatie."
+  return (
+    <details className="rounded border border-border bg-background/40" open={open} onToggle={e => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground select-none list-none flex items-center justify-between">
+        <span>AI opening-prompt{hasValue ? " ●" : ""}</span>
+        <span className="text-[8px] opacity-50">{open ? "▼" : "▶"}</span>
+      </summary>
+      <div className="px-2.5 pb-2.5 pt-1 flex flex-col gap-2">
+        <p className="font-mono text-[10px] text-muted-foreground leading-snug">
+          Bij sessie-start stuurt Claude deze prompt (na token-fill) en schrijft de {kind === 'round' ? 'situatie-update' : 'inject-inhoud'} zelf. Tokens zoals <code>{"{{sector}}"}</code> worden eerst vervangen.
+        </p>
+        <Textarea
+          rows={4}
+          value={value ?? ""}
+          onChange={e => onChange(e.target.value || undefined)}
+          placeholder={placeholder}
+          className="text-xs"
+        />
+      </div>
+    </details>
   )
 }
 
