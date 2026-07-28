@@ -15,7 +15,7 @@ const positionSchema = z.object({ x: z.number(), y: z.number() })
 
 const nodeSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(["start", "round", "inject", "decision", "special", "outcome"]),
+  type: z.enum(["start", "round", "inject", "decision", "special", "outcome", "chaser"]),
   position: positionSchema,
   data: z.any(),
 })
@@ -30,6 +30,8 @@ const edgeSchema = z.object({
   label: z.string().optional(),
 })
 
+// passthrough() zodat velden zoals features / meldplicht / irRetainerProfile /
+// irPlaybook mee-serialiseren zonder dat we ze hier moeten dupliceren.
 const graphSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -44,7 +46,7 @@ const graphSchema = z.object({
   edges: z.array(edgeSchema),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
-})
+}).passthrough()
 
 export async function GET() {
   const session = await auth()
