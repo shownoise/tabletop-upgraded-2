@@ -1,14 +1,10 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { AlertCircle, CheckCircle, Circle, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import type { ScenarioGraph, MeldplichtConfig } from "@/lib/graph/types"
-import { DEFAULT_MELDPLICHT } from "@/lib/graph/types"
-import type { IrRetainerProfile } from "@/lib/types"
+import type { ScenarioGraph, MeldplichtConfig, MeldplichtProfile } from "@/lib/graph/types"
+import { DEFAULT_MELDPLICHT, meldplichtFromProfile } from "@/lib/graph/types"
 import { computeCoverage, previewSupervisionReport, SUPERVISION_AREAS } from "@/lib/engine/supervision"
 
 interface Props {
@@ -20,7 +16,7 @@ interface Props {
   onAutoFixCoverage?: (areaId: string) => void
 }
 
-type Tab = 'coverage' | 'meldplicht' | 'retainer' | 'preview'
+type Tab = 'coverage' | 'preview'
 
 export function CompliancePanel({ open, onOpenChange, graph, onGraphPatch, onFocusNode, onAutoFixCoverage }: Props) {
   const [tab, setTab] = useState<Tab>('coverage')
@@ -42,8 +38,9 @@ export function CompliancePanel({ open, onOpenChange, graph, onGraphPatch, onFoc
         <SheetHeader>
           <SheetTitle>Compliance</SheetTitle>
         </SheetHeader>
+        <MeldplichtCard graph={graph} onGraphPatch={onGraphPatch} />
         <div className="flex gap-1 border-b border-border">
-          {(['coverage','meldplicht','retainer','preview'] as Tab[]).map(t => (
+          {(['coverage','preview'] as Tab[]).map(t => (
             <button
               key={t}
               type="button"
@@ -56,8 +53,6 @@ export function CompliancePanel({ open, onOpenChange, graph, onGraphPatch, onFoc
         </div>
         <div className="flex-1 overflow-y-auto">
           {tab === 'coverage' && <CoverageTab graph={graph} onFocusNode={onFocusNode ? focusThenClose : undefined} onAutoFix={onAutoFixCoverage ? autoFixThenClose : undefined} />}
-          {tab === 'meldplicht' && <MeldplichtTab graph={graph} onGraphPatch={onGraphPatch} />}
-          {tab === 'retainer' && <RetainerTab graph={graph} onGraphPatch={onGraphPatch} />}
           {tab === 'preview' && <PreviewTab graph={graph} />}
         </div>
       </SheetContent>
@@ -68,10 +63,23 @@ export function CompliancePanel({ open, onOpenChange, graph, onGraphPatch, onFoc
 function CoverageTab({ graph, onFocusNode, onAutoFix }: { graph: ScenarioGraph; onFocusNode?: (id: string) => void; onAutoFix?: (areaId: string) => void }) {
   const entries = useMemo(() => computeCoverage(graph), [graph])
   const covered = entries.filter(e => e.coverageLevel !== 'none').length
+  const missing = entries.filter(e => e.coverageLevel === 'none')
   return (
     <div className="flex flex-col gap-2 text-xs">
-      <div className={`font-mono text-[11px] ${covered === entries.length ? "text-emerald-500" : "text-muted-foreground"}`}>
-        {covered}/{entries.length} gebieden gedekt
+      <div className="flex items-center justify-between">
+        <div className={`font-mono text-[11px] ${covered === entries.length ? "text-emerald-500" : "text-muted-foreground"}`}>
+          {covered}/{entries.length} gebieden gedekt
+        </div>
+        {onAutoFix && missing.length > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-[10px]"
+            onClick={() => missing.forEach(m => onAutoFix(m.area))}
+          >
+            Auto-fix {missing.length} ontbrekende
+          </Button>
+        )}
       </div>
       <ul className="flex flex-col divide-y divide-border">
         {entries.map(e => (
@@ -114,102 +122,93 @@ function CoverageTab({ graph, onFocusNode, onAutoFix }: { graph: ScenarioGraph; 
   )
 }
 
-function MeldplichtTab({ graph, onGraphPatch }: { graph: ScenarioGraph; onGraphPatch?: (p: Partial<ScenarioGraph>) => void }) {
+function MeldplichtCard({ graph, onGraphPatch }: { graph: ScenarioGraph; onGraphPatch?: (p: Partial<ScenarioGraph>) => void }) {
   const m = graph.meldplicht ?? DEFAULT_MELDPLICHT
-  function patch(next: Partial<MeldplichtConfig>) {
-    onGraphPatch?.({ meldplicht: { ...m, ...next } })
+  const profile: MeldplichtProfile = m.incidentProfile ?? deriveProfile(m)
+
+  function setProfile(next: MeldplichtProfile) {
+    onGraphPatch?.({ meldplicht: meldplichtFromProfile(next, { incidentDetectedAt: m.incidentDetectedAt }) })
   }
+  function setClockStart(next: MeldplichtConfig['incidentDetectedAt']) {
+    onGraphPatch?.({ meldplicht: { ...m, incidentDetectedAt: next } })
+  }
+
+  const PROFILES: Array<{ id: MeldplichtProfile; title: string; hint: string }> = [
+    { id: 'personal_data_only',   title: 'AVG-incident',       hint: 'Persoonsgegevens gelekt → AP-melding (72u)' },
+    { id: 'critical_service_only',title: 'NIS2 verstoring',    hint: 'Kritieke dienst uitgevallen → NCSC 24u / 72u' },
+    { id: 'both',                 title: 'Beide — brede impact', hint: 'AVG én NIS2 spelen tegelijk' },
+  ]
+
   return (
-    <div className="flex flex-col gap-3 text-xs">
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={m.enabled} onChange={e => patch({ enabled: e.target.checked })} className="size-3" />
-        <span>Meldplicht spelen deze sessie</span>
-      </label>
-      <div>
-        <div className="font-mono text-[10px] uppercase text-muted-foreground mb-1">Wanneer start de deadline-klok?</div>
-        {(['start','round_1','round_2','round_3'] as const).map(v => (
-          <label key={v} className="flex items-center gap-2">
-            <input type="radio" checked={m.incidentDetectedAt === v} onChange={() => patch({ incidentDetectedAt: v })} />
-            <span>{v.replace('_', ' ')}</span>
-          </label>
+    <div className="flex flex-col gap-2 rounded border border-border bg-background/40 p-3">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Meldplicht — incidentprofiel</span>
+        <span className="font-mono text-[10px] text-muted-foreground">Retainer · Eye Security</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {PROFILES.map(p => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => setProfile(p.id)}
+            className={`flex flex-col gap-1 rounded-lg border px-2 py-1.5 text-left transition-colors ${
+              profile === p.id
+                ? "border-primary/60 bg-primary/5"
+                : "border-border bg-background hover:border-primary/30"
+            }`}
+          >
+            <span className="font-mono text-[11px] font-medium">{p.title}</span>
+            <span className="text-[10px] text-muted-foreground leading-snug">{p.hint}</span>
+          </button>
         ))}
       </div>
-      <div className="flex flex-col gap-1">
-        <Toggle label="24u NCSC vroegtijdige waarschuwing" hint="Verplicht binnen 24 uur na constatering" value={m.ncsc24hEnabled} onChange={v => patch({ ncsc24hEnabled: v })} />
-        <Toggle label="72u NCSC melding met initiële beoordeling" hint="Uiterlijk 72 uur" value={m.ncsc72hEnabled} onChange={v => patch({ ncsc72hEnabled: v })} />
-        <Toggle label="Eindverslag / voortgangsverslag NCSC" hint="Uiterlijk 1 maand" value={m.ncscFinalEnabled} onChange={v => patch({ ncscFinalEnabled: v })} />
-        <Toggle label="AP-melding (AVG)" hint="72u vanaf constatering" value={m.apEnabled} onChange={v => patch({ apEnabled: v })} />
-        <Toggle label="Chasers automatisch vuren bij gemiste deadline" value={m.chasersEnabled} onChange={v => patch({ chasersEnabled: v })} />
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Klok start bij</span>
+        <div className="flex gap-1">
+          {(['start','round_1','round_2','round_3'] as const).map(v => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setClockStart(v)}
+              className={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
+                m.incidentDetectedAt === v
+                  ? "border-primary/60 bg-primary/10 text-primary"
+                  : "border-border bg-background text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {v.replace('_', ' ')}
+            </button>
+          ))}
+        </div>
       </div>
+      <DerivedTimelineStrip config={meldplichtFromProfile(profile, { incidentDetectedAt: m.incidentDetectedAt })} />
     </div>
   )
 }
 
-function Toggle({ label, hint, value, onChange }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void }) {
+function DerivedTimelineStrip({ config }: { config: MeldplichtConfig }) {
+  const items: string[] = []
+  if (config.ncsc24hEnabled) items.push("24u → NCSC waarschuwing")
+  if (config.ncsc72hEnabled) items.push("72u → NCSC melding")
+  if (config.apEnabled)      items.push("72u → AP-melding (AVG)")
+  if (config.ncscFinalEnabled) items.push("1 mnd → eindverslag NCSC")
+  if (items.length === 0) return null
   return (
-    <label className="flex flex-col gap-0.5 rounded border border-border bg-background/40 px-2 py-1">
-      <span className="flex items-center gap-2 text-[11px]">
-        <input type="checkbox" checked={value} onChange={e => onChange(e.target.checked)} className="size-3" />
-        {label}
-      </span>
-      {hint && <span className="text-[10px] text-muted-foreground pl-5">{hint}</span>}
-    </label>
-  )
-}
-
-function RetainerTab({ graph, onGraphPatch }: { graph: ScenarioGraph; onGraphPatch?: (p: Partial<ScenarioGraph>) => void }) {
-  const p: IrRetainerProfile = graph.irRetainerProfile ?? {
-    name: "",
-    activationNumber: "",
-    authorizedActivators: [],
-    slaMinutesToFirstContact: 30,
-    handoffChecklist: [],
-    scopeIncludes: [],
-    scopeExcludes: [],
-  }
-  function patch(next: Partial<IrRetainerProfile>) {
-    onGraphPatch?.({ irRetainerProfile: { ...p, ...next } })
-  }
-  function warn(field: unknown) {
-    return Array.isArray(field) ? field.length === 0 : !field
-  }
-  return (
-    <div className="grid grid-cols-1 gap-2 text-xs">
-      <FieldRow label="Naam retainer-partij" warning={warn(p.name)}>
-        <Input value={p.name} onChange={e => patch({ name: e.target.value })} />
-      </FieldRow>
-      <FieldRow label="24/7 nummer" warning={warn(p.activationNumber)}>
-        <Input value={p.activationNumber} onChange={e => patch({ activationNumber: e.target.value })} />
-      </FieldRow>
-      <FieldRow label="SLA minuten tot eerste contact">
-        <Input type="number" min={0} value={p.slaMinutesToFirstContact} onChange={e => patch({ slaMinutesToFirstContact: Number(e.target.value) })} />
-      </FieldRow>
-      <FieldRow label="Geautoriseerde activators (komma)" warning={warn(p.authorizedActivators)}>
-        <Input value={p.authorizedActivators.join(", ")} onChange={e => patch({ authorizedActivators: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })} />
-      </FieldRow>
-      <FieldRow label="Overdrachtchecklist (per regel)" warning={warn(p.handoffChecklist)}>
-        <Textarea rows={3} value={p.handoffChecklist.join("\n")} onChange={e => patch({ handoffChecklist: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })} className="text-[11px]" />
-      </FieldRow>
-      <FieldRow label="Scope includes (per regel)">
-        <Textarea rows={2} value={p.scopeIncludes.join("\n")} onChange={e => patch({ scopeIncludes: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })} className="text-[11px]" />
-      </FieldRow>
-      <FieldRow label="Scope excludes (per regel)">
-        <Textarea rows={2} value={p.scopeExcludes.join("\n")} onChange={e => patch({ scopeExcludes: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })} className="text-[11px]" />
-      </FieldRow>
+    <div className="flex flex-wrap gap-1.5 border-t border-border pt-2">
+      {items.map(t => (
+        <span key={t} className="inline-flex items-center rounded-full bg-background px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+          {t}
+        </span>
+      ))}
     </div>
   )
 }
 
-function FieldRow({ label, warning, children }: { label: string; warning?: boolean; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-0.5">
-      <span className="font-mono text-[10px] uppercase text-muted-foreground flex items-center gap-1">
-        {warning && <AlertCircle className="size-3 text-yellow-500" />}
-        {label}
-      </span>
-      {children}
-    </label>
-  )
+function deriveProfile(m: MeldplichtConfig): MeldplichtProfile {
+  if (m.apEnabled && (m.ncsc24hEnabled || m.ncsc72hEnabled)) return 'both'
+  if (m.apEnabled) return 'personal_data_only'
+  if (m.ncsc24hEnabled || m.ncsc72hEnabled) return 'critical_service_only'
+  return 'both'
 }
 
 function PreviewTab({ graph }: { graph: ScenarioGraph }) {
@@ -254,3 +253,4 @@ function PreviewTab({ graph }: { graph: ScenarioGraph }) {
     </div>
   )
 }
+

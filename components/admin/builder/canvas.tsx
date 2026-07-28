@@ -22,6 +22,7 @@ import "@xyflow/react/dist/style.css"
 import { Palette } from "./palette"
 import { Inspector } from "./inspector"
 import { Toolbar } from "./toolbar"
+import { ComplianceRail } from "./compliance-rail"
 import { StartNode } from "./nodes/start-node"
 import { RoundNode } from "./nodes/round-node"
 import { InjectNode } from "./nodes/inject-node"
@@ -33,7 +34,10 @@ import { TypedEdge } from "./edges/typed-edge"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Sparkles, FileText, Workflow } from "lucide-react"
+import { EvaluationAspectPicker } from "./evaluation-aspects"
+import { autoLayout } from "./layout"
 import type {
+  EvaluationAspect,
   GraphEdge,
   GraphNode,
   GraphNodeData,
@@ -44,6 +48,7 @@ import type {
   ScenarioGraph,
   StartNodeData,
 } from "@/lib/graph/types"
+import { EYE_SECURITY_RETAINER, DEFAULT_MELDPLICHT } from "@/lib/graph/types"
 import { validateGraph } from "@/lib/graph/validate"
 import type { ScenarioType } from "@/lib/types"
 
@@ -78,6 +83,10 @@ function initialGraph(): ScenarioGraph {
     edges: [],
     createdAt: now,
     updatedAt: now,
+    // Retainer is always Eye Security (v2). Author cannot edit; engine reads this everywhere.
+    irRetainerName: EYE_SECURITY_RETAINER.name,
+    irRetainerProfile: EYE_SECURITY_RETAINER,
+    meldplicht: DEFAULT_MELDPLICHT,
   }
 }
 
@@ -195,9 +204,10 @@ function InnerCanvas() {
   const [startupOpen, setStartupOpen] = useState(true)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [templatesPickerOpen, setTemplatesPickerOpen] = useState(false)
+  const [aspectPicker, setAspectPicker] = useState<{ nodeId: string; nodeType: 'inject' | 'round' } | null>(null)
 
   const wrapperRef = useRef<HTMLDivElement>(null)
-  const { screenToFlowPosition, setCenter } = useReactFlow()
+  const { screenToFlowPosition, setCenter, fitView } = useReactFlow()
 
   const handleFocusNode = useCallback((nodeId: string) => {
     const n = nodes.find(x => x.id === nodeId)
@@ -282,15 +292,25 @@ function InnerCanvas() {
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
     const roundCount = nodes.filter(n => n.type === "round").length
     const id = newId(type)
-    const newNode: Node = {
-      id,
-      type,
-      position,
-      data: defaultData(type, roundCount + 1) as unknown as Record<string, unknown>,
-    }
+    // New inject/round nodes start opted-out (evaluationAspects: []) and immediately
+    // trigger the aspect picker. Legacy nodes without the field stay in "show all" mode.
+    const base = defaultData(type, roundCount + 1) as unknown as Record<string, unknown>
+    const isPickable = type === "inject" || type === "round"
+    const data = isPickable ? { ...base, evaluationAspects: [] as EvaluationAspect[] } : base
+    const newNode: Node = { id, type, position, data }
     setNodes(ns => [...ns, newNode])
     setSelectedId(id)
+    if (isPickable) setAspectPicker({ nodeId: id, nodeType: type as 'inject' | 'round' })
   }, [nodes, screenToFlowPosition, setNodes])
+
+  const applyAspectPick = useCallback((aspects: EvaluationAspect[]) => {
+    if (!aspectPicker) return
+    setNodes(ns => ns.map(n => {
+      if (n.id !== aspectPicker.nodeId) return n
+      return { ...n, data: { ...(n.data as Record<string, unknown>), evaluationAspects: aspects } }
+    }))
+    setAspectPicker(null)
+  }, [aspectPicker, setNodes])
 
   const handleNodeDataChange = useCallback((nodeId: string, data: GraphNodeData) => {
     setNodes(ns => ns.map(n => n.id === nodeId ? { ...n, data: data as unknown as Record<string, unknown> } : n))
@@ -306,11 +326,12 @@ function InnerCanvas() {
     const roundNode = nodes.find(n => n.id === roundNodeId)
     if (!roundNode) return
     const id = newId("inject")
+    const base = defaultData("inject", 1) as unknown as Record<string, unknown>
     const newNode: Node = {
       id,
       type: "inject",
       position: { x: roundNode.position.x + 40, y: roundNode.position.y + 180 },
-      data: defaultData("inject", 1) as unknown as Record<string, unknown>,
+      data: { ...base, evaluationAspects: [] as EvaluationAspect[] },
     }
     const newEdge: Edge = {
       id: newId("edge"),
@@ -324,6 +345,7 @@ function InnerCanvas() {
     setNodes(ns => [...ns, newNode])
     setEdges(es => [...es, newEdge])
     setSelectedId(id)
+    setAspectPicker({ nodeId: id, nodeType: "inject" })
   }, [nodes, setNodes, setEdges])
 
   const handleDuplicate = useCallback((nodeId: string) => {
@@ -385,10 +407,13 @@ function InnerCanvas() {
   }, [setNodes, setEdges])
 
   const handleLoad = useCallback((g: ScenarioGraph) => {
+    // Retainer is always Eye Security — override anything an older saved graph may hold.
     setGraphMeta({
       id: g.id, name: g.name, version: g.version, scenarioType: g.scenarioType, createdAt: g.createdAt,
-      irRetainerName: g.irRetainerName, irPlaybook: g.irPlaybook,
-      meldplicht: g.meldplicht, irRetainerProfile: g.irRetainerProfile,
+      irRetainerName: EYE_SECURITY_RETAINER.name,
+      irPlaybook: g.irPlaybook,
+      meldplicht: g.meldplicht ?? DEFAULT_MELDPLICHT,
+      irRetainerProfile: EYE_SECURITY_RETAINER,
     })
     setNodes(toFlowNodes(g))
     setEdges(toFlowEdges(g))
@@ -426,6 +451,12 @@ function InnerCanvas() {
   }, [persistGraph, graphMeta.name])
 
   const handleValidate = useCallback(() => validateGraph(buildGraph()), [buildGraph])
+
+  const handleAutoLayout = useCallback(() => {
+    setNodes(prev => autoLayout(prev, edges))
+    // Give React one tick to commit new positions before re-framing the viewport.
+    setTimeout(() => fitView({ duration: 400, padding: 0.15 }), 0)
+  }, [setNodes, edges, fitView])
 
   // Count injects reachable from each round node via inject-typed edges.
   const injectCountByRound = useMemo(() => {
@@ -518,16 +549,13 @@ function InnerCanvas() {
         graph={buildGraph()}
         onNameChange={name => setGraphMeta(g => ({ ...g, name }))}
         onScenarioTypeChange={t => setGraphMeta(g => ({ ...g, scenarioType: t as ScenarioType }))}
-        onIrRetainerChange={n => setGraphMeta(g => ({ ...g, irRetainerName: n }))}
         onPlaybookChange={p => setGraphMeta(g => ({ ...g, irPlaybook: p }))}
-        onGraphPatch={patch => setGraphMeta(g => ({ ...g, ...patch }))}
-        onFocusNode={handleFocusNode}
-        onAutoFixCoverage={handleAutoFixCoverage}
         onSave={handleSave}
         onLoad={handleLoad}
         onNew={handleNew}
         onValidate={handleValidate}
         onPublish={handlePublish}
+        onAutoLayout={handleAutoLayout}
         saving={saving}
       />
       {status && (
@@ -542,11 +570,17 @@ function InnerCanvas() {
         </div>
       )}
       <div className="flex flex-1 overflow-hidden">
-        <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card">
+        <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card overflow-y-auto">
           <div className="border-b border-border px-3 py-2">
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Palette</span>
           </div>
           <Palette />
+          <ComplianceRail
+            graph={buildGraph()}
+            onGraphPatch={patch => setGraphMeta(g => ({ ...g, ...patch }))}
+            onFocusNode={handleFocusNode}
+            onAutoFixCoverage={handleAutoFixCoverage}
+          />
         </aside>
         <div ref={wrapperRef} className="relative flex-1" onDragOver={onDragOver} onDrop={onDrop}>
           <ReactFlow
@@ -609,6 +643,15 @@ function InnerCanvas() {
       </div>
 
       <WizardDialog open={wizardOpen} onOpenChange={setWizardOpen} onGraphGenerated={handleLoad} />
+
+      {aspectPicker && (
+        <EvaluationAspectPicker
+          nodeType={aspectPicker.nodeType}
+          initial={[]}
+          onConfirm={applyAspectPick}
+          onSkip={() => applyAspectPick([])}
+        />
+      )}
 
       <Dialog open={templatesPickerOpen} onOpenChange={setTemplatesPickerOpen}>
         <DialogContent className="max-w-lg">

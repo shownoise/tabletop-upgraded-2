@@ -1,9 +1,10 @@
 "use client"
 
 import { Handle, Position, type NodeProps } from "@xyflow/react"
-import { Timer, Zap, Users } from "lucide-react"
+import { Timer, Zap, Users, Sparkles } from "lucide-react"
 import { NodeShell } from "../node-shell"
 import { NODE_THEME } from "../node-theme"
+import { ASPECT_BADGE } from "../evaluation-aspects"
 import type { RoundNodeData } from "@/lib/graph/types"
 
 interface Actions {
@@ -49,6 +50,21 @@ export function RoundNode({ id, data, selected }: NodeProps) {
         {roleCount > 0 && (
           <span className="inline-flex items-center gap-1 rounded-full bg-background/70 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:text-slate-300">
             <Users className="size-2.5" />{roleCount}
+          </span>
+        )}
+        {d.evaluationAspects && d.evaluationAspects.slice(0, 3).map(a => (
+          <span key={a} className="inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-mono text-primary">
+            {ASPECT_BADGE[a]}
+          </span>
+        ))}
+        {d.evaluationAspects && d.evaluationAspects.length > 3 && (
+          <span className="inline-flex items-center rounded-full bg-primary/5 px-1 py-0.5 text-[9px] font-mono text-primary/70">
+            +{d.evaluationAspects.length - 3}
+          </span>
+        )}
+        {d.dynamic?.enabled && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-background/70 px-1.5 py-0.5 text-[10px] font-mono text-amber-600" title="Dynamisch bij sessie-start">
+            <Sparkles className="size-2.5" />DYN
           </span>
         )}
       </div>

@@ -482,9 +482,11 @@ export async function POST(req: Request) {
           if (body.graph) {
             try { await saveScenarioGraph(body.graph) } catch { /* ignore */ }
           }
-          loadedGraph = graph
+          // Substitute {{sector}} etc. in nodes marked dynamic before compile.
+          const { applyDynamicFill } = await import("@/lib/graph/dynamic-fill")
+          loadedGraph = applyDynamicFill(graph, config)
           try {
-            const compiled = compileLinearGraph(graph)
+            const compiled = compileLinearGraph(loadedGraph)
             scenario = { scenario_title: compiled.scenario_title, scenario_summary: compiled.scenario_summary, rounds: [] }
           } catch (compileErr) {
             const msg = compileErr instanceof Error ? compileErr.message : "Graph compile failed"

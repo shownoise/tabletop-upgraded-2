@@ -19,22 +19,18 @@ import type { ScenarioType } from "@/lib/types"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { PreviewDialog } from "./preview-dialog"
 import { WizardDialog } from "./wizard-dialog"
-import { CompliancePanel } from "./compliance-panel"
 
 interface Props {
   graph: ScenarioGraph
   onNameChange: (name: string) => void
   onScenarioTypeChange: (t: ScenarioType) => void
-  onIrRetainerChange: (name: string | undefined) => void
   onPlaybookChange: (playbook: string | undefined) => void
-  onGraphPatch?: (patch: Partial<ScenarioGraph>) => void
-  onFocusNode?: (nodeId: string) => void
-  onAutoFixCoverage?: (areaId: string) => void
   onSave: () => Promise<void>
   onLoad: (g: ScenarioGraph) => void
   onNew: () => void
   onValidate: () => GraphIssue[]
   onPublish: () => Promise<void>
+  onAutoLayout: () => void
   saving?: boolean
 }
 
@@ -49,16 +45,13 @@ export function Toolbar({
   graph,
   onNameChange,
   onScenarioTypeChange,
-  onIrRetainerChange,
   onPlaybookChange,
-  onGraphPatch,
-  onFocusNode,
-  onAutoFixCoverage,
   onSave,
   onLoad,
   onNew,
   onValidate,
   onPublish,
+  onAutoLayout,
   saving,
 }: Props) {
   const [loadOpen, setLoadOpen] = useState(false)
@@ -66,7 +59,6 @@ export function Toolbar({
   const [previewOpen, setPreviewOpen] = useState(false)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [playbookOpen, setPlaybookOpen] = useState(false)
-  const [complianceOpen, setComplianceOpen] = useState(false)
   const [loadable, setLoadable] = useState<ScenarioGraph[] | null>(null)
   const [issues, setIssues] = useState<GraphIssue[] | null>(null)
   const [publishing, setPublishing] = useState(false)
@@ -119,7 +111,7 @@ export function Toolbar({
         <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>Templates</Button>
         <Button size="sm" variant="outline" onClick={openLoad}>Load</Button>
         <Button size="sm" variant="outline" onClick={() => setPlaybookOpen(true)}>Playbook / IR</Button>
-        <Button size="sm" variant="outline" onClick={() => setComplianceOpen(true)}>Compliance</Button>
+        <Button size="sm" variant="outline" onClick={onAutoLayout} title="Zet nodes netjes uit elkaar zodat je de stroom kan zien">Auto-layout</Button>
         <Button size="sm" variant="outline" onClick={handleValidate}>Validate</Button>
         <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>Preview</Button>
         <Button size="sm" variant="outline" onClick={onSave} disabled={saving}>
@@ -159,23 +151,15 @@ export function Toolbar({
       </Dialog>
 
       <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} graph={graph} />
-      <WizardDialog open={wizardOpen} onOpenChange={setWizardOpen} onGraphGenerated={onLoad} />
+      <WizardDialog open={wizardOpen} onOpenChange={setWizardOpen} onGraphGenerated={g => { onLoad(g); }} />
 
       <Dialog open={playbookOpen} onOpenChange={setPlaybookOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Crisis Playbook / IR-plan</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">IR retainer naam</Label>
-              <Input
-                value={graph.irRetainerName ?? ""}
-                onChange={e => onIrRetainerChange(e.target.value || undefined)}
-                placeholder="Bijv. Cronos Digital Forensics"
-              />
-              <p className="font-mono text-[10px] text-muted-foreground">
-                Verschijnt bovenin de participant-view als 'Facilitated by...'.
-              </p>
-            </div>
+            <p className="font-mono text-[10px] text-muted-foreground">
+              Retainer is vast — <span className="text-foreground">Eye Security</span>. Alleen de playbook-tekst is per scenario te tunen.
+            </p>
             <div className="flex flex-col gap-1">
               <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">IR / Crisis Playbook (Markdown)</Label>
               <Textarea
@@ -221,15 +205,6 @@ export function Toolbar({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <CompliancePanel
-        open={complianceOpen}
-        onOpenChange={setComplianceOpen}
-        graph={graph}
-        onGraphPatch={onGraphPatch}
-        onFocusNode={onFocusNode}
-        onAutoFixCoverage={onAutoFixCoverage}
-      />
 
       <Dialog open={issues !== null} onOpenChange={o => !o && setIssues(null)}>
         <DialogContent className="max-w-lg">

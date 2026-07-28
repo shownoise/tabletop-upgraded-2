@@ -16,6 +16,17 @@ import type { SupervisionArea } from "@/lib/engine/supervision"
 export type GraphNodeType = "start" | "round" | "inject" | "decision" | "special" | "outcome" | "chaser"
 export type GraphEdgeType = "sequence" | "branch" | "outcome" | "inject"
 
+// Opt-in aspects an author wants this node to be scored / annotated on.
+// undefined = legacy node, show all fields (backwards compat).
+// []        = minimal, hide every optional evaluation field.
+// non-empty = only show the fields that match the listed aspects.
+export type EvaluationAspect =
+  | 'reliability'          // Betrouwbaarheid (BOB) select on injects
+  | 'facts_assumptions'    // Span-editor for feit/aanname/misleidend
+  | 'nis2'                 // nis2Relevant flag + supervision areas
+  | 'decision_impact'      // scoreImpact / linkedDimension
+  | 'lessons_learned'      // learning objectives / lessonLearned
+
 export interface StartNodeData {
   kind: "start"
 }
@@ -34,11 +45,24 @@ export interface RoundNodeData {
   openingPrompts?: string[]
   // "Vanuit IR-perspectief" — alleen zichtbaar voor facilitator (jij als IR-consultant)
   facilitatorPerspective?: string
+  evaluationAspects?: EvaluationAspect[]
+  dynamic?: DynamicFillConfig
 }
 
 export interface InjectNodeData extends Omit<Inject, "id"> {
   kind: "inject"
+  evaluationAspects?: EvaluationAspect[]
+  dynamic?: DynamicFillConfig
 }
+
+export type DynamicFillToken = 'sector' | 'companySize' | 'crownJewels' | 'criticalSystems' | 'irRetainerName'
+
+export interface DynamicFillConfig {
+  enabled: boolean
+  fillFrom: DynamicFillToken[]
+}
+
+export const DYNAMIC_FILL_TOKENS: DynamicFillToken[] = ['sector', 'companySize', 'crownJewels', 'criticalSystems', 'irRetainerName']
 
 export interface DecisionNodeData {
   kind: "decision"
@@ -126,6 +150,8 @@ export interface GraphEdge {
   label?: string
 }
 
+export type MeldplichtProfile = 'personal_data_only' | 'critical_service_only' | 'both'
+
 export interface MeldplichtConfig {
   enabled: boolean
   incidentDetectedAt: 'start' | 'round_1' | 'round_2' | 'round_3'
@@ -134,6 +160,7 @@ export interface MeldplichtConfig {
   ncscFinalEnabled: boolean
   apEnabled: boolean
   chasersEnabled: boolean
+  incidentProfile?: MeldplichtProfile
 }
 
 export const DEFAULT_MELDPLICHT: MeldplichtConfig = {
@@ -144,6 +171,41 @@ export const DEFAULT_MELDPLICHT: MeldplichtConfig = {
   ncscFinalEnabled: false,
   apEnabled: true,
   chasersEnabled: true,
+  incidentProfile: 'both',
+}
+
+// Derive the individual toggle booleans from an incidentProfile choice.
+// Author picks a profile; engine reads the derived booleans.
+export function meldplichtFromProfile(profile: MeldplichtProfile, base: Partial<MeldplichtConfig> = {}): MeldplichtConfig {
+  const derived: Omit<MeldplichtConfig, 'incidentDetectedAt' | 'enabled' | 'incidentProfile'> = profile === 'personal_data_only'
+    ? { apEnabled: true, ncsc24hEnabled: false, ncsc72hEnabled: false, ncscFinalEnabled: false, chasersEnabled: true }
+    : profile === 'critical_service_only'
+      ? { apEnabled: false, ncsc24hEnabled: true, ncsc72hEnabled: true, ncscFinalEnabled: true, chasersEnabled: true }
+      : { apEnabled: true, ncsc24hEnabled: true, ncsc72hEnabled: true, ncscFinalEnabled: true, chasersEnabled: true }
+  return {
+    enabled: base.enabled ?? true,
+    incidentDetectedAt: base.incidentDetectedAt ?? 'round_1',
+    incidentProfile: profile,
+    ...derived,
+  }
+}
+
+// Retainer is always Eye Security in this app (v2). Kept as a data constant so
+// the engine, coverage checks, and templates all read from one source.
+export const EYE_SECURITY_RETAINER: IrRetainerProfile = {
+  name: "Eye Security",
+  activationNumber: "+31 (0)88 6600 700",
+  authorizedActivators: ["CISO", "IT Manager", "CEO"],
+  slaMinutesToFirstContact: 15,
+  handoffChecklist: [
+    "Incident samenvatting (wat, waar, wanneer)",
+    "Getroffen systemen en gebruikers",
+    "Reeds genomen containment-stappen",
+    "Beschikbare logs en toegangen voor forensics",
+    "Contactpersoon 24/7",
+  ],
+  scopeIncludes: ["Forensics", "Containment support", "Coordinatie NCSC/AP-meldingen", "Communicatie-advies"],
+  scopeExcludes: ["Losgeld-onderhandeling zonder schriftelijke opdracht", "Herstel via derde partij"],
 }
 
 export interface ScenarioGraph {

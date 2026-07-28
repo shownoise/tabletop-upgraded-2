@@ -8,12 +8,17 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import type {
   DecisionNodeData,
+  DynamicFillConfig,
+  DynamicFillToken,
+  EvaluationAspect,
   GraphNodeData,
   InjectNodeData,
   OutcomeNodeData,
   RoundNodeData,
   SpecialNodeData,
 } from "@/lib/graph/types"
+import { DYNAMIC_FILL_TOKENS } from "@/lib/graph/types"
+import { AspectPillBar, isAspectActive } from "./evaluation-aspects"
 import { ROLE_META } from "@/lib/types"
 import type {
   BobPhase,
@@ -213,8 +218,19 @@ function RoundForm({
     }
   }
 
+  const showLessons = isAspectActive(local.evaluationAspects, 'lessons_learned')
+
   return (
     <div className="flex flex-col gap-3">
+      <AspectPillBar
+        aspects={local.evaluationAspects}
+        nodeType="round"
+        onChange={next => commit({ ...local, evaluationAspects: next })}
+      />
+      <DynamicFillSection
+        value={local.dynamic}
+        onChange={next => commit({ ...local, dynamic: next })}
+      />
       <Field label="Title">
         <Input value={local.title} onChange={e => commit({ ...local, title: e.target.value })} />
       </Field>
@@ -223,6 +239,7 @@ function RoundForm({
           rows={5}
           value={local.situation_update}
           onChange={e => commit({ ...local, situation_update: e.target.value })}
+          className={local.dynamic?.enabled ? "border-l-4 border-l-amber-500/60" : undefined}
         />
       </Field>
       <Field label="Timer (minutes)">
@@ -277,12 +294,14 @@ function RoundForm({
         />
       </Section>
 
-      <Section title="Learning objectives" count={local.learningObjectives?.length ?? 0}>
-        <LearningObjectivesEditor
-          value={local.learningObjectives ?? []}
-          onChange={(v: LearningObjective[]) => commit({ ...local, learningObjectives: v })}
-        />
-      </Section>
+      {showLessons && (
+        <Section title="Learning objectives" count={local.learningObjectives?.length ?? 0}>
+          <LearningObjectivesEditor
+            value={local.learningObjectives ?? []}
+            onChange={(v: LearningObjective[]) => commit({ ...local, learningObjectives: v })}
+          />
+        </Section>
+      )}
 
       <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
         <Button type="button" variant="outline" size="sm" onClick={onAddInject}>Add inject</Button>
@@ -321,18 +340,33 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
     onSave(next)
   }
 
+  const showReliability = isAspectActive(local.evaluationAspects, 'reliability')
+  const showFactsAssumptions = isAspectActive(local.evaluationAspects, 'facts_assumptions')
+  const showNis2 = isAspectActive(local.evaluationAspects, 'nis2')
+
   return (
     <div className="flex flex-col gap-3">
+      <AspectPillBar
+        aspects={local.evaluationAspects}
+        nodeType="inject"
+        onChange={next => commit({ ...local, evaluationAspects: next })}
+      />
+      <DynamicFillSection
+        value={local.dynamic}
+        onChange={next => commit({ ...local, dynamic: next })}
+      />
       <div className="flex flex-wrap items-center gap-3 rounded border border-border bg-background/40 px-2 py-1.5">
-        <label className="flex items-center gap-1 text-[11px]">
-          <input
-            type="checkbox"
-            checked={markSpans}
-            onChange={e => setMarkSpans(e.target.checked)}
-            className="size-3"
-          />
-          <span>Markeer spans</span>
-        </label>
+        {showFactsAssumptions && (
+          <label className="flex items-center gap-1 text-[11px]">
+            <input
+              type="checkbox"
+              checked={markSpans}
+              onChange={e => setMarkSpans(e.target.checked)}
+              className="size-3"
+            />
+            <span>Markeer spans</span>
+          </label>
+        )}
         <label className="flex items-center gap-1 text-[11px]">
           <input
             type="checkbox"
@@ -347,7 +381,7 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
         <Input value={local.title} onChange={e => commit({ ...local, title: e.target.value })} />
       </Field>
       <Field label="Content">
-        {markSpans ? (
+        {showFactsAssumptions && markSpans ? (
           <InjectSpanEditor
             content={local.content}
             annotations={local.groundTruthAnnotations ?? []}
@@ -362,6 +396,7 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
             rows={5}
             value={local.content}
             onChange={e => commit({ ...local, content: e.target.value })}
+            className={local.dynamic?.enabled ? "border-l-4 border-l-amber-500/60" : undefined}
           />
         )}
       </Field>
@@ -410,21 +445,23 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
             placeholder="0 = direct"
           />
         </Field>
-        <Field label="Betrouwbaarheid (BOB)">
-          <select
-            value={local.reliability ?? ""}
-            onChange={e => commit({ ...local, reliability: e.target.value ? (e.target.value as InjectReliability) : undefined })}
-            className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-          >
-            <option value="">— niet gespecificeerd —</option>
-            <option value="fact">✓ Feit (bevestigd)</option>
-            <option value="assumption">? Aanname</option>
-            <option value="misleading">✗ Misleidend (verborgen voor participant)</option>
-          </select>
-          <p className="mt-1 font-mono text-[10px] text-muted-foreground leading-snug">
-            Alleen jij (facilitator) ziet dit. Participanten moeten zelf de betrouwbaarheid bepalen.
-          </p>
-        </Field>
+        {showReliability && (
+          <Field label="Betrouwbaarheid (BOB)">
+            <select
+              value={local.reliability ?? ""}
+              onChange={e => commit({ ...local, reliability: e.target.value ? (e.target.value as InjectReliability) : undefined })}
+              className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
+            >
+              <option value="">— niet gespecificeerd —</option>
+              <option value="fact">✓ Feit (bevestigd)</option>
+              <option value="assumption">? Aanname</option>
+              <option value="misleading">✗ Misleidend (verborgen voor participant)</option>
+            </select>
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground leading-snug">
+              Alleen jij (facilitator) ziet dit. Participanten moeten zelf de betrouwbaarheid bepalen.
+            </p>
+          </Field>
+        )}
       </div>
 
       <Section title="Sender">
@@ -481,25 +518,86 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
               onChange={(v: Role[] | undefined) => commit({ ...local, targetRoles: v })}
             />
           </div>
-          <label className="flex items-center gap-2 text-[11px] pt-1">
-            <input
-              type="checkbox"
-              checked={local.nis2Relevant ?? false}
-              onChange={e => commit({ ...local, nis2Relevant: e.target.checked || undefined })}
-              className="size-3"
-            />
-            <span>NIS2 relevant</span>
-          </label>
+          {showNis2 && (
+            <label className="flex items-center gap-2 text-[11px] pt-1">
+              <input
+                type="checkbox"
+                checked={local.nis2Relevant ?? false}
+                onChange={e => commit({ ...local, nis2Relevant: e.target.checked || undefined })}
+                className="size-3"
+              />
+              <span>NIS2 relevant</span>
+            </label>
+          )}
         </div>
       </Section>
 
-      <Section title="Testgebieden (toezichthouder)" count={local.supervisionAreas?.length ?? 0}>
-        <SupervisionAreasSelect
-          value={local.supervisionAreas ?? []}
-          onChange={v => commit({ ...local, supervisionAreas: v.length ? v : undefined })}
-        />
-      </Section>
+      {showNis2 && (
+        <Section title="Testgebieden (toezichthouder)" count={local.supervisionAreas?.length ?? 0}>
+          <SupervisionAreasSelect
+            value={local.supervisionAreas ?? []}
+            onChange={v => commit({ ...local, supervisionAreas: v.length ? v : undefined })}
+          />
+        </Section>
+      )}
     </div>
+  )
+}
+
+function DynamicFillSection({
+  value,
+  onChange,
+}: {
+  value: DynamicFillConfig | undefined
+  onChange: (next: DynamicFillConfig | undefined) => void
+}) {
+  const enabled = value?.enabled ?? false
+  const fillFrom = value?.fillFrom ?? []
+  const [open, setOpen] = useState(false)
+
+  function toggleToken(t: DynamicFillToken) {
+    const next = fillFrom.includes(t) ? fillFrom.filter(x => x !== t) : [...fillFrom, t]
+    onChange({ enabled: true, fillFrom: next })
+  }
+
+  return (
+    <details className="rounded border border-border bg-background/40" open={open} onToggle={e => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground select-none list-none flex items-center justify-between">
+        <span>Dynamisch invullen{enabled ? ` (${fillFrom.length})` : ""}</span>
+        <span className="text-[8px] opacity-50">{open ? "▼" : "▶"}</span>
+      </summary>
+      <div className="px-2.5 pb-2.5 pt-1 flex flex-col gap-2">
+        <label className="flex items-center gap-2 text-[11px]">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={e => onChange(e.target.checked ? { enabled: true, fillFrom } : undefined)}
+            className="size-3"
+          />
+          <span>Vul in op basis van gameconfig bij sessie-start</span>
+        </label>
+        {enabled && (
+          <>
+            <div className="flex flex-wrap gap-1">
+              {DYNAMIC_FILL_TOKENS.map(t => (
+                <label key={t} className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={fillFrom.includes(t)}
+                    onChange={() => toggleToken(t)}
+                    className="size-3"
+                  />
+                  <span className="font-mono">{`{{${t}}}`}</span>
+                </label>
+              ))}
+            </div>
+            <p className="font-mono text-[10px] text-muted-foreground leading-snug">
+              Gebruik tokens in title / content, bv. <code>{"{{sector}}"}</code>. Alleen tokens die je hier aanvinkt worden vervangen bij sessie-start.
+            </p>
+          </>
+        )}
+      </div>
+    </details>
   )
 }
 

@@ -1,6 +1,7 @@
 import type { ScenarioGraph } from "./types"
 import { nis2ShowcaseExample } from "./examples-nis2"
 import { buildNis2Showcase } from "./examples-nis2-showcase"
+import { meldplichtPressureExample } from "./examples-meldplicht-pressure"
 
 function id(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}`
@@ -1148,6 +1149,12 @@ export interface Example {
 }
 
 export const EXAMPLES: Example[] = [
+  {
+    key: "nis2_meldplicht_pressure_test",
+    label: "★ NIS2 Meldplicht Pressure Test",
+    description: "6 rondes, 3 rollen (CISO / Legal / CEO). Fout kiezen kost punten en levert een chaser-inject met facilitator-hint — verhaal loopt door. Retainer = Eye Security. R1/R3 injects zijn dynamisch (sector, criticalSystems).",
+    build: meldplichtPressureExample,
+  },
   {
     key: "nis2_showcase",
     label: "NIS2 showcase: Ransomware MSP",

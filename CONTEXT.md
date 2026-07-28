@@ -1,13 +1,14 @@
 # Session Context
 
-**Current Task**: Graph-driven scenario builder met BOB-model, IR-retainer context, reliability-labels, soft-decisions, IR-consult mechanic. NIS2-showcase compleet, AI-wizard genereert alle nieuwe velden. Laatste prod: tabletop-upgraded-2-2j2nbh4n1.vercel.app.
+**Current Task**: Compliance cleanup + evaluationAspects opt-in + dynamic {{token}} fills + new `nis2_meldplicht_pressure_test` example.
 
 **Key Decisions**:
-- Graph is de scenario-representatie; engine (`lib/graph/engine.ts`) driveert rounds/decisions/specials/outcomes. Legacy AI-generatie blijft parallel bestaan zonder `graphId`. Story-view (`/admin/story`) is de gestripte facilitator-flow voor graph-sessies; classic dashboard blijft voor AI-sessies.
-- BOB-training via drie mechanieken: `RoundNodeData.bobPhase`, `Inject.reliability` (misleading toont geen badge — herkennen), `RoleAction.respondsToMisleading` (auto -6 framework_adherence + lesson). Scoring per role-action/decision-option/outcome via `scoreImpact` + `linkedDimension` + `lessonLearned` → live scoreboard in story-view + BOB-fase analyse in downloadbaar rapport.
-- IR-retainer als narrative-anchor: `ScenarioGraph.irRetainerName` + `irPlaybook` (markdown, rol-scoped via `## [cfo,ceo] Titel`); role actions kunnen `pushesInject` hebben voor "Consulteer IR-partner" respons; `RoundNodeData.facilitatorPerspective` alleen zichtbaar voor facilitator.
+- Retainer is hardcoded `EYE_SECURITY_RETAINER` in `lib/graph/types.ts`. Retainer-tab weg uit Compliance; nieuwe graphs krijgen `irRetainerName = "Eye Security"` automatisch; `handleLoad` overschrijft oudere waardes.
+- Compliance verplaatst van top-toolbar naar left-rail (`components/admin/builder/compliance-rail.tsx`); Sheet heeft nu 2 tabs (coverage + preview); Meldplicht wordt gestuurd via `MeldplichtProfile` (3 cards) + `meldplichtFromProfile()`; individuele booleans blijven in state voor de engine.
+- Nodes hebben opt-in `evaluationAspects` (`reliability | facts_assumptions | nis2 | decision_impact | lessons_learned`) — undefined = legacy (alles tonen), `[]` = minimal. Picker opent na drop van inject/round. Inspector heeft `AspectPillBar` + "Meer beoordelen ▾" om aspecten later te wijzigen.
+- Dynamische injects/rounds: `dynamic: { enabled, fillFrom }` + `{{sector}}` etc. tokens; `lib/graph/dynamic-fill.ts` vervangt tokens in `app/api/session/create/route.ts` na graph-load, één keer.
 
 **Next Steps**:
-- Multi-team leaderboard (event-mode voor graph-sessies) — refactor session-store van singleton naar map, KV-keys per sessie, event-controller. Groot werk, later.
-- KV-vars staan alleen op Production; Preview-deploys hebben in-memory fallback → cross-instance issues (workaround: setup-form cachet graph in localStorage, POST body stuurt graph inline).
-- ANTHROPIC_API_KEY nodig voor AI-wizard + AI-fill + AI-suggest (Claude Haiku voor kleine calls, Sonnet voor wizard).
+- Browser-verificatie: drop inject → picker verschijnt; open "★ NIS2 Meldplicht Pressure Test" template en check dat R1/R3 injects DYN-badge tonen.
+- Overweeg engine-uitbreiding om per-decision-option `setFlag` te ondersteunen (nu is chaser gekoppeld aan `decision_not_taken` via de "correcte" roleActionId — werkt, maar minder expressief dan een echte wrong-option flag).
+- `PROMPT_COMPLIANCE_CLEANUP.md` is de bron van deze wijzigingen — kan gearchiveerd.
