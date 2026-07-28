@@ -531,12 +531,10 @@ function InnerCanvas() {
 
   const handlePublish = useCallback(async () => {
     const graph = buildGraph()
+    // Validate voor informatie — laat de builder zelf beslissen. Onvolledige
+    // graphs mogen publiceren; de facilitator vangt gaten tijdens de sessie op.
     const issues = validateGraph(graph)
     const errors = issues.filter(i => i.severity === "error")
-    if (errors.length > 0) {
-      setStatus({ kind: "error", text: `Cannot publish: ${errors.length} validation error(s). Click Validate.` })
-      return
-    }
     const res = await fetch("/api/scenario-graph", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -546,6 +544,9 @@ function InnerCanvas() {
       const err = await res.json().catch(() => ({}))
       setStatus({ kind: "error", text: `Save failed: ${err.error ?? "Unknown error"}` })
       return
+    }
+    if (errors.length > 0) {
+      setStatus({ kind: "info", text: `Gepubliceerd met ${errors.length} openstaand${errors.length === 1 ? "e" : "e"} validate-item${errors.length === 1 ? "" : "s"} — je kan ze via Validate bekijken.` })
     }
     router.push(`/admin?graphId=${encodeURIComponent(graph.id)}`)
   }, [buildGraph, router])
