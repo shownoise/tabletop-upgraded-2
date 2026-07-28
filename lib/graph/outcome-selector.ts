@@ -1,54 +1,67 @@
-import type { DecisionNodeData, OutcomeNodeData, ScenarioGraph } from "./types"
+import type { AssessmentDimensionKey, RoleAction, ScoreImpacts, SubmittedDecision } from "@/lib/types"
+import { resolveScoreImpacts } from "@/lib/types"
+import type { DecisionNodeData, OutcomeNodeData, ScenarioGraph, RoundNodeData } from "./types"
 
-// Sum of every scoreImpact from every decision-option matched to a
-// submitted decision. Per-dimension breakdown is preserved via
-// linkedDimension for the report; this helper only returns the total.
-export function cumulativeScore(
-  graph: ScenarioGraph,
-  submitted: Array<{ actionId?: string; optionId?: string }>,
-): number {
-  const optionIds = new Set(submitted.map(s => s.optionId).filter(Boolean) as string[])
-  const actionIds = new Set(submitted.map(s => s.actionId).filter(Boolean) as string[])
-  let total = 0
+interface SubmissionRef {
+  actionId?: string
+  optionId?: string
+}
+
+// Trekt alle scoreImpacts uit één graph + één set gesubmitte referenties.
+// Combineert:
+//  - RoleAction submissions (per-rol per-ronde keuzes)
+//  - DecisionNode option picks (graph-decision keuzes)
+// Legacy single-dim scoreImpact+linkedDimension worden gepromovoot naar de map.
+function collectImpacts(graph: ScenarioGraph, submissions: SubmissionRef[]): ScoreImpacts[] {
+  const optionIds = new Set(submissions.map(s => s.optionId).filter(Boolean) as string[])
+  const actionIds = new Set(submissions.map(s => s.actionId).filter(Boolean) as string[])
+  const impacts: ScoreImpacts[] = []
+
   for (const n of graph.nodes) {
-    if (n.type !== 'decision') continue
-    const d = n.data as DecisionNodeData
-    for (const opt of d.options) {
-      const matched = optionIds.has(opt.id) || (opt.roleActionId ? actionIds.has(opt.roleActionId) : false)
-      if (matched && typeof opt.scoreImpact === 'number') total += opt.scoreImpact
+    if (n.type === 'decision') {
+      const d = n.data as DecisionNodeData
+      for (const opt of d.options) {
+        const matched = optionIds.has(opt.id) || (opt.roleActionId ? actionIds.has(opt.roleActionId) : false)
+        if (!matched) continue
+        impacts.push(resolveScoreImpacts(opt))
+      }
+    }
+    if (n.type === 'round') {
+      const r = n.data as RoundNodeData
+      for (const action of r.roleActions ?? []) {
+        if (!actionIds.has(action.id)) continue
+        impacts.push(resolveScoreImpacts(action))
+      }
     }
   }
+  return impacts
+}
+
+// Cumulatieve score — som van alle dimensies bij elkaar. Geeft je één
+// gecomprimeerd getal voor de outcome-bandwidth check.
+export function cumulativeScore(graph: ScenarioGraph, submissions: SubmissionRef[]): number {
+  const all = collectImpacts(graph, submissions)
+  let total = 0
+  for (const m of all) for (const v of Object.values(m)) total += v ?? 0
   return total
 }
 
-// Per-dimension breakdown — kept intentionally as a separate helper so the
-// report can render bars per dimension without paying the cost when it isn't
-// showing them.
-export function scoreByDimension(
-  graph: ScenarioGraph,
-  submitted: Array<{ actionId?: string; optionId?: string }>,
-): Record<string, number> {
-  const optionIds = new Set(submitted.map(s => s.optionId).filter(Boolean) as string[])
-  const actionIds = new Set(submitted.map(s => s.actionId).filter(Boolean) as string[])
-  const totals: Record<string, number> = {}
-  for (const n of graph.nodes) {
-    if (n.type !== 'decision') continue
-    const d = n.data as DecisionNodeData
-    for (const opt of d.options) {
-      const matched = optionIds.has(opt.id) || (opt.roleActionId ? actionIds.has(opt.roleActionId) : false)
-      if (!matched || typeof opt.scoreImpact !== 'number' || !opt.linkedDimension) continue
-      totals[opt.linkedDimension] = (totals[opt.linkedDimension] ?? 0) + opt.scoreImpact
+// Per-dimensie breakdown — laat zien welke dimensies goed/slecht scoren.
+// Trade-offs worden hierdoor zichtbaar: "snel handelen" kan +decision_speed
+// hebben maar -compliance_awareness.
+export function scoreByDimension(graph: ScenarioGraph, submissions: SubmissionRef[]): Record<AssessmentDimensionKey, number> {
+  const all = collectImpacts(graph, submissions)
+  const totals = {} as Record<AssessmentDimensionKey, number>
+  for (const m of all) {
+    for (const [dim, val] of Object.entries(m) as [AssessmentDimensionKey, number][]) {
+      totals[dim] = (totals[dim] ?? 0) + val
     }
   }
   return totals
 }
 
-// Pick the outcome whose scoreRange contains the cumulative score. Preference
-// order when multiple ranges match:
-//   1. Narrowest range (tightest min/max window)
-//   2. Highest min bound (favor the more optimistic outcome as a tie-breaker)
-// If no outcome has a scoreRange, returns undefined — the caller falls back to
-// legacy behaviour (outcome connected via outcome-edge from R_last).
+// Selecteer outcome op basis van cumulatieve score-bandwidth.
+// Preferentie bij overlap: smalste range wint, hoogste min als tiebreaker.
 export function selectOutcomeByScore(graph: ScenarioGraph, total: number): OutcomeNodeData | undefined {
   const outcomes = graph.nodes
     .filter(n => n.type === 'outcome')
@@ -70,4 +83,24 @@ export function selectOutcomeByScore(graph: ScenarioGraph, total: number): Outco
     if (wa !== wb) return wa - wb
     return (b.scoreRange?.min ?? -Infinity) - (a.scoreRange?.min ?? -Infinity)
   })[0]
+}
+
+// Convenience: bouw submissions-ref direct uit een lijst SubmittedDecision.
+export function submissionsFromDecisions(decisions: SubmittedDecision[]): SubmissionRef[] {
+  return decisions.map(d => ({ actionId: d.actionId }))
+}
+
+// Ranking helper — bepaal welke van een set opties (RoleActions of options)
+// de "beste" is op basis van cumulatieve dimensie-punten. Voor gebruik in
+// review-fase en debrief: laat zien wat de author-marker qualityRank was én
+// wat de cumulatieve dimensies zeggen.
+export function bestChoiceIndex(items: Array<{ scoreImpact?: number; linkedDimension?: AssessmentDimensionKey; scoreImpacts?: ScoreImpacts }>): number {
+  if (items.length === 0) return -1
+  const totals = items.map(i => {
+    const map = resolveScoreImpacts(i as RoleAction)
+    return Object.values(map).reduce((s, v) => s + (v ?? 0), 0)
+  })
+  let bestIdx = 0
+  for (let i = 1; i < totals.length; i++) if (totals[i] > totals[bestIdx]) bestIdx = i
+  return bestIdx
 }

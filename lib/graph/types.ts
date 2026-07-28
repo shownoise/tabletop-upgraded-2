@@ -8,8 +8,10 @@ import type {
   ScenarioType,
   AssessmentDimensionKey,
   BobPhase,
+  ChoiceQuality,
   IrRetainerProfile,
   NotificationType,
+  ScoreImpacts,
 } from "@/lib/types"
 import type { SupervisionArea } from "@/lib/engine/supervision"
 
@@ -84,8 +86,11 @@ export interface DecisionNodeData {
     id: string
     label: string
     roleActionId?: string
-    scoreImpact?: number
-    linkedDimension?: AssessmentDimensionKey
+    scoreImpact?: number                       // legacy single-dim
+    linkedDimension?: AssessmentDimensionKey   // legacy single-dim
+    scoreImpacts?: ScoreImpacts                // new: multi-dim trade-off
+    qualityRank?: ChoiceQuality
+    facilitatorCommentary?: string
     lessonLearned?: string
   }>
   // Soft-decision: als false, blokkeert deze decision de graph-flow niet.
@@ -235,7 +240,7 @@ export interface GraphFeatures {
 }
 
 export const DEFAULT_FEATURES: GraphFeatures = {
-  reliability: true,
+  reliability: false,   // opt-in — te specialistisch als default
   compliance: true,
   scoring: true,
 }

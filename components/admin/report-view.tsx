@@ -9,6 +9,7 @@ import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
 import { GraphReportSection } from "./graph-report-section"
 import { LessonsLearnedSection } from "./lessons-learned-section"
+import { DimensionScoresSection } from "./dimension-scores-section"
 
 function ScoreCard({ label, value, color }: { label: string; value: number; color: "primary" | "amber" | "destructive" }) {
   const colorClass = {
@@ -192,6 +193,9 @@ export function ReportView({ lang }: Props) {
 
       {/* Scenario graph path (only when session was graph-driven) */}
       <GraphReportSection />
+
+      {/* Per-dimensie bars + per-rol × ronde tabel + facilitator-commentary debrief */}
+      <DimensionScoresSection />
 
       {/* Lessons learned aggregated by dimension */}
       <LessonsLearnedSection />

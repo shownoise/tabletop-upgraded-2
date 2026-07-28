@@ -15,6 +15,7 @@ import { UrgentInjectModal } from "./urgent-inject-modal"
 import { RoundTimerCompact } from "./round-timer"
 import { RoundPhaseTimeline } from "./round-phase-timeline"
 import { FactCheckReview } from "./fact-check-review"
+import { ReviewCommentary } from "./review-commentary"
 import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
@@ -1118,6 +1119,10 @@ export function PlayView() {
             {/* Fact-check review — shown when the current round reaches the review phase */}
             {session.roundPhase === "review" && participantId && (
               <FactCheckReview session={session} participantId={participantId} roundIndex={session.currentRound} />
+            )}
+            {/* IR-retainer commentary op ingediende keuzes tijdens review */}
+            {session.roundPhase === "review" && participantId && (
+              <ReviewCommentary session={session} participantId={participantId} roundIndex={session.currentRound} />
             )}
 
             {/* Meldplicht tray — story-driven prompt cards (top of feed area) */}

@@ -156,6 +156,16 @@ export type AssessmentDimensionKey =
   | 'dilemma_participation'
   | 'framework_adherence'
 
+// Kwaliteits-ranking van een keuze in de dimensies-context. Author zet dit
+// zodat het rapport én de review-fase kunnen laten zien welke van de opties
+// achteraf de "beste" was — niet als hard oordeel maar als IR-retainer perspectief.
+export type ChoiceQuality = 'best' | 'good' | 'poor' | 'wrong'
+
+// Multi-dimensie score-map. Een keuze kan meerdere dimensies raken (bv. snel
+// handelen = +decision_speed maar -compliance_awareness) — die trade-off is
+// precies wat we zichtbaar willen maken.
+export type ScoreImpacts = Partial<Record<AssessmentDimensionKey, number>>
+
 export interface RoleAction {
   id: string
   label: string
@@ -164,14 +174,20 @@ export interface RoleAction {
   isRecommended?: boolean
   irPlanAligned: boolean
   consequence?: string
+  // Legacy single-dim scoring — blijft voor backwards compat. Voor nieuwe
+  // scenario's gebruik scoreImpacts. resolveScoreImpacts() promoveert oude
+  // structuur naar de map.
   scoreImpact?: number
   linkedDimension?: AssessmentDimensionKey
+  // Nieuw: multi-dimensie scoring. { decision_speed: +2, compliance_awareness: -1 }
+  scoreImpacts?: ScoreImpacts
+  // Author markeert welke van de rol-acties de "beste" was in de dimensie-context.
+  qualityRank?: ChoiceQuality
+  // Facilitator/IR-retainer commentaar dat verschijnt in de review-fase én rapport.
+  // "Wij snappen deze keuze wegens speed, maar wettelijk zit je bij X."
+  facilitatorCommentary?: string
   lessonLearned?: string
-  // BOB-training: markeer een actie als reactie op een misleidend signaal.
-  // Submitten telt automatisch negatief op framework_adherence.
   respondsToMisleading?: boolean
-  // "Consulteer IR-retainer"-mechanic: als actie wordt gesubmit, wordt er
-  // automatisch een respons-inject naar de indiener + team gepusht.
   pushesInject?: {
     title: string
     content: string
@@ -180,6 +196,17 @@ export interface RoleAction {
     onlyToSubmitter?: boolean
   }
   supervisionAreas?: SupervisionArea[]
+}
+
+// Promote legacy {scoreImpact, linkedDimension} to the new map shape so that
+// scoring code only has to look at scoreImpacts. Kept in one place so the
+// legacy fields can be removed later without touching every consumer.
+export function resolveScoreImpacts(a: Pick<RoleAction, 'scoreImpact' | 'linkedDimension' | 'scoreImpacts'>): ScoreImpacts {
+  if (a.scoreImpacts && Object.keys(a.scoreImpacts).length > 0) return a.scoreImpacts
+  if (typeof a.scoreImpact === 'number' && a.linkedDimension) {
+    return { [a.linkedDimension]: a.scoreImpact }
+  }
+  return {}
 }
 
 export interface IrRetainerProfile {

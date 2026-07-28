@@ -114,7 +114,8 @@ function tickRoundPhase(session: SessionState): SessionState {
   const state = session.activeRoundPhaseState
   if (!state) return session
   if (session.phaseAutoAdvancePaused) return session
-  if (session.graph) return session
+  // WHY: graph-based sessies gebruikten de auto-tick niet; daardoor bleven
+  // participants zonder tijdsdruk hangen. Nu volgen ze dezelfde fase-cyclus.
 
   const durationMs = (state.durations[state.currentPhase] ?? 0) * 1000
   const elapsedMs = Date.now() - state.phaseStartedAt
@@ -214,7 +215,20 @@ function emit(name: LiveEventName, payload: Record<string, unknown>) {
 // Strips all facilitator-only data before broadcasting to unauthenticated clients.
 // Server-side logic (flagging, scoring) always uses the real stored state.
 
+// If none of an action's allowedRoles is actually joined (also after fallback
+// via ROLE_FALLBACK), open the action up to everyone. Prevents dead options
+// when a session runs with fewer roles than the scenario expects.
+function expandRolesForJoinedParticipants(action: RoleAction, joinedRoles: Set<Role>): RoleAction {
+  if (action.allowedRoles.length === 0) return action
+  const anyDirect = action.allowedRoles.some(r => joinedRoles.has(r))
+  if (anyDirect) return action
+  const anyFallback = action.allowedRoles.some(r => (ROLE_FALLBACK[r] ?? []).some(f => joinedRoles.has(f)))
+  if (anyFallback) return action
+  return { ...action, allowedRoles: [] }
+}
+
 export function toParticipantState(session: SessionState): SessionState {
+  const joinedRoles = new Set<Role>((session.participants ?? []).map(p => p.role).filter(Boolean) as Role[])
   const stripInjectGroundTruth = (inject: Inject, isReviewRound: boolean): Inject => {
     if (isReviewRound) return inject
     // WHY: participants must judge reliability themselves during play — the fact-check reveal
@@ -251,13 +265,20 @@ export function toParticipantState(session: SessionState): SessionState {
           ...round,
           injects: round.injects.map(inj => stripInjectGroundTruth(inj, isReviewRound)),
           facilitatorNotes: undefined,
-          roleActions: round.roleActions?.map(action => ({
-            id: action.id,
-            label: action.label,
-            description: action.description,
-            allowedRoles: action.allowedRoles,
-            irPlanAligned: true,
-          })),
+          roleActions: round.roleActions?.map(action => {
+            const expanded = expandRolesForJoinedParticipants(action, joinedRoles)
+            return {
+              id: expanded.id,
+              label: expanded.label,
+              description: expanded.description,
+              allowedRoles: expanded.allowedRoles,
+              irPlanAligned: true,
+              // Facilitator commentary blijft verborgen tot review-fase — dan onthullen we het.
+              facilitatorCommentary: isReviewRound ? action.facilitatorCommentary : undefined,
+              qualityRank: isReviewRound ? action.qualityRank : undefined,
+              lessonLearned: isReviewRound ? action.lessonLearned : undefined,
+            }
+          }),
           learningObjectives: round.learningObjectives?.map(({ triggerActionIds: _a, triggerSpecialType: _s, ...safe }) => safe),
         }
       }),

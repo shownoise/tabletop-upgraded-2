@@ -5,53 +5,48 @@ function id(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-// Full Showcase — 7 rondes, 3 rollen (CISO / Legal / CEO), side stories,
-// score-bandbreedte auto-outcome, en "scenario-stoppende" foutkeuzes die
-// via een reroute-inject wél doorlopen zodat de oefening niet dood valt.
+// Full Showcase v2 — laat alle mechanieken zien met simpele, uitlegbare scoring.
 //
-// Doel: één scenario waarin élk mechanisme zichtbaar is:
-// - dynamische tokens ({{sector}}, {{criticalSystems}}, {{crownJewels}})
-// - reliability-labels (feit / aanname / misleidend)
-// - NIS2-coverage + meldplicht
-// - decision scoring per dimensie
-// - cumulatieve score kiest outcome via scoreRange
-// - chasers voor wrong choices (verhaal loopt door)
-// - side stories die pas triggeren bij bepaalde keuzes
+// Dimensies (max 4, uitlegbaar):
+//   snelheid — reageert het team op tijd?
+//   kwaliteit — is de keuze inhoudelijk goed?
+//   compliance — meldplicht / NIS2 / AVG in acht genomen?
+//   communicatie — duidelijk richting stakeholders?
+//
+// Elke keuze raakt hooguit 2 dimensies. Trade-offs (bv. snelheid + / compliance -)
+// worden zichtbaar in het rapport per-dimensie en in de review-fase per keuze.
+//
+// Injects verschijnen gestaffeld gedurende de ronde (deliverySeconds).
+// Wrong choices → chaser-inject met facilitator-hint, verhaal loopt door.
+// 4 outcomes met scoreRange — engine kiest automatisch op cumulatieve score.
 export function fullShowcaseExample(): ScenarioGraph {
   const now = Date.now()
   const startId = id("start")
-  const r1 = id("round"), r2 = id("round"), r3 = id("round"), r4 = id("round")
-  const r5 = id("round"), r6 = id("round"), r7 = id("round")
+  const r1 = id("round"), r2 = id("round"), r3 = id("round"), r4 = id("round"), r5 = id("round"), r6 = id("round")
 
   const inj_r1a = id("inj"), inj_r1b = id("inj")
-  const inj_r2a = id("inj"), inj_r2b_insider = id("inj")
-  const inj_r3a = id("inj")
-  const inj_r4_journo = id("inj"), inj_r4_twitter = id("inj"), inj_r4_misleading = id("inj")
-  const inj_r5_ransom = id("inj")
-  const inj_r6_board = id("inj")
-  const inj_r7 = id("inj")
+  const inj_r2a = id("inj")
+  const inj_r3a = id("inj"), inj_r3b = id("inj")
+  const inj_r4a = id("inj")
+  const inj_r5a = id("inj")
+  const inj_r6 = id("inj")
 
-  const dec_r1 = id("dec"), dec_r2 = id("dec"), dec_r3 = id("dec"), dec_r4 = id("dec")
-  const dec_r5 = id("dec"), dec_r6 = id("dec")
+  const cha_r1 = id("cha"), cha_r2 = id("cha"), cha_r3 = id("cha"), cha_r4 = id("cha"), cha_r5 = id("cha")
 
-  const cha_r1 = id("cha"), cha_r2_insider = id("cha"), cha_r3 = id("cha"), cha_r4 = id("cha")
-  const cha_r5_reroute = id("cha"), cha_r6_reroute = id("cha")
+  const out_gold = id("out"), out_silver = id("out"), out_bronze = id("out"), out_meltdown = id("out")
 
-  const out_gold = id("out"), out_silver = id("out"), out_bronze = id("out"), out_iron = id("out"), out_meltdown = id("out")
-
-  // Roles-actions that count as "correct" choice — the chasers key on absence of these.
-  const A_R1_ACTIVATE = "r1-activate-retainer"
-  const A_R2_INSIDER_ESCALATE = "r2-insider-escalate"
-  const A_R3_AP_START = "r3-ap-start"
-  const A_R4_FORMAL = "r4-formal-statement"
-  const A_R5_STRUCTURED_ISOLATE = "r5-structured-isolate"
-  const A_R6_STRUCTURED_RESTORE = "r6-structured-restore"
+  // Correct-choice action ids (voor chaser-trigger via decision_not_taken)
+  const A_R1_CISO_RETAINER = "r1-ciso-eye-direct"
+  const A_R2_LEGAL_AP = "r2-legal-ap-72u"
+  const A_R3_CEO_FORMAL = "r3-ceo-formeel"
+  const A_R4_CISO_VIA_EYE = "r4-ciso-onderhandel-eye"
+  const A_R5_CISO_STRUCT_RESTORE = "r5-ciso-struct-restore"
 
   return {
     id: id("graph"),
-    name: "★★ Full Showcase — Supply-chain Ransomware bij ziekenhuis",
-    version: 1,
-    scenarioType: "supply_chain_compromise",
+    name: "★★ Full Showcase — Ransomware @ {{sector}}",
+    version: 2,
+    scenarioType: "ransomware_double_extortion",
     createdAt: now,
     updatedAt: now,
     irRetainerName: EYE_SECURITY_RETAINER.name,
@@ -61,763 +56,559 @@ export function fullShowcaseExample(): ScenarioGraph {
     nodes: [
       { id: startId, type: "start", position: { x: 40, y: 240 }, data: { kind: "start" } },
 
-      // ── R1 — Detectie & activatie ───────────────────────────────────────
+      // ── R1 — CISO + CEO ──────────────────────────────────────────────────
       {
         id: r1,
         type: "round",
         position: { x: 220, y: 200 },
         data: {
           kind: "round",
-          title: "R1 — Vreemd alert vanaf leverancier",
-          situation_update:
-            "Om 05:22 laat MDR weten: verdachte outbound-verbindingen vanaf servers die door een derde partij worden beheerd. " +
-            "De leverancier levert firmware-updates aan {{criticalSystems}}. Scope onduidelijk, maar het patroon lijkt op een supply-chain compromise.",
+          title: "R1 — Verdachte activiteit op productie",
+          situation_update: "05:12 — MDR meldt outbound-verbindingen vanaf {{criticalSystems}}. Scope onduidelijk, maar patroon lijkt op ransomware-recon. CISO en CEO zijn aan zaak.",
           timerMinutes: 12,
-          bobPhase: "beeldvorming",
-          evaluationAspects: ["reliability", "nis2"],
-          openingPrompts: [
-            "Wat weten we zeker vs wat is aanname?",
-            "Hebben we alle systemen van de leverancier in beeld?",
-            "Wie belt de leverancier én de retainer?",
-          ],
+          dynamic: { enabled: true, fillFrom: ["sector", "criticalSystems"] },
           roleActions: [
-            { id: A_R1_ACTIVATE, label: "CISO: activeer Eye Security en de leverancier gelijktijdig",
-              description: "Beide kanten uit: forensics via Eye Security + leverancier vraagt om patch-historie.",
+            // CISO keuzes ─────
+            {
+              id: A_R1_CISO_RETAINER,
+              label: "Eye Security direct activeren + eigen forensics starten",
+              description: "24/7 lijn bellen, parallel eigen logs veiligstellen.",
               allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true,
-              consequence: "Binnen 30 min heb je feiten van beide kanten en kan je scope inperken." },
-            { id: "r1-only-vendor", label: "CEO: bel alleen leverancier, laat retainer erbuiten",
-              description: "'Eerst zien of het niet aan hun kant zit'.",
+              scoreImpacts: { decision_speed: 2, decision_quality: 2 },
+              qualityRank: "best",
+              facilitatorCommentary: "Precies wat wij als IR-retainer verwachten: snel én je eigen huis op orde. Deze combinatie levert de meeste tijd op.",
+              consequence: "Binnen 15 min forensische support en logs veilig.",
+            },
+            {
+              id: "r1-ciso-wait",
+              label: "Eerst intern uitzoeken, retainer bewaren voor als nodig",
+              description: "Ownership behouden, kostenrisico beperken.",
+              allowedRoles: ["ciso"], irPlanAligned: false,
+              scoreImpacts: { decision_speed: -2, decision_quality: -1 },
+              qualityRank: "poor",
+              facilitatorCommentary: "Snappen we vanuit kosten-oogpunt, maar attacker heeft nu 2 uur ruimte om te bewegen. Eye bellen is goedkoper dan een uitgelopen incident.",
+              consequence: "Verspreiding wordt pas ontdekt in ronde 2.",
+            },
+            {
+              id: "r1-ciso-only-vendor",
+              label: "Alleen de leverancier bellen, geen retainer",
+              description: "Wachten op leverancier-bevestiging voordat er iemand ingeschakeld wordt.",
+              allowedRoles: ["ciso"], irPlanAligned: false,
+              scoreImpacts: { decision_speed: -1, decision_quality: -2 },
+              qualityRank: "wrong",
+              facilitatorCommentary: "Leverancier heeft een belang bij bagatelliseren. Onafhankelijke forensics is niet-onderhandelbaar.",
+              consequence: "Leverancier ontkent, spoor loopt dood.",
+            },
+            // CEO keuzes ─────
+            {
+              id: "r1-ceo-alert",
+              label: "Directie inlichten + crisis-tafel oproepen",
+              description: "Board voorbereiden, geen wachtstand.",
+              allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true,
+              scoreImpacts: { decision_speed: 2, communication_clarity: 1 },
+              qualityRank: "best",
+              facilitatorCommentary: "Board vroeg activeren = geen verrassingen later. Vooral bij een {{sector}}-organisatie waar bestuurlijke verantwoording snel hard wordt.",
+              consequence: "Board is voorbereid; besluitvorming kan in R2 vlot.",
+            },
+            {
+              id: "r1-ceo-wait",
+              label: "Wachten tot 08:00 — 'kwestie van geduld'",
+              description: "Board niet uit bed halen op basis van 1 alert.",
               allowedRoles: ["ceo"], irPlanAligned: false,
-              consequence: "Leverancier ontkent, spoor loopt dood — je hebt geen eigen forensics." },
-          ],
-          learningObjectives: [
-            { id: "obj-r1", description: "Retainer én leverancier tegelijk geactiveerd binnen 30 min", module: "detection_sensemaking", measuredBy: "decision", triggerActionIds: [A_R1_ACTIVATE] },
+              scoreImpacts: { decision_speed: -2 },
+              qualityRank: "poor",
+              facilitatorCommentary: "Snappen we — nachtelijke escalatie kost politiek kapitaal. Maar bij ransomware-recon kost wachten meer.",
+              consequence: "Board hoort van social media dat er 'iets speelt'.",
+            },
           ],
           facilitatorNotes: {
-            discussionGoal: "Testen of team supply-chain incidenten anders behandelt dan interne incidenten.",
-            keyQuestions: ["Wie is technisch én contractueel eigenaar van de leverancier-integratie?"],
-            hints: ["De leverancier heeft een belang bij bagatelliseren. Eigen forensics is niet-onderhandelbaar."],
-            expectedDecisions: ["Retainer + leverancier tegelijk"],
-            redFlags: ["Alleen leverancier vertrouwen"],
+            discussionGoal: "Testen of team snel + gelaagd escaleert bij ambigue signaal.",
+            keyQuestions: ["Wat is de drempel om Eye Security te bellen?", "Wanneer wek je board?"],
+            hints: [], expectedDecisions: [], redFlags: [],
           },
         },
       },
+      // Injects R1 — 0s + 90s stagger
       {
-        id: inj_r1a,
-        type: "inject",
-        position: { x: 260, y: 420 },
+        id: inj_r1a, type: "inject", position: { x: 260, y: 420 },
         data: {
           kind: "inject",
           type: "alert", channel: "siem", urgency: "high",
-          title: "MDR — supply-chain hit op {{criticalSystems}}",
-          content:
-            "Outbound naar onbekend AS-nummer vanaf 3 hosts die {{criticalSystems}} draaien. " +
-            "Verbindingen komen na een firmware-update van leverancier Meddix (vanmorgen 02:14). " +
-            "Sector-context: {{sector}}. Zone: PROD.",
-          source: "MDR", senderName: "MDR SOC", timestamp: "05:22",
-          targetTeam: "all", reliability: "assumption",
-          evaluationAspects: ["reliability", "nis2"],
-          dynamic: { enabled: true, fillFrom: ["sector", "criticalSystems"] },
-        },
-      },
-      {
-        id: inj_r1b,
-        type: "inject",
-        position: { x: 460, y: 420 },
-        data: {
-          kind: "inject",
-          type: "internal", channel: "phone", urgency: "medium",
-          title: "Leverancier: 'niks aan de hand, verkeerde alert'",
-          content:
-            "Account manager Meddix belt terug: 'die update was routine. Bij onze andere klanten geen issues. Ik zou zeggen: reset MDR-alert.'",
-          source: "Meddix", senderName: "K. de Boer (AM)", timestamp: "05:41",
-          targetTeam: "crisis_management",
-          reliability: "misleading",  // Author knows this is misleading — participants must not trust the vendor at face value.
-          evaluationAspects: ["reliability"],
-        },
-      },
-      {
-        id: dec_r1,
-        type: "decision",
-        position: { x: 660, y: 220 },
-        data: {
-          kind: "decision",
-          prompt: "R1 — Wat doen we in het eerste half uur?",
-          measuredBy: "participant_choice",
-          advancesGraph: false,
-          triggerRole: "ciso",
-          options: [
-            { id: id("opt"), label: "Eye Security + leverancier tegelijk activeren",
-              roleActionId: A_R1_ACTIVATE, scoreImpact: 3, linkedDimension: "escalation_timing",
-              lessonLearned: "Tweekantse verificatie is de norm bij supply-chain incidents." },
-            { id: id("opt"), label: "Alleen leverancier vertrouwen en MDR resetten",
-              scoreImpact: -4, linkedDimension: "framework_adherence",
-              lessonLearned: "Leverancier heeft belang bij bagatelliseren. Eigen forensics is niet optioneel." },
-            { id: id("opt"), label: "Wachten tot 09:00 om normale kanalen te gebruiken",
-              scoreImpact: -2, linkedDimension: "decision_speed",
-              lessonLearned: "Attacker profiteert van kantooruren-mindset." },
-          ],
-          supervisionAreas: ["detection_classification", "ir_retainer", "notification_duty"],
-        },
-      },
-      {
-        id: cha_r1,
-        type: "chaser",
-        position: { x: 860, y: 400 },
-        data: {
-          kind: "chaser",
-          condition: { kind: "decision_not_taken", roleActionId: A_R1_ACTIVATE, afterRoundNumber: 1 },
-          inject: {
-            kind: "inject",
-            type: "internal", channel: "email", urgency: "high",
-            title: "Terugkoppeling — retainer niet geactiveerd",
-            content:
-              "Eye Security is niet gebeld. Meddix heeft nog steeds toegang tot productiesystemen. Attacker heeft 4 uur ruimte gehad.\n\n" +
-              "[Facilitator-hint] Dit is het moment waarop een echte crisis zich vermenigvuldigt. In de oefening gaan we door.",
-            source: "MDR", senderName: "MDR SOC", timestamp: "09:00",
-            targetTeam: "all", reliability: "fact",
-          },
-        },
-      },
-
-      // ── R2 — Impact + insider side-story ─────────────────────────────────
-      {
-        id: r2,
-        type: "round",
-        position: { x: 880, y: 200 },
-        data: {
-          kind: "round",
-          title: "R2 — Impact + verdachte inlog",
-          situation_update:
-            "Forensics bevestigt: attacker heeft persistence via de Meddix-integratie. Tegelijk komt er een side-signaal binnen: " +
-            "een medewerker heeft afgelopen nacht privé-toegang aangevraagd tot {{crownJewels}} — normaal een groot alarm, maar precies in de chaos onopgemerkt.",
-          timerMinutes: 12,
-          bobPhase: "beeldvorming",
-          evaluationAspects: ["reliability", "nis2"],
-          roleActions: [
-            { id: A_R2_INSIDER_ESCALATE, label: "Legal + HR: escaleer insider-signaal parallel aan het hoofdincident",
-              description: "Twee sporen naast elkaar; niet één laten liggen omdat het andere urgenter voelt.",
-              allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true,
-              consequence: "Insider-signaal krijgt eigen owner — voorkomt dat het weglekt tijdens de crisis." },
-          ],
-          facilitatorNotes: {
-            discussionGoal: "Kan het team parallelle side-stories dragen zonder tunnelvisie?",
-            keyQuestions: ["Wie is owner van het insider-signaal?", "Wat is de aannemelijke relatie met het hoofdincident?"],
-            hints: ["Insider-signaal kan een afleidingsmanoeuvre zijn — of exact wat het lijkt."],
-            expectedDecisions: ["Insider parallel afhandelen"],
-            redFlags: ["'Doen we later wel'"],
-          },
-        },
-      },
-      {
-        id: inj_r2a,
-        type: "inject",
-        position: { x: 920, y: 420 },
-        data: {
-          kind: "inject",
-          type: "technical", channel: "email", urgency: "high",
-          title: "Eye Security — persistence via leverancier bevestigd",
-          content:
-            "Meddix-agent heeft een backdoor geopend via een geldig service-account. Attacker heeft toegang tot {{criticalSystems}} sinds 04:47.",
-          source: "Eye Security", senderName: "Eye IR-lead", timestamp: "11:20",
-          targetTeam: "all", reliability: "fact",
+          title: "MDR — verdachte outbound",
+          content: "Outbound naar onbekend AS-nummer vanaf 3 hosts. Off-hours logins. Patroon lijkt op ransomware-recon. Vereist scoping.",
+          source: "MDR", senderName: "MDR SOC", timestamp: "05:12",
+          targetTeam: "all",
+          deliverySeconds: 0,
           dynamic: { enabled: true, fillFrom: ["criticalSystems"] },
         },
       },
       {
-        id: inj_r2b_insider,
-        type: "inject",
-        position: { x: 1120, y: 420 },
+        id: inj_r1b, type: "inject", position: { x: 460, y: 420 },
         data: {
           kind: "inject",
-          type: "internal", channel: "email", urgency: "medium",
-          title: "Side-story: privé-toegangsaanvraag om 03:10",
-          content:
-            "IAM-log: gebruiker j.dekker@… vroeg om 03:10 uitgebreide read-access op {{crownJewels}}. Aanvraag hangt in queue van HR-approval.",
-          source: "IAM", senderName: "IAM system", timestamp: "03:10",
-          targetTeam: "crisis_management", reliability: "fact",
-          dynamic: { enabled: true, fillFrom: ["crownJewels"] },
+          type: "internal", channel: "phone", urgency: "medium",
+          title: "Leverancier belt terug",
+          content: "'Bij onze andere klanten geen issues. Ik zou zeggen: reset de alert, komt goed.'",
+          source: "Leverancier", senderName: "K. de Boer (AM)", timestamp: "05:38",
+          targetTeam: "crisis_management",
+          deliverySeconds: 90,
         },
       },
       {
-        id: dec_r2,
-        type: "decision",
-        position: { x: 1320, y: 220 },
-        data: {
-          kind: "decision",
-          prompt: "R2 — Hoe gaan we om met het insider-signaal?",
-          measuredBy: "participant_choice",
-          advancesGraph: false,
-          triggerRole: "legal",
-          options: [
-            { id: id("opt"), label: "Parallel spoor: Legal+HR nemen het insider-signaal onder handen",
-              roleActionId: A_R2_INSIDER_ESCALATE, scoreImpact: 2, linkedDimension: "mandate_clarity",
-              lessonLearned: "Side stories mogen niet wegglippen tijdens hoofdincident." },
-            { id: id("opt"), label: "Insider-signaal parkeren tot na hoofdincident",
-              scoreImpact: -2, linkedDimension: "mandate_clarity",
-              lessonLearned: "Insider heeft nu ruimte om schade te maken die je bij debrief pas ontdekt." },
-            { id: id("opt"), label: "Direct de betrokken medewerker confronteren",
-              scoreImpact: -3, linkedDimension: "decision_quality",
-              lessonLearned: "Zonder Legal is dit een arbeidsrechtelijk risico én tipt je de mogelijke insider." },
-          ],
-          supervisionAreas: ["roles_mandates", "logging_evidence"],
-        },
-      },
-      {
-        id: cha_r2_insider,
-        type: "chaser",
-        position: { x: 1520, y: 400 },
+        id: cha_r1, type: "chaser", position: { x: 660, y: 400 },
         data: {
           kind: "chaser",
-          condition: { kind: "decision_not_taken", roleActionId: A_R2_INSIDER_ESCALATE, afterRoundNumber: 2 },
+          condition: { kind: "decision_not_taken", roleActionId: A_R1_CISO_RETAINER, afterRoundNumber: 1 },
           inject: {
             kind: "inject",
             type: "internal", channel: "email", urgency: "high",
-            title: "Side-story escaleert — medewerker heeft data gedownload",
-            content:
-              "IAM-audit: gebruiker j.dekker heeft in de tussentijd 480MB uit {{crownJewels}} gedownload. Toegang is inmiddels beperkt.\n\n" +
-              "[Facilitator-hint] Dit was voorkómen als je Legal+HR een parallel spoor had laten oppakken. Verhaal loopt door.",
-            source: "IAM", senderName: "IAM system", reliability: "fact",
+            title: "Terugkoppeling — retainer niet ingeschakeld",
+            content: "MDR-team zet ticket op 'awaiting client'. Attacker heeft nu 3 uur extra bewegingsruimte.\n\n[Facilitator-hint] Dit is wat 'we wachten even' in de praktijk kost. We gaan in de oefening door.",
+            source: "MDR", senderName: "MDR SOC", timestamp: "08:15",
             targetTeam: "all",
           },
         },
       },
 
-      // ── R3 — Meldplicht besluit ─────────────────────────────────────────
+      // ── R2 — Legal + CEO ─────────────────────────────────────────────────
       {
-        id: r3,
-        type: "round",
-        position: { x: 220, y: 720 },
+        id: r2, type: "round", position: { x: 880, y: 200 },
         data: {
           kind: "round",
-          title: "R3 — Meldplicht besluit",
-          situation_update:
-            "Scope is nu scherp: klantendata uit {{crownJewels}} is exfiltrated. NCSC 24u-klok tikt tot morgenochtend 05:22, AP 72u tot overmorgen.",
+          title: "R2 — PII-lek bevestigd, meldplicht-klok tikt",
+          situation_update: "Forensics bevestigt: attacker heeft data uit {{crownJewels}} geëxfiltreerd. 72u AP-klok loopt vanaf 05:12. NCSC 24u ook actief. Legal en CEO moeten meldpad kiezen.",
           timerMinutes: 12,
-          bobPhase: "oordeel",
-          evaluationAspects: ["nis2"],
+          dynamic: { enabled: true, fillFrom: ["crownJewels"] },
           roleActions: [
-            { id: A_R3_AP_START, label: "Legal: 72u AP-melding voorbereiden + NCSC 24u waarschuwing versturen",
-              description: "Beide meldingen parallel; Eye Security levert feiten aan.",
+            // LEGAL ─────
+            {
+              id: A_R2_LEGAL_AP,
+              label: "72u AP-melding + NCSC 24u waarschuwing parallel starten",
+              description: "Concepten openen, feiten via Eye Security aanleveren.",
               allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true,
-              consequence: "Beide klokken beheerst; geen proactieve controle." },
+              scoreImpacts: { compliance_awareness: 3, decision_quality: 1 },
+              qualityRank: "best",
+              facilitatorCommentary: "De AP hanteert 'aannemelijk', niet 'bewezen'. Concept openen kost niets, uitstellen wel.",
+            },
+            {
+              id: "r2-legal-wait",
+              label: "Wachten met beide meldingen — 'we willen eerst zekerheid'",
+              description: "Voorkomen dat we iets communiceren dat later niet klopt.",
+              allowedRoles: ["legal"], irPlanAligned: false,
+              scoreImpacts: { compliance_awareness: -3, decision_speed: -1 },
+              qualityRank: "wrong",
+              facilitatorCommentary: "Snappen we vanuit 'geen half werk', maar de AP komt proactief langs als jij niet komt. Boete-risico stijgt met elk uur.",
+            },
+            {
+              id: "r2-legal-only-ap",
+              label: "Alleen AP, NCSC pas als zeker is",
+              description: "AVG heeft prioriteit boven NIS2 in eerste uren.",
+              allowedRoles: ["legal"], irPlanAligned: false,
+              scoreImpacts: { compliance_awareness: -1 },
+              qualityRank: "poor",
+              facilitatorCommentary: "Kritieke dienst uitgevallen = ook NCSC. Twee kloklijnen tegelijk, één owner per lijn.",
+            },
+            // CEO ─────
+            {
+              id: "r2-ceo-sign",
+              label: "Ondertekening AP-melding namens board delegeren aan Legal",
+              description: "Legal heeft mandaat + tempo, CEO blijft focus houden.",
+              allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true,
+              scoreImpacts: { decision_speed: 1, compliance_awareness: 1 },
+              qualityRank: "best",
+              facilitatorCommentary: "Delegeren op operationele meldingen = goed mandaat-gebruik. CEO houdt bandwidth vrij voor board en pers.",
+            },
+            {
+              id: "r2-ceo-hold",
+              label: "Eerst intern uitzoeken, ondertekening pas na scope-lock",
+              description: "Board wil niets ondertekenen zonder volledige feiten.",
+              allowedRoles: ["ceo"], irPlanAligned: false,
+              scoreImpacts: { decision_speed: -1, compliance_awareness: -2 },
+              qualityRank: "wrong",
+              facilitatorCommentary: "Klassieke board-reflex maar juridisch kloppen 'aannemelijk' en 'bewezen' niet op één lijn. Legal moet nu kunnen tekenen.",
+            },
           ],
-          facilitatorNotes: {
-            discussionGoal: "Test parallelle meldplichten.",
-            keyQuestions: ["Wie tekent NCSC vs wie tekent AP?"],
-            hints: ["NCSC 24u en AP 72u lopen allebei — parallel behandelen."],
-            expectedDecisions: ["Beide meldingen starten"],
-            redFlags: ["Alleen AP", "Alleen NCSC"],
-          },
         },
       },
       {
-        id: inj_r3a,
-        type: "inject",
-        position: { x: 260, y: 940 },
+        id: inj_r2a, type: "inject", position: { x: 920, y: 420 },
         data: {
           kind: "inject",
-          type: "regulatory", channel: "memo", urgency: "high",
-          title: "Legal-brief — meldplicht scope",
-          content:
-            "Aannemelijke PII-uitstroom via {{crownJewels}} — AP 72u en NCSC 24u zijn allebei actief.",
-          source: "Legal", senderName: "Legal counsel",
-          targetTeam: "crisis_management", reliability: "fact",
+          type: "technical", channel: "email", urgency: "high",
+          title: "Eye Security — 40MB PII bevestigd geëxfiltreerd",
+          content: "Klantendata uit {{crownJewels}}. 2 tabellen. Attacker heeft persistence op 4 hosts. NCSC 24u loopt tot morgen 05:12.",
+          source: "Eye Security", senderName: "Eye IR-lead", timestamp: "09:40",
+          targetTeam: "all", deliverySeconds: 0,
           dynamic: { enabled: true, fillFrom: ["crownJewels"] },
         },
       },
       {
-        id: dec_r3,
-        type: "decision",
-        position: { x: 460, y: 740 },
-        data: {
-          kind: "decision",
-          prompt: "R3 — Welke meldingen versturen we?",
-          measuredBy: "participant_choice",
-          advancesGraph: false,
-          triggerRole: "legal",
-          options: [
-            { id: id("opt"), label: "Beide (NCSC 24u waarschuwing + AP 72u concept)",
-              roleActionId: A_R3_AP_START, scoreImpact: 3, linkedDimension: "compliance_awareness",
-              lessonLearned: "Twee kloklijnen tegelijk vraagt om twee owners." },
-            { id: id("opt"), label: "Alleen AP — 'NIS2 valt nog niet onder ons'",
-              scoreImpact: -2, linkedDimension: "compliance_awareness",
-              lessonLearned: "NIS2 raakt zorgorganisaties direct; wachten kost boete + reputatie." },
-            { id: id("opt"), label: "Wachten met beide — 'eerst zeker weten'",
-              scoreImpact: -3, linkedDimension: "compliance_awareness",
-              lessonLearned: "AP komt proactief; NCSC ook. Wachten is nooit gratis." },
-          ],
-          supervisionAreas: ["notification_duty"],
-        },
-      },
-      {
-        id: cha_r3,
-        type: "chaser",
-        position: { x: 660, y: 940 },
+        id: cha_r2, type: "chaser", position: { x: 1120, y: 400 },
         data: {
           kind: "chaser",
-          condition: { kind: "decision_not_taken", roleActionId: A_R3_AP_START, afterRoundNumber: 3 },
+          condition: { kind: "decision_not_taken", roleActionId: A_R2_LEGAL_AP, afterRoundNumber: 2 },
           inject: {
             kind: "inject",
             type: "regulatory", channel: "email", urgency: "critical",
-            title: "NCSC belt — 'we ontvingen een tip'",
-            content:
-              "NCSC-adviseur: 'we hoorden via andere kanalen dat er iets speelt bij jullie. Wanneer krijgen we een melding?'\n\n" +
-              "[Facilitator-hint] Proactieve NCSC is een teken dat je te laat bent. Verhaal loopt door.",
-            source: "NCSC", senderName: "NCSC advisor", reliability: "fact",
+            title: "AP mailt — 'wij ontvingen een klacht'",
+            content: "'Klant meldt vermoedelijk lek. Kunt u toelichten of u dit gemeld heeft?'\n\n[Facilitator-hint] Als jij niet meldt, komt de AP naar jou. Boete-risico is nu materieel groter.",
+            source: "Autoriteit Persoonsgegevens", senderName: "AP toezicht", reliability: "fact",
             targetTeam: "all",
           },
         },
       },
 
-      // ── R4 — Media + misleidende inject ─────────────────────────────────
+      // ── R3 — CEO + Legal (media) ─────────────────────────────────────────
       {
-        id: r4,
-        type: "round",
-        position: { x: 880, y: 720 },
+        id: r3, type: "round", position: { x: 220, y: 720 },
         data: {
           kind: "round",
-          title: "R4 — Media druk + Twitter",
-          situation_update:
-            "Op X (voorheen Twitter) gaat een screenshot rond van een offline patiëntenportaal. Een journalist heeft binnen 60 min een deadline. " +
-            "Tussen alle druk zit ook een 'tipster'-mail die pretendeert insider-info te hebben — checkbaar is nihil.",
+          title: "R3 — Media druk",
+          situation_update: "Journalist heeft deadline 17:00, Twitter draait. CEO en Legal moeten samen statement handelen.",
           timerMinutes: 12,
-          bobPhase: "oordeel",
-          evaluationAspects: ["reliability", "nis2"],
           roleActions: [
-            { id: A_R4_FORMAL, label: "CEO: kort formeel statement via woordvoerder — alleen bevestigde feiten",
-              description: "Behoud narratief-controle; geen speculatie.",
+            // CEO ─────
+            {
+              id: A_R3_CEO_FORMAL,
+              label: "Kort formeel statement via woordvoerder",
+              description: "Bevestigde feiten + geruststelling, verwijzen naar Eye Security.",
               allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true,
-              consequence: "Journalist heeft een quote; Twitter-storm dooft in de avond." },
+              scoreImpacts: { communication_clarity: 3, decision_quality: 1 },
+              qualityRank: "best",
+              facilitatorCommentary: "Formeel + kort + verifieerbaar. Precies de driehoek waarmee je onder tijdsdruk niet in problemen komt.",
+            },
+            {
+              id: "r3-ceo-nocomment",
+              label: "'Geen commentaar' — 'we onderzoeken het'",
+              description: "Wachten tot alles zeker is voor er iets naar buiten gaat.",
+              allowedRoles: ["ceo"], irPlanAligned: false,
+              scoreImpacts: { communication_clarity: -1 },
+              qualityRank: "poor",
+              facilitatorCommentary: "Stilte wordt gevuld met speculatie. Twitter kan sneller dan jij.",
+            },
+            {
+              id: "r3-ceo-uitgebreid",
+              label: "Uitgebreid interview om vertrouwen te herstellen",
+              description: "Transparant en breed uitleggen wat er gebeurt.",
+              allowedRoles: ["ceo"], irPlanAligned: false,
+              scoreImpacts: { communication_clarity: -2, decision_quality: -2 },
+              qualityRank: "wrong",
+              facilitatorCommentary: "Elk detail dat later moet worden bijgesteld = tweede crisis. Nooit ontkennen wat je niet zeker weet.",
+            },
+            // LEGAL ─────
+            {
+              id: "r3-legal-review",
+              label: "Statement door Legal pre-review vóór publicatie",
+              description: "Elke zin door Legal langs voor er iets naar buiten gaat.",
+              allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true,
+              scoreImpacts: { compliance_awareness: 2, communication_clarity: 1 },
+              qualityRank: "best",
+              facilitatorCommentary: "Standaard hoge kwaliteit-vinger op de trekker. Kost 10 minuten, voorkomt uren narrigheid.",
+            },
+            {
+              id: "r3-legal-nolegal",
+              label: "CEO tekent zelf — Legal krijgt kopie",
+              description: "Snel weg met het statement, Legal reviewt post-hoc.",
+              allowedRoles: ["legal"], irPlanAligned: false,
+              scoreImpacts: { compliance_awareness: -1, decision_speed: 1 },
+              qualityRank: "poor",
+              facilitatorCommentary: "Snel = mooi, maar één juridisch verkeerde zin en je hebt een aansprakelijkheids-issue erbovenop.",
+            },
           ],
-          facilitatorNotes: {
-            discussionGoal: "Onder tijdsdruk feit-vs-aanname scheiden.",
-            keyQuestions: ["Welke zin uit de tipster is 'feit'? Welke zijn 'aanname'?", "Wat is verifieerbaar?"],
-            hints: ["De tipster-mail is deliberaat misleidend gemarkeerd — als je erop reageert verlies je grond."],
-            expectedDecisions: ["Formeel statement", "Tipster negeren tot verificatie"],
-            redFlags: ["Ontkennen wat je niet zeker weet", "Reageren op tipster"],
-          },
         },
       },
       {
-        id: inj_r4_journo,
-        type: "inject",
-        position: { x: 920, y: 940 },
+        id: inj_r3a, type: "inject", position: { x: 260, y: 940 },
         data: {
           kind: "inject",
           type: "media", channel: "email", urgency: "high",
-          title: "NRC journalist — deadline 17:00",
-          content:
-            "'Wij schrijven over de storing bij uw {{sector}}-organisatie. Klopt het dat patiëntgegevens zijn gelekt?'",
+          title: "NRC — deadline 60 minuten",
+          content: "'Wij schrijven over de storing bij uw {{sector}}-organisatie. Reactie graag binnen 60 min.'",
           source: "NRC", senderName: "M. Vermeulen",
-          targetTeam: "crisis_management", reliability: "fact",
+          targetTeam: "crisis_management", deliverySeconds: 0,
           dynamic: { enabled: true, fillFrom: ["sector"] },
         },
       },
       {
-        id: inj_r4_twitter,
-        type: "inject",
-        position: { x: 1120, y: 940 },
+        id: inj_r3b, type: "inject", position: { x: 460, y: 940 },
         data: {
           kind: "inject",
           type: "social", channel: "news_ticker", urgency: "medium",
-          title: "Twitter — patiëntenportaal offline",
-          content: "@techlekker post screenshot: '{{sector}}-portaal is down, iemand die kan bevestigen dat dit een aanval is? 🚨' — 890 retweets in 30 min.",
+          title: "Twitter — screenshot gaat rond",
+          content: "@techlekker: '{{sector}}-portaal ligt eruit — iemand die kan bevestigen? 🚨' — 890 retweets.",
           source: "X", senderName: "@techlekker",
-          targetTeam: "all", reliability: "assumption",
+          targetTeam: "all", deliverySeconds: 180,
           dynamic: { enabled: true, fillFrom: ["sector"] },
         },
       },
       {
-        id: inj_r4_misleading,
-        type: "inject",
-        position: { x: 1320, y: 940 },
-        data: {
-          kind: "inject",
-          type: "intel", channel: "email", urgency: "medium",
-          title: "Tipster — 'ik weet wie de attacker is'",
-          content:
-            "'Ik werk bij een cybersec-bedrijf en heb sporen dat dit een Russische groep is. Als jullie snel handelen kan ik jullie helpen.'",
-          source: "onbekend", senderName: "anonymous@protonmail.com",
-          targetTeam: "crisis_management", reliability: "misleading",
-          evaluationAspects: ["reliability"],
-        },
-      },
-      {
-        id: dec_r4,
-        type: "decision",
-        position: { x: 1520, y: 740 },
-        data: {
-          kind: "decision",
-          prompt: "R4 — Statement + reactie op tipster?",
-          measuredBy: "participant_choice",
-          advancesGraph: false,
-          triggerRole: "ceo",
-          options: [
-            { id: id("opt"), label: "Formeel statement + tipster negeren tot verificatie",
-              roleActionId: A_R4_FORMAL, scoreImpact: 2, linkedDimension: "communication_clarity",
-              lessonLearned: "Feit/aanname scheiden onder druk = kernvaardigheid." },
-            { id: id("opt"), label: "'Geen commentaar' + tipster negeren",
-              scoreImpact: -1, linkedDimension: "communication_clarity",
-              lessonLearned: "Stilte wordt gevuld met speculatie op Twitter." },
-            { id: id("opt"), label: "Reageren op tipster — 'we willen weten wat je hebt'",
-              scoreImpact: -3, linkedDimension: "framework_adherence",
-              lessonLearned: "Ongeverifieerde bronnen tijdens crisis = extra kanaal om via te worden misleid." },
-          ],
-          supervisionAreas: ["crisis_communication", "emergency_communication"],
-        },
-      },
-      {
-        id: cha_r4,
-        type: "chaser",
-        position: { x: 1720, y: 940 },
+        id: cha_r3, type: "chaser", position: { x: 660, y: 940 },
         data: {
           kind: "chaser",
-          condition: { kind: "decision_not_taken", roleActionId: A_R4_FORMAL, afterRoundNumber: 4 },
+          condition: { kind: "decision_not_taken", roleActionId: A_R3_CEO_FORMAL, afterRoundNumber: 3 },
           inject: {
             kind: "inject",
             type: "media", channel: "news_ticker", urgency: "critical",
-            title: "NRC artikel live — kop is stelliger dan je zou willen",
-            content:
-              "'Ziekenhuisketen zwijgt over datalek — patiënten in het duister' — Twitter pikt op dat je niet reageerde.\n\n" +
-              "[Facilitator-hint] Formeel statement kost 10 minuten en houdt het narratief onder controle. Verhaal loopt door.",
-            source: "NRC", senderName: "M. Vermeulen", reliability: "fact",
-            targetTeam: "all",
+            title: "NRC-artikel live — kop is stelliger dan gehoopt",
+            content: "'{{sector}}-organisatie zwijgt over lek' — Twitter pikt de stilte op.\n\n[Facilitator-hint] Een kort formeel statement had dit voorkomen. Verhaal loopt door.",
+            source: "NRC", senderName: "M. Vermeulen", reliability: "fact", targetTeam: "all",
+            dynamic: { enabled: true, fillFrom: ["sector"] },
           },
         },
       },
 
-      // ── R5 — Containment (scenario-stoppende optie + reroute) ───────────
+      // ── R4 — CISO + CEO (ransom) ─────────────────────────────────────────
       {
-        id: r5,
-        type: "round",
-        position: { x: 220, y: 1240 },
+        id: r4, type: "round", position: { x: 880, y: 720 },
         data: {
           kind: "round",
-          title: "R5 — Containment onder druk",
-          situation_update:
-            "Encryptie start op niet-kritieke systemen. Board vraagt of 'alles gewoon uit kan'. " +
-            "In een zorgomgeving zit patient safety in de weegschaal.",
+          title: "R4 — Ransom demand",
+          situation_update: "Attacker post: '12u tot publicatie. 15 BTC of het gaat door.' Board-druk stijgt.",
           timerMinutes: 14,
-          bobPhase: "besluit",
-          evaluationAspects: ["nis2"],
           roleActions: [
-            { id: A_R5_STRUCTURED_ISOLATE, label: "CISO+Ops: gestructureerde segmentatie — zorg-endpoints buiten scope",
-              description: "Alleen non-critical segmenten uit. Zorg-endpoints krijgen aparte containment.",
+            {
+              id: A_R4_CISO_VIA_EYE,
+              label: "Onderhandeling via Eye Security, board tekent scope",
+              description: "IR-partij doet OFAC-check, koopt tijd, houdt narratief onder controle.",
               allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true,
-              consequence: "Encryptie stopt buiten zorgpad; patient safety geborgd." },
+              scoreImpacts: { decision_quality: 2, compliance_awareness: 2 },
+              qualityRank: "best",
+              facilitatorCommentary: "Onze default. Sancties-check + narratieve controle + tijdswinning zonder direct te betalen.",
+            },
+            {
+              id: "r4-ciso-noplay",
+              label: "Niet betalen, geen onderhandeling",
+              description: "Direct communiceren dat er niets betaald wordt.",
+              allowedRoles: ["ciso"], irPlanAligned: false,
+              scoreImpacts: { decision_quality: -1, communication_clarity: -1 },
+              qualityRank: "poor",
+              facilitatorCommentary: "Kán juist zijn, maar zonder onderhandelplan verspil je optionaliteit. Onderhandelen ≠ betalen.",
+            },
+            {
+              id: "r4-ciso-pay",
+              label: "Board goedkeuring voor directe 15 BTC betaling",
+              description: "Snel afkopen, herstel binnen 24 uur.",
+              allowedRoles: ["ciso"], irPlanAligned: false,
+              scoreImpacts: { decision_quality: -3, compliance_awareness: -2 },
+              qualityRank: "wrong",
+              facilitatorCommentary: "Zonder OFAC-check kan dit een sanctie-overtreding worden. Ook: veel betalers krijgen alsnog geen key.",
+            },
+            {
+              id: "r4-ceo-mandaat",
+              label: "CEO tekent scope-mandaat voor Eye Security onderhandeling",
+              description: "Duidelijke autorisatie zonder betalingsverplichting.",
+              allowedRoles: ["ceo"], isRecommended: true, irPlanAligned: true,
+              scoreImpacts: { decision_speed: 1, decision_quality: 1 },
+              qualityRank: "best",
+              facilitatorCommentary: "Scope-mandaat is de sleutel: Eye kan onderhandelen zonder dat je iets belooft.",
+            },
+            {
+              id: "r4-ceo-board-veto",
+              label: "Wachten op board-veto voor elk gesprek",
+              description: "Board wil per stap goedkeuring geven.",
+              allowedRoles: ["ceo"], irPlanAligned: false,
+              scoreImpacts: { decision_speed: -2 },
+              qualityRank: "poor",
+              facilitatorCommentary: "Micro-mandaat vertraagt onderhandeling zodanig dat attacker de deadline gebruikt tegen je.",
+            },
           ],
-          facilitatorNotes: {
-            discussionGoal: "Board-druk vs patient safety — kan iemand het board tegenspreken?",
-            keyQuestions: ["Wie mandateert 'alles uit'?", "Wie borgt patient safety?"],
-            hints: ["'Alles uit' bij zorg = mensenlevens. Dit moet expliciet tegengesproken worden."],
-            expectedDecisions: ["Gestructureerde segmentatie"],
-            redFlags: ["Ongesegmenteerde kill-switch"],
-          },
         },
       },
       {
-        id: inj_r5_ransom,
-        type: "inject",
-        position: { x: 260, y: 1460 },
+        id: inj_r4a, type: "inject", position: { x: 920, y: 940 },
         data: {
           kind: "inject",
           type: "media", channel: "ransom_note", urgency: "critical",
-          title: "Ransom note — 12u tot encryptie zorgsystemen",
-          content:
-            "'12 uur tot we ook jullie zorg-endpoints raken. 20 BTC of het gaat door. Geen onderhandeling.'",
+          title: "Ransom note",
+          content: "'12u tot publicatie. 15 BTC of het gaat door. Geen onderhandeling.' — TidalWave",
           source: "Attacker", senderName: "TidalWave",
-          targetTeam: "all", reliability: "fact",
+          targetTeam: "all", deliverySeconds: 0,
         },
       },
       {
-        id: dec_r5,
-        type: "decision",
-        position: { x: 460, y: 1260 },
-        data: {
-          kind: "decision",
-          prompt: "R5 — Containment: hoe scherp trekken we de streep?",
-          measuredBy: "participant_choice",
-          advancesGraph: false,
-          triggerRole: "ciso",
-          options: [
-            { id: id("opt"), label: "Gestructureerde segmentatie — non-critical uit, zorg-endpoints geïsoleerd containment",
-              roleActionId: A_R5_STRUCTURED_ISOLATE, scoreImpact: 3, linkedDimension: "decision_quality",
-              lessonLearned: "Patient safety is de grens — niet onderhandelbaar zelfs onder ransom-druk." },
-            { id: id("opt"), label: "Alleen non-critical uit, zorg-endpoints ongewijzigd",
-              scoreImpact: 0, linkedDimension: "decision_quality",
-              lessonLearned: "Werkt op korte termijn maar attacker heeft nog een been binnen." },
-            // Scenario-stopping option — in real life this would kill patients. Reroute keeps the exercise going.
-            { id: id("opt"), label: "ALLES uit inclusief zorg-endpoints — 'we redden data, we regelen mensen wel'",
-              scoreImpact: -6, linkedDimension: "framework_adherence",
-              lessonLearned: "Dit is in het echt een patient safety incident — de oefening zou hier stoppen. We gebruiken een reroute-inject om door te kunnen." },
-          ],
-          supervisionAreas: ["technical_response", "business_continuity"],
-        },
-      },
-      {
-        id: cha_r5_reroute,
-        type: "chaser",
-        position: { x: 660, y: 1460 },
+        id: cha_r4, type: "chaser", position: { x: 1120, y: 940 },
         data: {
           kind: "chaser",
-          condition: { kind: "decision_not_taken", roleActionId: A_R5_STRUCTURED_ISOLATE, afterRoundNumber: 5 },
+          condition: { kind: "decision_not_taken", roleActionId: A_R4_CISO_VIA_EYE, afterRoundNumber: 4 },
           inject: {
             kind: "inject",
-            type: "internal", channel: "memo", urgency: "critical",
-            title: "REROUTE — in de echte wereld was dit een game-stop",
-            content:
-              "[Facilitator reroute] Jullie keuze zou in werkelijkheid patiëntenlevens raken (of andere onomkeerbare schade). " +
-              "Om de oefening voort te zetten stellen we voor: de OK-coordinator heeft een handmatige fallback gedaan die net op tijd was. " +
-              "Geen echte patient-schade in dit scenario — maar in de debrief bespreken we waarom dit besluit anders had gemoeten.\n\n" +
-              "Score is behoorlijk gedaald; het verhaal gaat door naar R6.",
+            type: "regulatory", channel: "email", urgency: "critical",
+            title: "REROUTE — betaling zonder OFAC-check zou game over zijn",
+            content: "[Facilitator reroute] Attacker-wallet is 1 hop van OFAC-sanctielijst. In het echt: handhavings-incident + geen key.\n\nIn de oefening: fictief nét geen sanctie-link, verhaal gaat door naar R5. In de debrief: waarom OFAC-check verplicht is.",
             source: "Facilitator", senderName: "Facilitator", reliability: "fact",
             targetTeam: "all",
           },
         },
       },
 
-      // ── R6 — Recovery of doorgaan (scenario-stopping optie + reroute) ──
+      // ── R5 — CISO + Legal (herstel + klantcomms) ─────────────────────────
       {
-        id: r6,
-        type: "round",
-        position: { x: 880, y: 1240 },
+        id: r5, type: "round", position: { x: 220, y: 1240 },
         data: {
           kind: "round",
-          title: "R6 — Recovery of ransom betalen?",
-          situation_update:
-            "Backup-restore is haalbaar binnen 18 uur; ransom is 20 BTC. Board zit hard op tafel: 'wat kost een dag downtime ons?'",
-          timerMinutes: 15,
-          bobPhase: "besluit",
-          evaluationAspects: ["decision_impact", "lessons_learned"],
+          title: "R5 — Herstel + klantcommunicatie",
+          situation_update: "Attacker gaf de key na Eye-onderhandeling. Herstel is technisch mogelijk maar vraagt keuzes. Klanten willen ook horen wat er is gebeurd.",
+          timerMinutes: 12,
           roleActions: [
-            { id: A_R6_STRUCTURED_RESTORE, label: "CISO+CEO: gestructureerd restore-plan via Eye Security, geen betaling",
-              description: "Backup-restore + externe onderhandeling voor tijdsuitstel; geen sancties-risico.",
+            {
+              id: A_R5_CISO_STRUCT_RESTORE,
+              label: "Gestructureerd restore-plan met validation-checkpoints",
+              description: "Backup-restore in fases + forensics-validation per fase.",
               allowedRoles: ["ciso"], isRecommended: true, irPlanAligned: true,
-              consequence: "18u downtime, kosten hoog maar geen sanctie-boete." },
+              scoreImpacts: { decision_quality: 3 },
+              qualityRank: "best",
+              facilitatorCommentary: "Fases + validation = de manier om herhalings-compromise te voorkomen. Duurt langer maar is duurzamer.",
+            },
+            {
+              id: "r5-ciso-fast",
+              label: "Snel volledige restore, validatie later",
+              description: "Zo snel mogelijk operationeel, checks in de nasleep.",
+              allowedRoles: ["ciso"], irPlanAligned: false,
+              scoreImpacts: { decision_speed: 2, decision_quality: -2 },
+              qualityRank: "poor",
+              facilitatorCommentary: "Snel = mooi voor operations, maar attacker-persistence kan zo intact blijven. Trade-off tussen snelheid en zekerheid.",
+            },
+            {
+              id: "r5-legal-24u",
+              label: "Klanten binnen 24u informeren + FAQ + support-lijn",
+              description: "Volledige transparantie met opties voor gedupeerden.",
+              allowedRoles: ["legal"], isRecommended: true, irPlanAligned: true,
+              scoreImpacts: { communication_clarity: 2, compliance_awareness: 2 },
+              qualityRank: "best",
+              facilitatorCommentary: "Proactieve klantcommunicatie is compliance én reputation-management in één. Geen alternatief.",
+            },
+            {
+              id: "r5-legal-later",
+              label: "Klanten informeren zodra scope écht rond is",
+              description: "Wachten tot alle feiten helder zijn.",
+              allowedRoles: ["legal"], irPlanAligned: false,
+              scoreImpacts: { communication_clarity: -2, compliance_awareness: -1 },
+              qualityRank: "poor",
+              facilitatorCommentary: "AVG-eis is 'onverwijld'. Wachten geeft de indruk dat je iets verbergt.",
+            },
           ],
-          facilitatorNotes: {
-            discussionGoal: "Board-druk vs OFAC-realiteit.",
-            keyQuestions: ["Wie tekent betaling?", "Waar staat OFAC-check in het proces?"],
-            hints: ["Direct betalen zonder OFAC = boete. Zonder retainer-onderhandeling geen tijd-uitstel."],
-            expectedDecisions: ["Restore + onderhandeling via Eye"],
-            redFlags: ["Direct betalen"],
-          },
         },
       },
       {
-        id: inj_r6_board,
-        type: "inject",
-        position: { x: 920, y: 1460 },
+        id: inj_r5a, type: "inject", position: { x: 260, y: 1460 },
         data: {
           kind: "inject",
-          type: "executive", channel: "email", urgency: "high",
-          title: "Board — 'wat we ook doen, doe het snel'",
-          content:
-            "Board-voorzitter: 'we hebben investeerders aan de lijn. Als we morgen niet operationeel zijn is dat een kwartaal-omzet kwijt. Betaal desnoods.'",
-          source: "Board", senderName: "Voorzitter", reliability: "fact",
-          targetTeam: "crisis_management",
+          type: "technical", channel: "email", urgency: "medium",
+          title: "Eye Security — key ontvangen, herstel kan starten",
+          content: "Onderhandeling succesvol; attacker leverde key na scope-druk. Restore is technisch klaar om te starten.",
+          source: "Eye Security", senderName: "Eye IR-lead",
+          targetTeam: "all", deliverySeconds: 0,
         },
       },
       {
-        id: dec_r6,
-        type: "decision",
-        position: { x: 1120, y: 1260 },
-        data: {
-          kind: "decision",
-          prompt: "R6 — Restore of betalen?",
-          measuredBy: "participant_choice",
-          advancesGraph: false,
-          triggerRole: "ceo",
-          options: [
-            { id: id("opt"), label: "Restore + onderhandeling via Eye Security (geen directe betaling)",
-              roleActionId: A_R6_STRUCTURED_RESTORE, scoreImpact: 3, linkedDimension: "decision_quality",
-              lessonLearned: "Restore is bijna altijd de norm; onderhandelen koopt tijd zonder te betalen." },
-            { id: id("opt"), label: "Niet betalen en zelf restoren — geen onderhandeling",
-              scoreImpact: 0, linkedDimension: "decision_quality",
-              lessonLearned: "Kan werken maar je geeft optionaliteit weg." },
-            // Scenario-stopping: direct payment without OFAC check.
-            { id: id("opt"), label: "Direct 20 BTC betalen zonder OFAC-check — 'we hebben geen keus'",
-              scoreImpact: -5, linkedDimension: "framework_adherence",
-              lessonLearned: "OFAC-boete + je krijgt vaak geen key. Zou in het echt een handhavings-incident zijn." },
-          ],
-          supervisionAreas: ["recovery", "board_decision_making"],
-        },
-      },
-      {
-        id: cha_r6_reroute,
-        type: "chaser",
-        position: { x: 1320, y: 1460 },
+        id: cha_r5, type: "chaser", position: { x: 460, y: 1460 },
         data: {
           kind: "chaser",
-          condition: { kind: "decision_not_taken", roleActionId: A_R6_STRUCTURED_RESTORE, afterRoundNumber: 6 },
+          condition: { kind: "decision_not_taken", roleActionId: A_R5_CISO_STRUCT_RESTORE, afterRoundNumber: 5 },
           inject: {
             kind: "inject",
-            type: "internal", channel: "memo", urgency: "critical",
-            title: "REROUTE — betaling zonder OFAC-check was in het echt game over",
-            content:
-              "[Facilitator reroute] De attacker-wallet staat op de OFAC-sanctielijst. In het echt was dit een handhavings-incident + geen decryptie-key. " +
-              "In de oefening: wallet blijkt bij loot-clearing niet gelinkt aan sanctie-partij (fictief), key wordt geleverd, verhaal loopt door naar R7.\n\n" +
-              "In de debrief: waarom een OFAC-check verplicht is voor je betaalt.",
-            source: "Facilitator", senderName: "Facilitator", reliability: "fact",
+            type: "technical", channel: "siem", urgency: "high",
+            title: "Follow-up compromise gedetecteerd",
+            content: "3 dagen na restore: nieuwe verdachte activiteit op dezelfde subnet. Attacker-persistence was niet volledig geruimd.\n\n[Facilitator-hint] Snel restoreren zonder validation = tweede kans voor de attacker. Verhaal gaat door.",
+            source: "MDR", senderName: "MDR SOC", reliability: "fact",
             targetTeam: "all",
           },
         },
       },
 
-      // ── R7 — Debrief ─────────────────────────────────────────────────────
+      // ── R6 — Debrief ─────────────────────────────────────────────────────
       {
-        id: r7,
-        type: "round",
-        position: { x: 220, y: 1740 },
+        id: r6, type: "round", position: { x: 880, y: 1240 },
         data: {
           kind: "round",
-          title: "R7 — Debrief",
-          situation_update:
-            "Het incident is gestabiliseerd. Tijd om te reflecteren: waar zaten de duurste momenten? Welke rol had wat anders kunnen doen? " +
-            "De outcome wordt automatisch gekozen op basis van jullie cumulatieve score.",
-          timerMinutes: 10,
-          evaluationAspects: ["lessons_learned"],
+          title: "R6 — Debrief",
+          situation_update: "Incident gestabiliseerd. De outcome wordt automatisch gekozen op basis van jullie cumulatieve dimensie-score.",
+          timerMinutes: 8,
           facilitatorNotes: {
-            discussionGoal: "Cumulatieve score verbinden aan concrete momenten.",
-            keyQuestions: ["Welk moment had de grootste impact?", "Wie had eerder aan de bel kunnen trekken?"],
-            hints: [],
-            expectedDecisions: [],
-            redFlags: [],
+            discussionGoal: "Trade-offs zichtbaar maken: snel handelen kostte compliance? Communicatie was strak maar tempo laag?",
+            keyQuestions: ["Welke dimensie liep het meest achter?", "Waar was de duurste keuze?"],
+            hints: [], expectedDecisions: [], redFlags: [],
           },
         },
       },
       {
-        id: inj_r7,
-        type: "inject",
-        position: { x: 260, y: 1960 },
+        id: inj_r6, type: "inject", position: { x: 920, y: 1460 },
         data: {
           kind: "inject",
           type: "internal", channel: "memo", urgency: "low",
-          title: "Facilitator — debrief starten",
-          content: "Bekijk het rapport voor je cumulatieve score en dimensie-breakdown. De outcome hieronder is automatisch gekozen op basis van de bandbreedtes.",
-          source: "Facilitator", senderName: "Facilitator", reliability: "fact",
-          targetTeam: "all",
+          title: "Debrief-start",
+          content: "Bekijk het rapport voor de per-dimensie-breakdown en de outcome-band waarin jullie score valt.",
+          source: "Facilitator", senderName: "Facilitator",
+          targetTeam: "all", deliverySeconds: 0,
         },
       },
 
-      // ── Outcomes met scoreRange — engine kiest automatisch ──────────────
+      // ── Outcomes met scoreRange (cumulatieve som van alle dimensies) ────
       {
-        id: out_gold,
-        type: "outcome",
-        position: { x: 560, y: 1780 },
+        id: out_gold, type: "outcome", position: { x: 1220, y: 1140 },
         data: {
           kind: "outcome",
           key: "outcome_gold",
-          label: "★ Gold — Textbook response",
-          narrative:
-            "Retainer meteen actief, insider-side story parallel opgevangen, meldingen op tijd, geen media-crisis, restore zonder betaling. " +
-            "Board is achteraf zeer tevreden; klant-vertrouwen praktisch onaangetast.",
-          scoreImpact: 6, linkedDimension: "framework_adherence",
-          scoreRange: { min: 10 },
-          lessonLearned: "Consistente snelheid + parallel-processing van side stories is wat teams die goed presteren onderscheidt.",
+          label: "★ Gold — Voorbeeldige respons",
+          narrative: "Eye direct actief, meldingen op tijd, communicatie strak, herstel gestructureerd. Board tevreden.",
+          scoreImpact: 0, scoreRange: { min: 14 },
+          lessonLearned: "De combinatie van snelheid, kwaliteit én compliance was consistent. Dat is zeldzaam.",
         },
       },
       {
-        id: out_silver,
-        type: "outcome",
-        position: { x: 560, y: 1900 },
+        id: out_silver, type: "outcome", position: { x: 1220, y: 1280 },
         data: {
           kind: "outcome",
           key: "outcome_silver",
-          label: "Silver — Solide, ruimte voor verbetering",
-          narrative:
-            "De meeste keuzes waren juist; één of twee momenten kostten tijd of narratief. Meldplicht op tijd, geen sanctie-risico.",
-          scoreImpact: 3, linkedDimension: "decision_quality",
-          scoreRange: { min: 4, max: 9 },
-          lessonLearned: "Kijk terug welke rol als eerste twijfelde en of dat sneller hardop had gemogen.",
+          label: "Silver — Solide met kleine kreuken",
+          narrative: "Meeste keuzes goed, één of twee trade-offs kostten punten op één dimensie.",
+          scoreImpact: 0, scoreRange: { min: 5, max: 13 },
+          lessonLearned: "Kijk terug op welke dimensie het meest afwijkt — daar zit vaak je grootste verbeter-slag.",
         },
       },
       {
-        id: out_bronze,
-        type: "outcome",
-        position: { x: 560, y: 2020 },
+        id: out_bronze, type: "outcome", position: { x: 1220, y: 1420 },
         data: {
           kind: "outcome",
           key: "outcome_bronze",
           label: "Bronze — Wisselvallig",
-          narrative:
-            "Meerdere keuzes waren traag of niet-consistent met het IR-playbook. Reputatie is geraakt, meldplicht net op tijd, geen ramp.",
-          scoreImpact: 0, linkedDimension: "decision_quality",
-          scoreRange: { min: -1, max: 3 },
+          narrative: "Meerdere keuzes waren traag of niet-consistent. Meldplicht net op tijd, reputatie geraakt.",
+          scoreImpact: 0, scoreRange: { min: -3, max: 4 },
           lessonLearned: "Rol-mandaten waren onduidelijk; het team wachtte vaak op elkaar.",
         },
       },
       {
-        id: out_iron,
-        type: "outcome",
-        position: { x: 560, y: 2140 },
-        data: {
-          kind: "outcome",
-          key: "outcome_iron",
-          label: "Iron — Meerdere gemiste kansen",
-          narrative:
-            "Verschillende chasers hebben moeten vuren; media-narratief is uit de hand gelopen. Meldingen te laat, geen ramp maar wel duur.",
-          scoreImpact: -3, linkedDimension: "framework_adherence",
-          scoreRange: { min: -6, max: -2 },
-          lessonLearned: "Elke gemiste keuze compoundt — de volgende keer voelt het als 'we lopen achter de feiten aan'.",
-        },
-      },
-      {
-        id: out_meltdown,
-        type: "outcome",
-        position: { x: 560, y: 2260 },
+        id: out_meltdown, type: "outcome", position: { x: 1220, y: 1560 },
         data: {
           kind: "outcome",
           key: "outcome_meltdown",
-          label: "Meltdown — In de echte wereld game over",
-          narrative:
-            "Meerdere reroute-injects moesten worden ingezet om de oefening voort te zetten. In werkelijkheid was er patient safety-schade + sanctie-risico + reputatiecrisis tegelijk.",
-          scoreImpact: -8, linkedDimension: "framework_adherence",
-          scoreRange: { max: -7 },
-          lessonLearned: "De reroute-injects zijn een oefeningsmechanisme — ze verhullen dat in de echte wereld dit besluit onomkeerbaar was. Debrief hierop uitgebreid.",
+          label: "Meltdown — reroute nodig gehad",
+          narrative: "Reroute-injects moesten worden ingezet — in werkelijkheid was er materiële schade en handhavings-risico.",
+          scoreImpact: 0, scoreRange: { max: -4 },
+          lessonLearned: "De reroute is oefeningshulp. Bespreek in de debrief waarom die keuze in het echt onomkeerbaar was.",
         },
       },
     ],
     edges: [
       { id: id("e"), source: startId, target: r1, type: "sequence" },
-      // R1
       { id: id("e"), source: r1, target: inj_r1a, sourceHandle: "injects", type: "inject" },
       { id: id("e"), source: r1, target: inj_r1b, sourceHandle: "injects", type: "inject" },
-      { id: id("e"), source: r1, target: dec_r1, type: "sequence" },
-      { id: id("e"), source: dec_r1, target: r2, type: "sequence" },
-      // R2
+      { id: id("e"), source: r1, target: r2, type: "sequence" },
       { id: id("e"), source: r2, target: inj_r2a, sourceHandle: "injects", type: "inject" },
-      { id: id("e"), source: r2, target: inj_r2b_insider, sourceHandle: "injects", type: "inject" },
-      { id: id("e"), source: r2, target: dec_r2, type: "sequence" },
-      { id: id("e"), source: dec_r2, target: r3, type: "sequence" },
-      // R3
+      { id: id("e"), source: r2, target: r3, type: "sequence" },
       { id: id("e"), source: r3, target: inj_r3a, sourceHandle: "injects", type: "inject" },
-      { id: id("e"), source: r3, target: dec_r3, type: "sequence" },
-      { id: id("e"), source: dec_r3, target: r4, type: "sequence" },
-      // R4
-      { id: id("e"), source: r4, target: inj_r4_journo, sourceHandle: "injects", type: "inject" },
-      { id: id("e"), source: r4, target: inj_r4_twitter, sourceHandle: "injects", type: "inject" },
-      { id: id("e"), source: r4, target: inj_r4_misleading, sourceHandle: "injects", type: "inject" },
-      { id: id("e"), source: r4, target: dec_r4, type: "sequence" },
-      { id: id("e"), source: dec_r4, target: r5, type: "sequence" },
-      // R5
-      { id: id("e"), source: r5, target: inj_r5_ransom, sourceHandle: "injects", type: "inject" },
-      { id: id("e"), source: r5, target: dec_r5, type: "sequence" },
-      { id: id("e"), source: dec_r5, target: r6, type: "sequence" },
-      // R6
-      { id: id("e"), source: r6, target: inj_r6_board, sourceHandle: "injects", type: "inject" },
-      { id: id("e"), source: r6, target: dec_r6, type: "sequence" },
-      { id: id("e"), source: dec_r6, target: r7, type: "sequence" },
-      // R7
-      { id: id("e"), source: r7, target: inj_r7, sourceHandle: "injects", type: "inject" },
-      // Outcomes — R7 verbindt naar één (engine kiest de juiste op basis van score)
-      { id: id("e"), source: r7, target: out_silver, type: "outcome" },
-      // Voer de andere outcomes ook op als bereikbaar zodat coverage/preview ze meeneemt
-      { id: id("e"), source: r7, target: out_gold, type: "outcome" },
-      { id: id("e"), source: r7, target: out_bronze, type: "outcome" },
-      { id: id("e"), source: r7, target: out_iron, type: "outcome" },
-      { id: id("e"), source: r7, target: out_meltdown, type: "outcome" },
+      { id: id("e"), source: r3, target: inj_r3b, sourceHandle: "injects", type: "inject" },
+      { id: id("e"), source: r3, target: r4, type: "sequence" },
+      { id: id("e"), source: r4, target: inj_r4a, sourceHandle: "injects", type: "inject" },
+      { id: id("e"), source: r4, target: r5, type: "sequence" },
+      { id: id("e"), source: r5, target: inj_r5a, sourceHandle: "injects", type: "inject" },
+      { id: id("e"), source: r5, target: r6, type: "sequence" },
+      { id: id("e"), source: r6, target: inj_r6, sourceHandle: "injects", type: "inject" },
+      // Alle outcomes verbonden — engine kiest op scoreRange.
+      { id: id("e"), source: r6, target: out_silver, type: "outcome" },
+      { id: id("e"), source: r6, target: out_gold, type: "outcome" },
+      { id: id("e"), source: r6, target: out_bronze, type: "outcome" },
+      { id: id("e"), source: r6, target: out_meltdown, type: "outcome" },
     ],
   }
 }

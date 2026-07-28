@@ -6,13 +6,26 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { ROLE_META } from "@/lib/types"
-import type { AssessmentDimensionKey, Role, RoleAction } from "@/lib/types"
+import type { AssessmentDimensionKey, ChoiceQuality, Role, RoleAction, ScoreImpacts } from "@/lib/types"
 import { SUPERVISION_AREAS, type SupervisionArea } from "@/lib/engine/supervision"
 
 const ALL_ROLES = Object.keys(ROLE_META) as Role[]
-const DIMENSIONS: AssessmentDimensionKey[] = [
-  "decision_speed", "decision_quality", "escalation_timing", "mandate_clarity",
-  "framework_adherence", "dilemma_participation", "communication_clarity", "compliance_awareness",
+
+// We tonen alleen 4 primaire dimensies in de builder — houdt de UI + scoring
+// uitlegbaar. Legacy scoreImpact/linkedDimension blijft in de data mocht een
+// scenario nog de oude vorm gebruiken.
+const PRIMARY_DIMS: Array<{ key: AssessmentDimensionKey; label: string; hint: string }> = [
+  { key: 'decision_speed',       label: 'Snelheid',      hint: 'Reageert het team op tijd?' },
+  { key: 'decision_quality',     label: 'Kwaliteit',     hint: 'Is de keuze inhoudelijk goed onderbouwd?' },
+  { key: 'compliance_awareness', label: 'Compliance',    hint: 'Meldplicht / NIS2 / AVG in acht genomen?' },
+  { key: 'communication_clarity',label: 'Communicatie',  hint: 'Duidelijk richting stakeholders?' },
+]
+
+const QUALITY_RANKS: Array<{ key: ChoiceQuality; label: string; className: string }> = [
+  { key: 'best',  label: 'Best',      className: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40' },
+  { key: 'good',  label: 'Goed',      className: 'bg-sky-500/15 text-sky-600 border-sky-500/40' },
+  { key: 'poor',  label: 'Kon beter', className: 'bg-amber-500/15 text-amber-600 border-amber-500/40' },
+  { key: 'wrong', label: 'Fout',      className: 'bg-red-500/15 text-red-600 border-red-500/40' },
 ]
 
 function makeId(prefix: string) { return `${prefix}_${Math.random().toString(36).slice(2, 8)}` }
@@ -136,28 +149,52 @@ export function RoleActionsEditor({ value, onChange, suggestedIdPrefix = "act" }
             placeholder="Consequence (optional)"
             className="text-xs"
           />
-          {/* Scoring block */}
-          <div className="flex flex-col gap-1 mt-1 pt-2 border-t border-border">
-            <Label className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Scoring (optional)</Label>
-            <div className="flex items-center gap-1.5">
-              <select
-                value={action.linkedDimension ?? ""}
-                onChange={e => update(idx, { linkedDimension: e.target.value ? (e.target.value as AssessmentDimensionKey) : undefined })}
-                className="rounded border border-border bg-background px-1.5 py-1 font-mono text-[10px] flex-1"
-              >
-                <option value="">— dimension —</option>
-                {DIMENSIONS.map(d => <option key={d} value={d}>{d.replace(/_/g, " ")}</option>)}
-              </select>
-              <Input
-                type="number"
-                min={-10}
-                max={10}
-                value={action.scoreImpact ?? ""}
-                onChange={e => update(idx, { scoreImpact: e.target.value ? Number(e.target.value) : undefined })}
-                placeholder="±10"
-                className="h-7 w-16 font-mono text-[11px]"
-              />
+          {/* Scoring block — multi-dim + qualityRank + commentary */}
+          <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-border">
+            <Label className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Score-impact per dimensie</Label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {PRIMARY_DIMS.map(d => (
+                <DimInput
+                  key={d.key}
+                  label={d.label}
+                  hint={d.hint}
+                  value={action.scoreImpacts?.[d.key]}
+                  onChange={v => {
+                    const nextMap: ScoreImpacts = { ...(action.scoreImpacts ?? {}) }
+                    if (v === undefined || v === 0) delete nextMap[d.key]
+                    else nextMap[d.key] = v
+                    update(idx, { scoreImpacts: Object.keys(nextMap).length ? nextMap : undefined })
+                  }}
+                />
+              ))}
             </div>
+            <div className="flex items-center gap-1.5">
+              <Label className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground shrink-0">Kwaliteit</Label>
+              <div className="flex gap-1 flex-1">
+                {QUALITY_RANKS.map(r => {
+                  const on = action.qualityRank === r.key
+                  return (
+                    <button
+                      key={r.key}
+                      type="button"
+                      onClick={() => update(idx, { qualityRank: on ? undefined : r.key })}
+                      className={`rounded border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition-colors ${
+                        on ? r.className : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <Textarea
+              rows={2}
+              value={action.facilitatorCommentary ?? ""}
+              onChange={e => update(idx, { facilitatorCommentary: e.target.value || undefined })}
+              placeholder="IR-retainer perspectief — verschijnt in review-fase én rapport"
+              className="text-[11px]"
+            />
             <Textarea
               rows={2}
               value={action.lessonLearned ?? ""}
@@ -256,5 +293,30 @@ export function RoleActionsEditor({ value, onChange, suggestedIdPrefix = "act" }
         Add role action
       </Button>
     </div>
+  )
+}
+
+function DimInput({ label, hint, value, onChange }: {
+  label: string
+  hint: string
+  value: number | undefined
+  onChange: (v: number | undefined) => void
+}) {
+  return (
+    <label className="flex items-center gap-1.5 rounded border border-border bg-background px-1.5 py-1" title={hint}>
+      <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground flex-1 min-w-0 truncate">{label}</span>
+      <Input
+        type="number"
+        min={-5}
+        max={5}
+        value={value ?? ""}
+        onChange={e => {
+          const raw = e.target.value
+          onChange(raw === "" ? undefined : Number(raw))
+        }}
+        placeholder="0"
+        className="h-6 w-14 font-mono text-[11px] text-right"
+      />
+    </label>
   )
 }
