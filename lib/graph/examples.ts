@@ -2,6 +2,7 @@ import type { ScenarioGraph } from "./types"
 import { nis2ShowcaseExample } from "./examples-nis2"
 import { buildNis2Showcase } from "./examples-nis2-showcase"
 import { meldplichtPressureExample } from "./examples-meldplicht-pressure"
+import { fullShowcaseExample } from "./examples-full-showcase"
 
 function id(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}`
@@ -1149,6 +1150,12 @@ export interface Example {
 }
 
 export const EXAMPLES: Example[] = [
+  {
+    key: "full_showcase",
+    label: "★★ Full Showcase — alles wat de builder kan",
+    description: "7 rondes met side stories, dynamische tokens, misleidende inject, cumulatieve score-bandbreedtes en 5 outcomes. Twee 'scenario-stoppende' foutkeuzes hebben een reroute-inject zodat de oefening tóch doorloopt.",
+    build: fullShowcaseExample,
+  },
   {
     key: "nis2_meldplicht_pressure_test",
     label: "★ NIS2 Meldplicht Pressure Test",

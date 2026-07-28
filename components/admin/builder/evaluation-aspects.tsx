@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import type { EvaluationAspect } from "@/lib/graph/types"
+import type { EvaluationAspect, GraphFeatures } from "@/lib/graph/types"
+import { DEFAULT_FEATURES } from "@/lib/graph/types"
 
 interface AspectMeta {
   key: EvaluationAspect
@@ -14,42 +15,61 @@ interface AspectMeta {
 
 // Order matters — this is the order rendered in the picker + inspector pills.
 export const ASPECTS: AspectMeta[] = [
-  { key: 'reliability',       label: 'Betrouwbaarheid',   hint: 'BOB-tag: feit / aanname / misleidend op de hele inject',       appliesTo: ['inject'] },
-  { key: 'facts_assumptions', label: 'Feiten & aannames', hint: 'Markeer specifieke zinnen als feit/aanname/misleidend',        appliesTo: ['inject'] },
-  { key: 'nis2',              label: 'NIS2',              hint: 'Koppel aan NIS2-testgebieden en meldplicht',                    appliesTo: ['inject', 'round'] },
-  { key: 'decision_impact',   label: 'Beslis-impact',     hint: 'Voeg scoreImpact / dimensie toe (zichtbaar bij decisions)',    appliesTo: ['round'] },
-  { key: 'lessons_learned',   label: 'Lessons learned',   hint: 'Toon leerdoelen en debrief-tekstvelden',                        appliesTo: ['round'] },
+  { key: 'reliability',       label: 'Betrouwbaarheid',   hint: 'BOB-tag + markeer specifieke zinnen als feit / aanname / misleidend', appliesTo: ['inject'] },
+  { key: 'nis2',              label: 'NIS2',              hint: 'Koppel aan NIS2-testgebieden en meldplicht',                          appliesTo: ['inject', 'round'] },
+  { key: 'decision_impact',   label: 'Beslis-impact',     hint: 'Voeg scoreImpact / dimensie toe (zichtbaar bij decisions)',          appliesTo: ['round'] },
+  { key: 'lessons_learned',   label: 'Lessons learned',   hint: 'Toon leerdoelen en debrief-tekstvelden',                              appliesTo: ['round'] },
 ]
 
 // Short badge label for node cards + inspector pills.
+// 'facts_assumptions' is kept as an alias so old graphs render — it is normalized
+// to 'reliability' before any UI logic uses it.
 export const ASPECT_BADGE: Record<EvaluationAspect, string> = {
   reliability: 'BOB',
-  facts_assumptions: 'FA',
+  facts_assumptions: 'BOB',
   nis2: 'NIS2',
   decision_impact: 'DEC',
   lessons_learned: 'LL',
 }
 
-export function aspectsForNodeType(nodeType: 'inject' | 'round'): AspectMeta[] {
-  return ASPECTS.filter(a => a.appliesTo.includes(nodeType))
+// Legacy 'facts_assumptions' → 'reliability'. De-dupes after mapping so the
+// UI never renders the same pill twice.
+export function normalizeAspects(aspects: EvaluationAspect[] | undefined): EvaluationAspect[] | undefined {
+  if (aspects === undefined) return undefined
+  const mapped = aspects.map(a => (a === 'facts_assumptions' ? 'reliability' as const : a))
+  return Array.from(new Set(mapped))
+}
+
+export function aspectsForNodeType(nodeType: 'inject' | 'round', features?: GraphFeatures): AspectMeta[] {
+  const f = features ?? DEFAULT_FEATURES
+  return ASPECTS.filter(a => a.appliesTo.includes(nodeType)).filter(a => {
+    if (a.key === 'reliability') return f.reliability
+    if (a.key === 'nis2')        return f.compliance
+    if (a.key === 'decision_impact' || a.key === 'lessons_learned') return f.scoring
+    return true
+  })
 }
 
 // Undefined = legacy → show every field. Otherwise the array is the ground truth.
+// Normalizes 'facts_assumptions' → 'reliability' before checking.
 export function isAspectActive(aspects: EvaluationAspect[] | undefined, aspect: EvaluationAspect): boolean {
   if (aspects === undefined) return true
-  return aspects.includes(aspect)
+  const normalized = normalizeAspects(aspects) ?? []
+  const target = aspect === 'facts_assumptions' ? 'reliability' : aspect
+  return normalized.includes(target)
 }
 
 interface PickerProps {
   nodeType: 'inject' | 'round'
   initial: EvaluationAspect[]
+  features?: GraphFeatures
   onConfirm: (aspects: EvaluationAspect[]) => void
   onSkip: () => void
 }
 
-export function EvaluationAspectPicker({ nodeType, initial, onConfirm, onSkip }: PickerProps) {
+export function EvaluationAspectPicker({ nodeType, initial, features, onConfirm, onSkip }: PickerProps) {
   const [selected, setSelected] = useState<EvaluationAspect[]>(initial)
-  const options = aspectsForNodeType(nodeType)
+  const options = aspectsForNodeType(nodeType, features)
 
   function toggle(k: EvaluationAspect) {
     setSelected(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k])
@@ -93,14 +113,16 @@ export function EvaluationAspectPicker({ nodeType, initial, onConfirm, onSkip }:
 export function AspectPillBar({
   aspects,
   nodeType,
+  features,
   onChange,
 }: {
   aspects: EvaluationAspect[] | undefined
   nodeType: 'inject' | 'round'
+  features?: GraphFeatures
   onChange: (next: EvaluationAspect[]) => void
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const active: EvaluationAspect[] = aspects ?? aspectsForNodeType(nodeType).map(a => a.key)
+  const active: EvaluationAspect[] = aspects ?? aspectsForNodeType(nodeType, features).map(a => a.key)
   return (
     <div className="flex flex-wrap items-center gap-1 border-b border-border bg-background/40 px-3 py-2">
       <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mr-1">Beoordelen</span>
@@ -126,6 +148,7 @@ export function AspectPillBar({
         <EvaluationAspectPicker
           nodeType={nodeType}
           initial={active}
+          features={features}
           onConfirm={next => { onChange(next); setPickerOpen(false) }}
           onSkip={() => setPickerOpen(false)}
         />

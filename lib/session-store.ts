@@ -6,6 +6,7 @@
 import { randomBytes } from "crypto"
 import { generateScenario } from "./scenario-generator"
 import { evaluateChasersOnRoundStart, stepFromNode, type EngineTrigger, type StepResult } from "./graph/engine"
+import { cumulativeScore, selectOutcomeByScore } from "./graph/outcome-selector"
 import type { DecisionNodeData } from "./graph/types"
 import {
   dbDeleteScenarioGraph,
@@ -505,35 +506,46 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
       }
       updated = pushTimeline(updated, "special_triggered", { specialId: special.id, type: output.type, assignedTo: assigned?.name })
     } else if (output.kind === "set_outcome") {
+      // If features.scoring is on and any outcome has a scoreRange, override
+      // the edge-based outcome with the one whose bandwidth matches the
+      // cumulative score. The edge-based outcome stays as fallback.
+      let chosen = output.outcome
+      const features = updated.graph?.features
+      const scoringOn = features?.scoring ?? true
+      if (scoringOn && updated.graph) {
+        const total = cumulativeScore(updated.graph, (updated.submittedDecisions ?? []).map(d => ({ actionId: d.actionId })))
+        const byScore = selectOutcomeByScore(updated.graph, total)
+        if (byScore) chosen = byScore
+      }
       updated = {
         ...updated,
         status: "ended",
         graphState: updated.graphState ? {
           ...updated.graphState,
           finalOutcome: {
-            key: output.outcome.key,
-            label: output.outcome.label,
-            narrative: output.outcome.narrative,
-            scoreImpact: output.outcome.scoreImpact,
+            key: chosen.key,
+            label: chosen.label,
+            narrative: chosen.narrative,
+            scoreImpact: chosen.scoreImpact,
           },
         } : undefined,
       }
       // Log outcome scoring against its linked dimension for the rapport
-      if (output.outcome.linkedDimension && typeof output.outcome.scoreImpact === "number") {
-        const normalized = Math.max(0, Math.min(100, 50 + output.outcome.scoreImpact * 5))
+      if (chosen.linkedDimension && typeof chosen.scoreImpact === "number") {
+        const normalized = Math.max(0, Math.min(100, 50 + chosen.scoreImpact * 5))
         const ev: AssessmentEvent = {
           timestamp: Date.now(),
-          dimensionId: output.outcome.linkedDimension as AssessmentDimensionId,
+          dimensionId: chosen.linkedDimension as AssessmentDimensionId,
           roundNumber: updated.currentRound,
           value: normalized,
           source: "system",
-          note: `Outcome: ${output.outcome.label}`,
-          lesson: output.outcome.lessonLearned,
-          scoreImpact: output.outcome.scoreImpact,
+          note: `Outcome: ${chosen.label}`,
+          lesson: chosen.lessonLearned,
+          scoreImpact: chosen.scoreImpact,
         }
         updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), ev] }
       }
-      updated = pushTimeline(updated, "session_ended", { outcome: output.outcome.key })
+      updated = pushTimeline(updated, "session_ended", { outcome: chosen.key })
     }
   }
 

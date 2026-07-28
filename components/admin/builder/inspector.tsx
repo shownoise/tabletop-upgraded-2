@@ -11,6 +11,7 @@ import type {
   DynamicFillConfig,
   DynamicFillToken,
   EvaluationAspect,
+  GraphFeatures,
   GraphNodeData,
   InjectNodeData,
   OutcomeNodeData,
@@ -45,6 +46,7 @@ import type { GraphNodeType } from "@/lib/graph/types"
 interface Props {
   node: Node | null
   graphId: string
+  features?: GraphFeatures
   onChange: (nodeId: string, data: GraphNodeData) => void
   onAddInject: (roundNodeId: string) => void
   onDelete: (nodeId: string) => void
@@ -73,7 +75,7 @@ function makeId(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-export function Inspector({ node, graphId, onChange, onAddInject, onDelete, onDuplicate, onSaveGraph }: Props) {
+export function Inspector({ node, graphId, features, onChange, onAddInject, onDelete, onDuplicate, onSaveGraph }: Props) {
   if (!node) {
     return (
       <div className="flex h-full flex-col items-center justify-center p-4 text-center">
@@ -133,6 +135,7 @@ export function Inspector({ node, graphId, onChange, onAddInject, onDelete, onDu
           <RoundForm
             key={node.id}
             data={data}
+            features={features}
             onSave={next => onChange(node.id, next)}
             onAddInject={() => onAddInject(node.id)}
             graphId={graphId}
@@ -141,7 +144,7 @@ export function Inspector({ node, graphId, onChange, onAddInject, onDelete, onDu
           />
         )}
         {data.kind === "inject" && (
-          <InjectForm key={node.id} data={data} onSave={next => onChange(node.id, next)} />
+          <InjectForm key={node.id} data={data} features={features} onSave={next => onChange(node.id, next)} />
         )}
         {data.kind === "decision" && (
           <DecisionForm
@@ -174,6 +177,7 @@ function StartForm() {
 
 function RoundForm({
   data,
+  features,
   onSave,
   onAddInject,
   graphId,
@@ -181,6 +185,7 @@ function RoundForm({
   onSaveGraph,
 }: {
   data: RoundNodeData
+  features?: GraphFeatures
   onSave: (d: RoundNodeData) => void
   onAddInject: () => void
   graphId: string
@@ -225,6 +230,7 @@ function RoundForm({
       <AspectPillBar
         aspects={local.evaluationAspects}
         nodeType="round"
+        features={features}
         onChange={next => commit({ ...local, evaluationAspects: next })}
       />
       <DynamicFillSection
@@ -329,7 +335,7 @@ function Section({ title, count, children }: { title: string; count?: number; ch
   )
 }
 
-function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: InjectNodeData) => void }) {
+function InjectForm({ data, features, onSave }: { data: InjectNodeData; features?: GraphFeatures; onSave: (d: InjectNodeData) => void }) {
   const [local, setLocal] = useState<InjectNodeData>(data)
   const [markSpans, setMarkSpans] = useState(false)
   const [participantPreview, setParticipantPreview] = useState(false)
@@ -340,8 +346,8 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
     onSave(next)
   }
 
+  // Reliability now covers both the BOB-select AND the span-editor for feit/aanname/misleidend.
   const showReliability = isAspectActive(local.evaluationAspects, 'reliability')
-  const showFactsAssumptions = isAspectActive(local.evaluationAspects, 'facts_assumptions')
   const showNis2 = isAspectActive(local.evaluationAspects, 'nis2')
 
   return (
@@ -349,6 +355,7 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
       <AspectPillBar
         aspects={local.evaluationAspects}
         nodeType="inject"
+        features={features}
         onChange={next => commit({ ...local, evaluationAspects: next })}
       />
       <DynamicFillSection
@@ -356,7 +363,7 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
         onChange={next => commit({ ...local, dynamic: next })}
       />
       <div className="flex flex-wrap items-center gap-3 rounded border border-border bg-background/40 px-2 py-1.5">
-        {showFactsAssumptions && (
+        {showReliability && (
           <label className="flex items-center gap-1 text-[11px]">
             <input
               type="checkbox"
@@ -381,7 +388,7 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
         <Input value={local.title} onChange={e => commit({ ...local, title: e.target.value })} />
       </Field>
       <Field label="Content">
-        {showFactsAssumptions && markSpans ? (
+        {showReliability && markSpans ? (
           <InjectSpanEditor
             content={local.content}
             annotations={local.groundTruthAnnotations ?? []}
@@ -916,6 +923,40 @@ function OutcomeForm({ data, onSave }: { data: OutcomeNodeData; onSave: (d: Outc
           onChange={e => commit({ ...local, lessonLearned: e.target.value })}
           placeholder="Wat leert het team hiervan?"
         />
+      </Field>
+      <Field label="Score-bandbreedte (automatisch kiezen op cumulatieve score)">
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            placeholder="min"
+            value={local.scoreRange?.min ?? ""}
+            onChange={e => commit({
+              ...local,
+              scoreRange: {
+                ...local.scoreRange,
+                min: e.target.value === "" ? undefined : Number(e.target.value),
+              },
+            })}
+            className="h-7 w-24 font-mono text-[11px]"
+          />
+          <span className="font-mono text-[10px] text-muted-foreground">t/m</span>
+          <Input
+            type="number"
+            placeholder="max"
+            value={local.scoreRange?.max ?? ""}
+            onChange={e => commit({
+              ...local,
+              scoreRange: {
+                ...local.scoreRange,
+                max: e.target.value === "" ? undefined : Number(e.target.value),
+              },
+            })}
+            className="h-7 w-24 font-mono text-[11px]"
+          />
+        </div>
+        <p className="mt-1 font-mono text-[10px] text-muted-foreground leading-snug">
+          Beide inclusief. Laat leeg voor "geen ondergrens" / "geen bovengrens". Alleen actief als "Score" feature aan staat.
+        </p>
       </Field>
     </div>
   )

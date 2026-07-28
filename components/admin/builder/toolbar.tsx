@@ -30,7 +30,6 @@ interface Props {
   onNew: () => void
   onValidate: () => GraphIssue[]
   onPublish: () => Promise<void>
-  onAutoLayout: () => void
   saving?: boolean
 }
 
@@ -51,7 +50,6 @@ export function Toolbar({
   onNew,
   onValidate,
   onPublish,
-  onAutoLayout,
   saving,
 }: Props) {
   const [loadOpen, setLoadOpen] = useState(false)
@@ -90,8 +88,9 @@ export function Toolbar({
 
   return (
     <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-2">
-      <div className="flex flex-1 items-center gap-3">
-        <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Name</Label>
+      {/* Meta group — identity of this scenario */}
+      <div className="flex flex-1 items-center gap-2">
+        <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Naam</Label>
         <Input
           value={graph.name}
           onChange={e => onNameChange(e.target.value)}
@@ -105,20 +104,25 @@ export function Toolbar({
           {SCENARIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
       </div>
-      <div className="flex items-center gap-2">
-        <Button size="sm" variant="outline" onClick={handleNew}>New</Button>
-        <Button size="sm" variant="outline" onClick={() => setWizardOpen(true)}>AI wizard</Button>
-        <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>Templates</Button>
-        <Button size="sm" variant="outline" onClick={openLoad}>Load</Button>
-        <Button size="sm" variant="outline" onClick={() => setPlaybookOpen(true)}>Playbook / IR</Button>
-        <Button size="sm" variant="outline" onClick={onAutoLayout} title="Zet nodes netjes uit elkaar zodat je de stroom kan zien">Auto-layout</Button>
-        <Button size="sm" variant="outline" onClick={handleValidate}>Validate</Button>
-        <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>Preview</Button>
-        <Button size="sm" variant="outline" onClick={onSave} disabled={saving}>
+
+      {/* Content group — starting a new scenario or reusing existing content */}
+      <div className="flex items-center gap-1 pl-2 border-l border-border">
+        <Button size="sm" variant="ghost" onClick={handleNew} title="Nieuw leeg canvas">New</Button>
+        <Button size="sm" variant="ghost" onClick={() => setWizardOpen(true)} title="Genereer scenario met AI">AI wizard</Button>
+        <Button size="sm" variant="ghost" onClick={() => setTemplatesOpen(true)} title="Kant-en-klare voorbeeldscenario's">Templates</Button>
+        <Button size="sm" variant="ghost" onClick={openLoad} title="Laad opgeslagen graph">Load</Button>
+        <Button size="sm" variant="ghost" onClick={() => setPlaybookOpen(true)} title="IR-playbook tekst">Playbook</Button>
+      </div>
+
+      {/* Actions group — validate / preview / persist */}
+      <div className="flex items-center gap-1 pl-2 border-l border-border">
+        <Button size="sm" variant="ghost" onClick={handleValidate} title="Controleer graph op fouten">Validate</Button>
+        <Button size="sm" variant="ghost" onClick={() => setPreviewOpen(true)} title="Bekijk hoe deelnemers dit zien">Preview</Button>
+        <Button size="sm" variant="outline" onClick={onSave} disabled={saving} title="Sla wijzigingen op">
           {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
           Save
         </Button>
-        <Button size="sm" onClick={handlePublish} disabled={publishing}>
+        <Button size="sm" onClick={handlePublish} disabled={publishing} title="Publiceer naar admin dashboard">
           {publishing ? <Loader2 className="size-3.5 animate-spin" /> : null}
           Publish
         </Button>

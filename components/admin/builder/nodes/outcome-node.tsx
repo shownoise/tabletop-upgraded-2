@@ -42,6 +42,11 @@ export function OutcomeNode({ id, data, selected }: NodeProps) {
       onDelete={d.onDelete ? () => d.onDelete?.(id) : undefined}
     >
       <Handle type="target" position={Position.Left} className={`${NODE_THEME.outcome.handleColor} !size-3 !border-2 !border-background`} />
+      {d.scoreRange && (
+        <div className="mb-1 inline-flex items-center rounded-md bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[10px] text-emerald-700 dark:text-emerald-300">
+          score {d.scoreRange.min ?? "-∞"} … {d.scoreRange.max ?? "∞"}
+        </div>
+      )}
       {d.narrative ? (
         <p className="text-[11px] text-foreground/80 line-clamp-3 leading-snug">{d.narrative.slice(0, 120)}</p>
       ) : (

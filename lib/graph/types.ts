@@ -20,9 +20,14 @@ export type GraphEdgeType = "sequence" | "branch" | "outcome" | "inject"
 // undefined = legacy node, show all fields (backwards compat).
 // []        = minimal, hide every optional evaluation field.
 // non-empty = only show the fields that match the listed aspects.
+//
+// Note: 'facts_assumptions' was merged into 'reliability' — the latter now
+// controls both the BOB dropdown AND the span-editor. Legacy graphs may still
+// carry 'facts_assumptions' in their arrays; the inspector treats it as an
+// alias for 'reliability' (see normalizeAspects in evaluation-aspects.tsx).
 export type EvaluationAspect =
-  | 'reliability'          // Betrouwbaarheid (BOB) select on injects
-  | 'facts_assumptions'    // Span-editor for feit/aanname/misleidend
+  | 'reliability'          // BOB-select + span-editor (feit / aanname / misleidend)
+  | 'facts_assumptions'    // DEPRECATED — alias for reliability, kept for backwards compat
   | 'nis2'                 // nis2Relevant flag + supervision areas
   | 'decision_impact'      // scoreImpact / linkedDimension
   | 'lessons_learned'      // learning objectives / lessonLearned
@@ -122,6 +127,12 @@ export interface OutcomeNodeData {
   scoreImpact?: number
   linkedDimension?: AssessmentDimensionKey
   lessonLearned?: string
+  // Cumulatieve-score bandbreedte die deze outcome triggert. Als features.scoring
+  // aan staat en de graph meerdere outcomes met scoreRange heeft, kiest de engine
+  // automatisch de outcome waar de totaalscore in valt.
+  // min inclusief, max inclusief. Beide optioneel — laat max weg voor "≥ min",
+  // laat min weg voor "≤ max".
+  scoreRange?: { min?: number; max?: number }
 }
 
 export type GraphNodeData =
@@ -208,6 +219,21 @@ export const EYE_SECURITY_RETAINER: IrRetainerProfile = {
   scopeExcludes: ["Losgeld-onderhandeling zonder schriftelijke opdracht", "Herstel via derde partij"],
 }
 
+// Per-graph feature toggles — author decides which mechanics are in play for
+// this specific scenario. Kept intentionally coarse: turn a whole mechanic on
+// or off, no fine-grained knobs. undefined = all-on (backwards compat).
+export interface GraphFeatures {
+  reliability: boolean  // BOB-tags + span-editor beschikbaar op injects
+  compliance: boolean   // Meldplicht + coverage panel actief
+  scoring: boolean      // Score-dimensies + score-based outcome selection actief
+}
+
+export const DEFAULT_FEATURES: GraphFeatures = {
+  reliability: true,
+  compliance: true,
+  scoring: true,
+}
+
 export interface ScenarioGraph {
   id: string
   name: string
@@ -224,4 +250,5 @@ export interface ScenarioGraph {
   irPlaybook?: string
   meldplicht?: MeldplichtConfig
   irRetainerProfile?: IrRetainerProfile
+  features?: GraphFeatures
 }

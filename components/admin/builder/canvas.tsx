@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   addEdge,
   Background,
+  ControlButton,
   Controls,
   MiniMap,
   ReactFlow,
@@ -23,6 +24,7 @@ import { Palette } from "./palette"
 import { Inspector } from "./inspector"
 import { Toolbar } from "./toolbar"
 import { ComplianceRail } from "./compliance-rail"
+import { SettingsPanel } from "./settings-panel"
 import { StartNode } from "./nodes/start-node"
 import { RoundNode } from "./nodes/round-node"
 import { InjectNode } from "./nodes/inject-node"
@@ -33,7 +35,7 @@ import { WizardDialog } from "./wizard-dialog"
 import { TypedEdge } from "./edges/typed-edge"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Sparkles, FileText, Workflow } from "lucide-react"
+import { Sparkles, FileText, Workflow, LayoutGrid } from "lucide-react"
 import { EvaluationAspectPicker } from "./evaluation-aspects"
 import { autoLayout } from "./layout"
 import type {
@@ -48,7 +50,7 @@ import type {
   ScenarioGraph,
   StartNodeData,
 } from "@/lib/graph/types"
-import { EYE_SECURITY_RETAINER, DEFAULT_MELDPLICHT } from "@/lib/graph/types"
+import { EYE_SECURITY_RETAINER, DEFAULT_MELDPLICHT, DEFAULT_FEATURES } from "@/lib/graph/types"
 import { validateGraph } from "@/lib/graph/validate"
 import type { ScenarioType } from "@/lib/types"
 
@@ -87,6 +89,7 @@ function initialGraph(): ScenarioGraph {
     irRetainerName: EYE_SECURITY_RETAINER.name,
     irRetainerProfile: EYE_SECURITY_RETAINER,
     meldplicht: DEFAULT_MELDPLICHT,
+    features: DEFAULT_FEATURES,
   }
 }
 
@@ -193,8 +196,11 @@ function fromFlowEdges(edges: Edge[]): GraphEdge[] {
 function InnerCanvas() {
   const router = useRouter()
   const initial = useMemo(() => initialGraph(), [])
-  const [graphMeta, setGraphMeta] = useState<Pick<ScenarioGraph, "id" | "name" | "version" | "scenarioType" | "createdAt" | "irRetainerName" | "irPlaybook" | "meldplicht" | "irRetainerProfile">>(
-    { id: initial.id, name: initial.name, version: initial.version, scenarioType: initial.scenarioType, createdAt: initial.createdAt },
+  const [graphMeta, setGraphMeta] = useState<Pick<ScenarioGraph, "id" | "name" | "version" | "scenarioType" | "createdAt" | "irRetainerName" | "irPlaybook" | "meldplicht" | "irRetainerProfile" | "features">>(
+    {
+      id: initial.id, name: initial.name, version: initial.version, scenarioType: initial.scenarioType, createdAt: initial.createdAt,
+      irRetainerName: initial.irRetainerName, irRetainerProfile: initial.irRetainerProfile, meldplicht: initial.meldplicht, features: initial.features,
+    },
   )
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(toFlowNodes(initial))
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -414,6 +420,7 @@ function InnerCanvas() {
       irPlaybook: g.irPlaybook,
       meldplicht: g.meldplicht ?? DEFAULT_MELDPLICHT,
       irRetainerProfile: EYE_SECURITY_RETAINER,
+      features: g.features ?? DEFAULT_FEATURES,
     })
     setNodes(toFlowNodes(g))
     setEdges(toFlowEdges(g))
@@ -555,7 +562,6 @@ function InnerCanvas() {
         onNew={handleNew}
         onValidate={handleValidate}
         onPublish={handlePublish}
-        onAutoLayout={handleAutoLayout}
         saving={saving}
       />
       {status && (
@@ -575,12 +581,18 @@ function InnerCanvas() {
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Palette</span>
           </div>
           <Palette />
-          <ComplianceRail
+          <SettingsPanel
             graph={buildGraph()}
             onGraphPatch={patch => setGraphMeta(g => ({ ...g, ...patch }))}
-            onFocusNode={handleFocusNode}
-            onAutoFixCoverage={handleAutoFixCoverage}
           />
+          {(graphMeta.features?.compliance ?? DEFAULT_FEATURES.compliance) && (
+            <ComplianceRail
+              graph={buildGraph()}
+              onGraphPatch={patch => setGraphMeta(g => ({ ...g, ...patch }))}
+              onFocusNode={handleFocusNode}
+              onAutoFixCoverage={handleAutoFixCoverage}
+            />
+          )}
         </aside>
         <div ref={wrapperRef} className="relative flex-1" onDragOver={onDragOver} onDrop={onDrop}>
           <ReactFlow
@@ -602,7 +614,11 @@ function InnerCanvas() {
             proOptions={{ hideAttribution: true }}
           >
             <Background />
-            <Controls />
+            <Controls>
+              <ControlButton onClick={handleAutoLayout} title="Auto-layout — zet nodes netjes uit elkaar">
+                <LayoutGrid />
+              </ControlButton>
+            </Controls>
             <MiniMap
               pannable
               zoomable
@@ -633,6 +649,7 @@ function InnerCanvas() {
           <Inspector
             node={selectedNode}
             graphId={graphMeta.id}
+            features={graphMeta.features}
             onChange={handleNodeDataChange}
             onAddInject={handleAddInject}
             onDelete={handleDelete}
@@ -648,6 +665,7 @@ function InnerCanvas() {
         <EvaluationAspectPicker
           nodeType={aspectPicker.nodeType}
           initial={[]}
+          features={graphMeta.features}
           onConfirm={applyAspectPick}
           onSkip={() => applyAspectPick([])}
         />
