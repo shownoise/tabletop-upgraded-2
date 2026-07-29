@@ -93,5 +93,22 @@ export function getInjectRecipients(
   const planned = session.injectRoutePlan?.routes[inject.id]
   if (planned && planned.length > 0) return planned
   const presentRoles = session.participants.map(p => p.role).filter((r): r is Role => !!r)
+  // Deel B §1.3 — als er een roleResolution snapshot is, gebruik adaptieve
+  // routing (domein-fallback in plaats van rol-fallback). Zonder snapshot
+  // vallen we terug op het legacy gedrag.
+  if (session.roleResolution) {
+    // Lazy require om circular imports te vermijden (lib/graph → lib/scoring → lib/graph).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { resolveInjectRecipientsAdaptive } = require('@/lib/graph/adaptive-routing') as typeof import('@/lib/graph/adaptive-routing')
+    return resolveInjectRecipientsAdaptive({
+      inject, presentRoles, teamRoles,
+      roleResolution: {
+        effectiveOwners: session.roleResolution.effectiveOwners as Record<import('@/lib/scoring').Domain, import('@/lib/scoring').RoleId | 'NPC'>,
+        rolCoverage: session.roleResolution.rolCoverage,
+        distinctOwners: session.roleResolution.distinctOwners,
+        resolvedAt: session.roleResolution.resolvedAt,
+      },
+    })
+  }
   return resolveInjectRecipients({ inject, presentRoles, teamRoles })
 }

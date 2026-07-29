@@ -688,6 +688,7 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
       updated = withRoundPhaseState(updated, updated.currentRound, now)
       updated = pushTimeline(updated, "session_started", { roundIndex: updated.currentRound })
       updated = withIncidentDetectedAt(updated, now)
+      updated = withRoleResolution(updated, now)
       return updated
     }
     if (s.scenario.rounds.length === 0) return null
@@ -697,10 +698,39 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
     updated = withRoundPhaseState(updated, 0, now)
     updated = pushTimeline(updated, "session_started", { roundIndex: 0 })
     updated = withIncidentDetectedAt(updated, now)
+    updated = withRoleResolution(updated, now)
     return updated
   })
   if (result.ok) emit("start_session", { roundIndex: 0 })
   return result
+}
+
+// Deel B §1.2 — éénmalige rolresolutie bij session_started. Immutable snapshot;
+// bij herstart wordt niet overschreven.
+function withRoleResolution(session: SessionState, now: number): SessionState {
+  if (session.roleResolution) return session  // niet overschrijven
+  // Lazy import om circular deps te vermijden.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { resolveRoles } = require('@/lib/scoring') as typeof import('@/lib/scoring')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { toSpecRole } = require('@/lib/graph/role-adapter') as typeof import('@/lib/graph/role-adapter')
+  const specPresent = session.participants
+    .map(p => (p.role ? toSpecRole(p.role) : undefined))
+    .filter((s): s is string => !!s)
+  const resolution = resolveRoles(
+    { presentRoles: specPresent },
+    { rounds: [], decisionPoints: [], injects: [] },
+    now,
+  )
+  return {
+    ...session,
+    roleResolution: {
+      effectiveOwners: resolution.effectiveOwners,
+      rolCoverage: resolution.rolCoverage,
+      distinctOwners: resolution.distinctOwners,
+      resolvedAt: resolution.resolvedAt,
+    },
+  }
 }
 
 function withIncidentDetectedAt(session: SessionState, now: number): SessionState {

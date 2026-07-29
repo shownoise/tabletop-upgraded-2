@@ -742,6 +742,16 @@ export interface SessionState {
   // node een decision is. Scoring-info wordt tijdens play-phase gescrubd,
   // tijdens review-fase onthuld.
   activeDecision?: ActiveDecisionState
+  // Deel B §1.2 — éénmalige rolresolutie bij session_started. Immutable snapshot;
+  // scoring reproduceerbaarheid vergt dat late roster-wijzigingen deze niet muteren.
+  // Plain JSON (geen scoring-package types) — de app leest deze rechtstreeks
+  // vanaf de state en de scoring-package construeert 'm indien nodig zelf.
+  roleResolution?: {
+    effectiveOwners: Record<string, string>  // Domain → spec-RoleId (of 'NPC')
+    rolCoverage: number
+    distinctOwners: number
+    resolvedAt: number
+  }
 }
 
 export interface ActiveDecisionState {
