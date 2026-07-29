@@ -736,6 +736,27 @@ export interface SessionState {
   retainerState?: RetainerActivationState
   // Auditor-edited fields on the supervision report (chains, lessons).
   supervisionReportEdits?: SupervisionReportEdits
+  // Slim projection van de huidige/peek-ahead DecisionNode voor participants.
+  // Alleen aanwezig als de current round een decision heeft die participants
+  // mogen zien (perRole=true én phase = decision/review), of als het huidige
+  // node een decision is. Scoring-info wordt tijdens play-phase gescrubd,
+  // tijdens review-fase onthuld.
+  activeDecision?: ActiveDecisionState
+}
+
+export interface ActiveDecisionState {
+  nodeId: string
+  prompt: string
+  perRole: boolean
+  options: Array<{
+    id: string
+    label: string
+    allowedRole?: Role
+    // Alleen ingevuld in review-fase — de reveal.
+    qualityRank?: ChoiceQuality
+    facilitatorCommentary?: string
+    lessonLearned?: string
+  }>
 }
 
 export interface SupervisionReportEdits {

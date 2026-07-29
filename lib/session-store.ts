@@ -316,6 +316,55 @@ export function toParticipantState(session: SessionState): SessionState {
     // Hide the full graph and internal traversal state from participants
     graph: undefined,
     graphState: undefined,
+    activeDecision: projectActiveDecision(session),
+  }
+}
+
+// Peek-ahead: als de current node een decision is, exposeer die. Anders,
+// als current node een round is en de round-fase is 'decision' of 'review',
+// zoek de outgoing sequence-edge naar een decision-node en projecteer die.
+// Scoring-info wordt gescrubd behalve tijdens de review-fase.
+function projectActiveDecision(session: SessionState): import("./types").ActiveDecisionState | undefined {
+  if (!session.graph || !session.graphState) return undefined
+  const currentId = session.graphState.currentNodeId
+  const nodeById = new Map(session.graph.nodes.map(n => [n.id, n]))
+  const current = nodeById.get(currentId)
+  if (!current) return undefined
+
+  const isReview = session.roundPhase === 'review'
+  const phaseAllowsPeek = session.roundPhase === 'decision' || session.roundPhase === 'discussion' || isReview
+
+  let dnode: import("./graph/types").GraphNode | undefined
+  if (current.type === 'decision') {
+    dnode = current
+  } else if (current.type === 'round' && phaseAllowsPeek) {
+    // Zoek eerstvolgende decision via sequence-edges (max 1 hop diep).
+    const nextEdge = session.graph.edges.find(e => e.source === currentId && e.type === 'sequence')
+    if (nextEdge) {
+      const cand = nodeById.get(nextEdge.target)
+      if (cand?.type === 'decision') dnode = cand
+    }
+  }
+  if (!dnode) return undefined
+
+  const dd = dnode.data as import("./graph/types").DecisionNodeData
+  if (dd.perRole !== true) return undefined  // Facilitator-picks blijven verborgen voor participants
+  return {
+    nodeId: dnode.id,
+    prompt: dd.prompt,
+    perRole: true,
+    options: dd.options.map(o => ({
+      id: o.id,
+      label: o.label,
+      allowedRole: o.allowedRole,
+      ...(isReview
+        ? {
+            qualityRank: o.qualityRank,
+            facilitatorCommentary: o.facilitatorCommentary,
+            lessonLearned: o.lessonLearned,
+          }
+        : {}),
+    })),
   }
 }
 
@@ -471,7 +520,14 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
       if (updated.graph) {
         const chasers = evaluateChasersOnRoundStart(updated.graph, updated, roundNumber)
         if (chasers.length > 0) {
-          const chasePushes = chasers.map(inj => ({ inject: inj, roundIndex, pushedAt: now }))
+          // Chasers respecteren ook deliverySeconds — anders komt bij ronde-start
+          // álles tegelijk binnen als er meerdere chasers zijn. Default 60s
+          // vertraging als de author geen deliverySeconds heeft gezet.
+          const chasePushes = chasers.map((inj, i) => ({
+            inject: inj,
+            roundIndex,
+            pushedAt: now + ((inj.deliverySeconds ?? (60 + i * 45)) * 1000),
+          }))
           const flagUpdates: Record<string, boolean> = { ...(updated.flags ?? {}) }
           for (const c of chasers) {
             // best-effort: mark chaser as fired keyed by inject id
@@ -575,8 +631,19 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
 
 function triggerEngine(session: SessionState, trigger: EngineTrigger): SessionState {
   if (!session.graph || !session.graphState) return session
-  const step = stepFromNode(session.graph, session.graphState.currentNodeId, trigger)
-  return applyEngineStep(session, step)
+  let updated = applyEngineStep(session, stepFromNode(session.graph, session.graphState.currentNodeId, trigger))
+  // Cascade voorbij soft-perRole decisions: die zijn tijdens de ronde
+  // afgehandeld via peek-ahead + submitDecision. Blijven staan op zo'n
+  // decision-node zou een extra facilitator-klik vereisen.
+  for (let hops = 0; hops < 3; hops++) {
+    if (!updated.graph || !updated.graphState) break
+    const cur = updated.graph.nodes.find(n => n.id === updated.graphState!.currentNodeId)
+    if (!cur || cur.type !== 'decision') break
+    const dd = cur.data as import("./graph/types").DecisionNodeData
+    if (dd.advancesGraph !== false || dd.perRole !== true) break
+    updated = applyEngineStep(updated, stepFromNode(updated.graph, updated.graphState.currentNodeId, { kind: "facilitator_next" }))
+  }
+  return updated
 }
 
 // ─── Session operations ───────────────────────────────────────
@@ -1071,32 +1138,31 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
   const round = session.scenario.rounds[input.roundIndex]
   if (!round) return { ok: false, error: "Invalid round." }
 
-  // Lookup #1: legacy roleAction op de ronde. Lookup #2: option op de huidige
-  // graph-DecisionNode. Zo werkt één submit-endpoint voor beide authoring-paden.
+  // Lookup #1: legacy roleAction op de ronde. Lookup #2: option in ÉLKE
+  // DecisionNode in de graph (option-ids zijn uniek, dus dit is veilig en
+  // ondersteunt het peek-ahead scenario waarin het huidige node nog de round is).
   let action: RoleAction | undefined = round.roleActions?.find(a => a.id === input.actionId)
-  if (!action && session.graph && session.graphState) {
-    const node = session.graph.nodes.find(n => n.id === session.graphState!.currentNodeId)
-    if (node?.type === 'decision') {
+  if (!action && session.graph) {
+    for (const node of session.graph.nodes) {
+      if (node.type !== 'decision') continue
       const dd = node.data as DecisionNodeData
       const opt = dd.options.find(o => o.id === input.actionId)
-      if (opt) {
-        // Map de optie op de RoleAction-shape zodat de rest van submitDecision
-        // ongewijzigd blijft werken (governance flags, scoring, timeline).
-        action = {
-          id: opt.id,
-          label: opt.label,
-          description: opt.label,
-          allowedRoles: opt.allowedRole ? [opt.allowedRole] : [],
-          isRecommended: opt.qualityRank === 'best',
-          irPlanAligned: opt.qualityRank !== 'wrong',
-          scoreImpact: opt.scoreImpact,
-          linkedDimension: opt.linkedDimension,
-          scoreImpacts: opt.scoreImpacts,
-          qualityRank: opt.qualityRank,
-          facilitatorCommentary: opt.facilitatorCommentary,
-          lessonLearned: opt.lessonLearned,
-        }
+      if (!opt) continue
+      action = {
+        id: opt.id,
+        label: opt.label,
+        description: opt.label,
+        allowedRoles: opt.allowedRole ? [opt.allowedRole] : [],
+        isRecommended: opt.qualityRank === 'best',
+        irPlanAligned: opt.qualityRank !== 'wrong',
+        scoreImpact: opt.scoreImpact,
+        linkedDimension: opt.linkedDimension,
+        scoreImpacts: opt.scoreImpacts,
+        qualityRank: opt.qualityRank,
+        facilitatorCommentary: opt.facilitatorCommentary,
+        lessonLearned: opt.lessonLearned,
       }
+      break
     }
   }
   if (!action) return { ok: false, error: "Invalid action." }

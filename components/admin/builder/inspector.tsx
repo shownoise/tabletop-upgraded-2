@@ -228,25 +228,11 @@ function RoundForm({
 
   return (
     <div className="flex flex-col gap-3">
-      <AspectPillBar
-        aspects={local.evaluationAspects}
-        nodeType="round"
-        features={features}
-        onChange={next => commit({ ...local, evaluationAspects: next })}
-      />
-      <DynamicFillSection
-        value={local.dynamic}
-        onChange={next => commit({ ...local, dynamic: next })}
-      />
-      <AiPromptSection
-        kind="round"
-        value={local.aiPromptTemplate}
-        onChange={next => commit({ ...local, aiPromptTemplate: next })}
-      />
-      <Field label="Title">
+      {/* Primary — de 3 velden die je bijna altijd nodig hebt */}
+      <Field label="Titel">
         <Input value={local.title} onChange={e => commit({ ...local, title: e.target.value })} />
       </Field>
-      <Field label="Situation update">
+      <Field label="Situatie">
         <Textarea
           rows={5}
           value={local.situation_update}
@@ -254,7 +240,7 @@ function RoundForm({
           className={local.dynamic?.enabled ? "border-l-4 border-l-amber-500/60" : undefined}
         />
       </Field>
-      <Field label="Timer (minutes)">
+      <Field label="Timer (minuten)">
         <Input
           type="number"
           min={1}
@@ -262,66 +248,63 @@ function RoundForm({
           onChange={e => commit({ ...local, timerMinutes: e.target.value ? Number(e.target.value) : undefined })}
         />
       </Field>
-      <Field label="BOB fase">
-        <select
-          value={local.bobPhase ?? ""}
-          onChange={e => commit({ ...local, bobPhase: e.target.value ? (e.target.value as BobPhase) : undefined })}
-          className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-        >
-          <option value="">— geen —</option>
-          <option value="beeldvorming">Beeldvorming (feiten verzamelen)</option>
-          <option value="oordeel">Oordeelsvorming (opties wegen)</option>
-          <option value="besluit">Besluitvorming (kiezen)</option>
-        </select>
-      </Field>
-      <Field label="Opening prompts (BOB-kickstart)">
-        <StringListEditor
-          value={local.openingPrompts ?? []}
-          onChange={v => commit({ ...local, openingPrompts: v.length ? v : undefined })}
-          placeholder="Wat weten we zeker? Wat is aanname?"
-        />
-      </Field>
-      <Field label="IR-perspectief (alleen facilitator)">
-        <Textarea
-          rows={4}
-          value={local.facilitatorPerspective ?? ""}
-          onChange={e => commit({ ...local, facilitatorPerspective: e.target.value || undefined })}
-          placeholder="Als IR-consultant zou je nu adviseren: ... Deze tekst zie jij als facilitator in story-view."
-          className="text-xs"
-        />
-      </Field>
 
-      <Section title="Role actions" count={local.roleActions?.length ?? 0}>
-        <RoleActionsEditor
-          value={local.roleActions ?? []}
-          onChange={(v: RoleAction[]) => commit({ ...local, roleActions: v })}
-          suggestedIdPrefix={nodeId.slice(0, 6)}
-        />
-      </Section>
-
-      <Section title="Facilitator notes">
-        <FacilitatorNotesEditor
-          value={local.facilitatorNotes}
-          onChange={(v: FacilitatorNotes) => commit({ ...local, facilitatorNotes: v })}
-        />
-      </Section>
-
-      {showLessons && (
-        <Section title="Learning objectives" count={local.learningObjectives?.length ?? 0}>
-          <LearningObjectivesEditor
-            value={local.learningObjectives ?? []}
-            onChange={(v: LearningObjective[]) => commit({ ...local, learningObjectives: v })}
-          />
-        </Section>
-      )}
-
-      <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-        <Button type="button" variant="outline" size="sm" onClick={onAddInject}>Add inject</Button>
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Button type="button" variant="outline" size="sm" onClick={onAddInject}>+ Inject</Button>
         <Button type="button" variant="outline" size="sm" onClick={aiFill} disabled={aiBusy}>
           {aiBusy ? "AI…" : "AI-fill"}
         </Button>
       </div>
       {aiError && <p className="text-[11px] text-destructive">{aiError}</p>}
+
+      {/* Geavanceerd — alles wat je zelden nodig hebt in één details */}
+      <Section title="Geavanceerd">
+        <div className="flex flex-col gap-3">
+          <DynamicFillSection value={local.dynamic} onChange={next => commit({ ...local, dynamic: next })} />
+          <AiPromptSection kind="round" value={local.aiPromptTemplate} onChange={next => commit({ ...local, aiPromptTemplate: next })} />
+          <Field label="IR-perspectief (alleen facilitator ziet dit)">
+            <Textarea
+              rows={3}
+              value={local.facilitatorPerspective ?? ""}
+              onChange={e => commit({ ...local, facilitatorPerspective: e.target.value || undefined })}
+              placeholder="Als IR-consultant zou je nu adviseren: ..."
+              className="text-xs"
+            />
+          </Field>
+          <Field label="Aspecten voor rapportage">
+            <AspectPillBar
+              aspects={local.evaluationAspects}
+              nodeType="round"
+              features={features}
+              onChange={next => commit({ ...local, evaluationAspects: next })}
+            />
+          </Field>
+        </div>
+      </Section>
+
+      {(local.facilitatorNotes || (local.roleActions?.length ?? 0) > 0 || (local.learningObjectives?.length ?? 0) > 0) && (
+        <Section title="Legacy — facilitator notes / role actions / leerdoelen">
+          <div className="flex flex-col gap-3">
+            <FacilitatorNotesEditor
+              value={local.facilitatorNotes}
+              onChange={(v: FacilitatorNotes) => commit({ ...local, facilitatorNotes: v })}
+            />
+            {(local.roleActions?.length ?? 0) > 0 && (
+              <RoleActionsEditor
+                value={local.roleActions ?? []}
+                onChange={(v: RoleAction[]) => commit({ ...local, roleActions: v })}
+                suggestedIdPrefix={nodeId.slice(0, 6)}
+              />
+            )}
+            {showLessons && (local.learningObjectives?.length ?? 0) > 0 && (
+              <LearningObjectivesEditor
+                value={local.learningObjectives ?? []}
+                onChange={(v: LearningObjective[]) => commit({ ...local, learningObjectives: v })}
+              />
+            )}
+          </div>
+        </Section>
+      )}
     </div>
   )
 }
@@ -352,60 +335,19 @@ function InjectForm({ data, features, onSave }: { data: InjectNodeData; features
     onSave(next)
   }
 
-  // Reliability now covers both the BOB-select AND the span-editor for feit/aanname/misleidend.
-  const showReliability = isAspectActive(local.evaluationAspects, 'reliability')
   const showNis2 = isAspectActive(local.evaluationAspects, 'nis2')
+  // markSpans + participantPreview + reliability: legacy state, alleen nog
+  // gebruikt als de author expliciet het toggle-vinkje aan zet. Uit standaard.
+  void markSpans
 
   return (
     <div className="flex flex-col gap-3">
-      <AspectPillBar
-        aspects={local.evaluationAspects}
-        nodeType="inject"
-        features={features}
-        onChange={next => commit({ ...local, evaluationAspects: next })}
-      />
-      <DynamicFillSection
-        value={local.dynamic}
-        onChange={next => commit({ ...local, dynamic: next })}
-      />
-      <AiPromptSection
-        kind="inject"
-        value={local.aiPromptTemplate}
-        onChange={next => commit({ ...local, aiPromptTemplate: next })}
-      />
-      <div className="flex flex-wrap items-center gap-3 rounded border border-border bg-background/40 px-2 py-1.5">
-        {showReliability && (
-          <label className="flex items-center gap-1 text-[11px]">
-            <input
-              type="checkbox"
-              checked={markSpans}
-              onChange={e => setMarkSpans(e.target.checked)}
-              className="size-3"
-            />
-            <span>Markeer spans</span>
-          </label>
-        )}
-        <label className="flex items-center gap-1 text-[11px]">
-          <input
-            type="checkbox"
-            checked={participantPreview}
-            onChange={e => setParticipantPreview(e.target.checked)}
-            className="size-3"
-          />
-          <span>Test kijk (participant preview)</span>
-        </label>
-      </div>
-      <Field label="Title">
+      {/* Primary — de velden die je bijna altijd nodig hebt */}
+      <Field label="Titel">
         <Input value={local.title} onChange={e => commit({ ...local, title: e.target.value })} />
       </Field>
-      <Field label="Content">
-        {showReliability && markSpans ? (
-          <InjectSpanEditor
-            content={local.content}
-            annotations={local.groundTruthAnnotations ?? []}
-            onChange={anns => commit({ ...local, groundTruthAnnotations: anns.length ? anns : undefined })}
-          />
-        ) : participantPreview ? (
+      <Field label="Inhoud">
+        {participantPreview ? (
           <div className="whitespace-pre-wrap rounded border border-border bg-background px-2 py-1.5 text-xs">
             {local.content || <span className="text-muted-foreground italic">— leeg —</span>}
           </div>
@@ -419,16 +361,7 @@ function InjectForm({ data, features, onSave }: { data: InjectNodeData; features
         )}
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Type">
-          <select
-            value={local.type}
-            onChange={e => commit({ ...local, type: e.target.value as InjectType })}
-            className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-          >
-            {INJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </Field>
-        <Field label="Channel">
+        <Field label="Kanaal">
           <select
             value={local.channel ?? ""}
             onChange={e => commit({ ...local, channel: e.target.value ? (e.target.value as InjectChannel) : undefined })}
@@ -438,7 +371,7 @@ function InjectForm({ data, features, onSave }: { data: InjectNodeData; features
             {INJECT_CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </Field>
-        <Field label="Urgency">
+        <Field label="Urgentie">
           <select
             value={local.urgency}
             onChange={e => commit({ ...local, urgency: e.target.value as Urgency })}
@@ -447,14 +380,7 @@ function InjectForm({ data, features, onSave }: { data: InjectNodeData; features
             {URGENCIES.map(u => <option key={u} value={u}>{u}</option>)}
           </select>
         </Field>
-        <Field label="Timestamp">
-          <Input
-            value={local.timestamp ?? ""}
-            onChange={e => commit({ ...local, timestamp: e.target.value || undefined })}
-            placeholder="HH:MM"
-          />
-        </Field>
-        <Field label="Delivery delay (sec after round start)">
+        <Field label="Vertraging (sec na ronde-start)">
           <Input
             type="number"
             min={0}
@@ -463,101 +389,106 @@ function InjectForm({ data, features, onSave }: { data: InjectNodeData; features
             placeholder="0 = direct"
           />
         </Field>
-        {showReliability && (
-          <Field label="Betrouwbaarheid (BOB)">
-            <select
-              value={local.reliability ?? ""}
-              onChange={e => commit({ ...local, reliability: e.target.value ? (e.target.value as InjectReliability) : undefined })}
-              className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-            >
-              <option value="">— niet gespecificeerd —</option>
-              <option value="fact">✓ Feit (bevestigd)</option>
-              <option value="assumption">? Aanname</option>
-              <option value="misleading">✗ Misleidend (verborgen voor participant)</option>
-            </select>
-            <p className="mt-1 font-mono text-[10px] text-muted-foreground leading-snug">
-              Alleen jij (facilitator) ziet dit. Participanten moeten zelf de betrouwbaarheid bepalen.
-            </p>
-          </Field>
-        )}
+        <Field label="Doelteam">
+          <select
+            value={local.targetTeam ?? "all"}
+            onChange={e => commit({ ...local, targetTeam: e.target.value as "all" | "crisis_management" | "technical_it" })}
+            className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
+          >
+            <option value="all">Iedereen</option>
+            <option value="crisis_management">Crisis-team</option>
+            <option value="technical_it">Technisch team</option>
+          </select>
+        </Field>
       </div>
+      <label className="flex items-center gap-2 text-[11px]">
+        <input
+          type="checkbox"
+          checked={participantPreview}
+          onChange={e => setParticipantPreview(e.target.checked)}
+          className="size-3"
+        />
+        <span>Preview zoals participant het ziet</span>
+      </label>
 
-      <Section title="Sender">
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-1">
-            <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Source</Label>
+      {/* Geavanceerd — alles wat je zelden nodig hebt */}
+      <Section title="Geavanceerd">
+        <div className="flex flex-col gap-3">
+          <DynamicFillSection value={local.dynamic} onChange={next => commit({ ...local, dynamic: next })} />
+          <AiPromptSection kind="inject" value={local.aiPromptTemplate} onChange={next => commit({ ...local, aiPromptTemplate: next })} />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Type">
+              <select
+                value={local.type}
+                onChange={e => commit({ ...local, type: e.target.value as InjectType })}
+                className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
+              >
+                {INJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </Field>
+            <Field label="Tijdstempel">
+              <Input
+                value={local.timestamp ?? ""}
+                onChange={e => commit({ ...local, timestamp: e.target.value || undefined })}
+                placeholder="HH:MM"
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-1 gap-1.5">
             <Input
               value={local.source ?? ""}
               onChange={e => commit({ ...local, source: e.target.value || undefined })}
-              placeholder="Organisation or system"
-              className="h-8"
+              placeholder="Bron (organisatie of systeem)"
+              className="h-8 text-xs"
             />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Sender name</Label>
             <Input
               value={local.senderName ?? ""}
               onChange={e => commit({ ...local, senderName: e.target.value || undefined })}
-              className="h-8"
+              placeholder="Naam afzender"
+              className="h-8 text-xs"
             />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Sender handle</Label>
             <Input
               value={local.senderHandle ?? ""}
               onChange={e => commit({ ...local, senderHandle: e.target.value || undefined })}
-              placeholder="@handle or +31…"
-              className="h-8"
+              placeholder="@handle of nummer"
+              className="h-8 text-xs"
             />
           </div>
-        </div>
-      </Section>
-
-      <Section title="Targeting">
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-1">
-            <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Target team</Label>
-            <select
-              value={local.targetTeam ?? "all"}
-              onChange={e => commit({ ...local, targetTeam: e.target.value as "all" | "crisis_management" | "technical_it" })}
-              className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-            >
-              <option value="all">All</option>
-              <option value="crisis_management">Crisis management</option>
-              <option value="technical_it">Technical / IT</option>
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              Target roles (overrides team)
-            </Label>
+          <Field label="Alleen naar bepaalde rollen">
             <TargetRolesEditor
               value={local.targetRoles}
               onChange={(v: Role[] | undefined) => commit({ ...local, targetRoles: v })}
             />
-          </div>
+          </Field>
+          <Field label="Aspecten voor rapportage">
+            <AspectPillBar
+              aspects={local.evaluationAspects}
+              nodeType="inject"
+              features={features}
+              onChange={next => commit({ ...local, evaluationAspects: next })}
+            />
+          </Field>
           {showNis2 && (
-            <label className="flex items-center gap-2 text-[11px] pt-1">
-              <input
-                type="checkbox"
-                checked={local.nis2Relevant ?? false}
-                onChange={e => commit({ ...local, nis2Relevant: e.target.checked || undefined })}
-                className="size-3"
-              />
-              <span>NIS2 relevant</span>
-            </label>
+            <>
+              <label className="flex items-center gap-2 text-[11px]">
+                <input
+                  type="checkbox"
+                  checked={local.nis2Relevant ?? false}
+                  onChange={e => commit({ ...local, nis2Relevant: e.target.checked || undefined })}
+                  className="size-3"
+                />
+                <span>NIS2 relevant</span>
+              </label>
+              <Field label="Testgebieden (toezichthouder)">
+                <SupervisionAreasSelect
+                  value={local.supervisionAreas ?? []}
+                  onChange={v => commit({ ...local, supervisionAreas: v.length ? v : undefined })}
+                />
+              </Field>
+            </>
           )}
         </div>
       </Section>
-
-      {showNis2 && (
-        <Section title="Testgebieden (toezichthouder)" count={local.supervisionAreas?.length ?? 0}>
-          <SupervisionAreasSelect
-            value={local.supervisionAreas ?? []}
-            onChange={v => commit({ ...local, supervisionAreas: v.length ? v : undefined })}
-          />
-        </Section>
-      )}
     </div>
   )
 }

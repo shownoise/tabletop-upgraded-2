@@ -1,11 +1,11 @@
 "use client"
 
 import { Shield, ThumbsUp, ThumbsDown, AlertTriangle } from "lucide-react"
-import type { SessionState, SubmittedDecision, RoleAction, ChoiceQuality } from "@/lib/types"
+import type { ActiveDecisionState, ChoiceQuality, SessionState, SubmittedDecision } from "@/lib/types"
 
 // Review-fase panel: laat participants zien wat wij (IR-retainer) van hun keuze
-// vinden. Gebruikt facilitatorCommentary + qualityRank die alleen tijdens de
-// review-fase door toParticipantState wordt onthuld.
+// vinden. Leest uit activeDecision.options — die zijn tijdens review-fase
+// gevuld met qualityRank + facilitatorCommentary + lessonLearned.
 interface Props {
   session: SessionState
   participantId: string
@@ -21,8 +21,8 @@ const QUALITY_META: Record<ChoiceQuality, { label: string; Icon: typeof ThumbsUp
 
 export function ReviewCommentary({ session, participantId, roundIndex }: Props) {
   if (session.roundPhase !== 'review') return null
-  const round = session.scenario.rounds[roundIndex]
-  if (!round?.roleActions?.length) return null
+  const ad = (session as unknown as { activeDecision?: ActiveDecisionState }).activeDecision
+  if (!ad || ad.options.length === 0) return null
 
   const mine: SubmittedDecision[] = (session.submittedDecisions ?? [])
     .filter(d => d.participantId === participantId && d.roundIndex === roundIndex)
@@ -38,8 +38,8 @@ export function ReviewCommentary({ session, participantId, roundIndex }: Props) 
       </div>
       <div className="flex flex-col divide-y divide-border">
         {mine.map(dec => {
-          const action = round.roleActions?.find(a => a.id === dec.actionId) as RoleAction | undefined
-          const rank: ChoiceQuality | undefined = action?.qualityRank
+          const opt = ad.options.find(o => o.id === dec.actionId)
+          const rank = opt?.qualityRank
           const meta = rank ? QUALITY_META[rank] : null
           return (
             <div key={dec.actionId} className={`p-4 flex flex-col gap-2 ${meta?.bg ?? ""}`}>
@@ -51,15 +51,15 @@ export function ReviewCommentary({ session, participantId, roundIndex }: Props) 
                 <span className="text-xs text-tt-dim">·</span>
                 <span className="font-mono text-[10px] text-tt-dim">{dec.actionLabel}</span>
               </div>
-              {action?.facilitatorCommentary && (
+              {opt?.facilitatorCommentary && (
                 <p className="text-sm leading-relaxed text-foreground">
-                  {action.facilitatorCommentary}
+                  {opt.facilitatorCommentary}
                 </p>
               )}
-              {action?.lessonLearned && (
+              {opt?.lessonLearned && (
                 <div className="border-l-2 border-tt-accent/40 pl-3 py-1">
                   <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim block mb-0.5">Lessons learned</span>
-                  <span className="text-xs text-tt-dim italic">{action.lessonLearned}</span>
+                  <span className="text-xs text-tt-dim italic">{opt.lessonLearned}</span>
                 </div>
               )}
             </div>

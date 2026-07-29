@@ -304,23 +304,6 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
             </div>
           )}
 
-          <div className="border border-tt-border bg-tt-bright/5 px-4 py-3">
-            <p className="font-mono text-[9px] uppercase tracking-widest text-tt-dim mb-2">
-              {tr(lang, "roundIntro")}
-            </p>
-            <ul className="flex flex-col gap-1.5">
-              {[
-                tr(lang, "roundInstruction1"),
-                tr(lang, "roundInstruction2"),
-                tr(lang, "roundInstruction3"),
-              ].map((s, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="font-mono text-[10px] shrink-0" style={{ color: severityColor }}>→</span>
-                  <span className="font-mono text-[10px] text-tt-dim">{s}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
       )}
     </div>
@@ -487,8 +470,9 @@ function RoleDocumentsPanel({ docs }: { docs: RoleDocument[] }) {
 }
 
 // ─── Decision ticket — één UI voor graph-DecisionNodes ───
-// perRole=true → participants submitten zelf (elke rol z'n eigen optie),
-// perRole=false → facilitator picks (read-only voor participants).
+// perRole=true → participants submitten zelf. Leest van activeDecision
+// (peek-ahead vanuit de round tijdens decision-fase). qualityRank + commentary
+// zijn alleen bevolkt in review-fase.
 function DecisionTicket({
   session,
   participantId,
@@ -501,34 +485,24 @@ function DecisionTicket({
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const graphState = (session as unknown as { graphState?: { currentNodeId: string } }).graphState
-  const graph = (session as unknown as { graph?: { nodes: Array<{ id: string; type: string; data: unknown }> } }).graph
-  if (!graph || !graphState) return null
-  const currentNode = graph.nodes.find(n => n.id === graphState.currentNodeId)
-  if (!currentNode || currentNode.type !== "decision") return null
-  const dd = currentNode.data as {
-    prompt: string
-    measuredBy: string
-    advancesGraph?: boolean
-    perRole?: boolean
-    options: Array<{ id: string; label: string; roleActionId?: string; allowedRole?: Role }>
-  }
+  const ad = (session as unknown as { activeDecision?: {
+    nodeId: string; prompt: string; perRole: boolean
+    options: Array<{ id: string; label: string; allowedRole?: Role }>
+  } }).activeDecision
+  if (!ad || !ad.perRole) return null
 
-  const isFacilitator = dd.measuredBy === "facilitator_trigger"
-  const isPerRole = dd.perRole === true
-  const canSubmit = isPerRole && !!participantId && !!participantRole
+  const canSubmit = !!participantId && !!participantRole
   const roundIndex = session.currentRound
 
-  // Al ingediend voor deze ronde? Toon locked staat.
   const already = (session.submittedDecisions ?? []).find(
     d => d.participantId === participantId && d.roundIndex === roundIndex,
   )
 
   // Rol-fallback: als geen enkele optie mijn rol match, alle opties open.
   const mine = participantRole
-    ? dd.options.filter(o => !o.allowedRole || o.allowedRole === participantRole)
-    : dd.options
-  const visibleOptions = mine.length > 0 ? mine : dd.options
+    ? ad.options.filter(o => !o.allowedRole || o.allowedRole === participantRole)
+    : ad.options
+  const visibleOptions = mine.length > 0 ? mine : ad.options
 
   async function pick(optionId: string) {
     if (!participantId || !participantRole || !canSubmit) return
@@ -549,13 +523,7 @@ function DecisionTicket({
     }
   }
 
-  const headline = already
-    ? "Jouw keuze is ingediend"
-    : isFacilitator
-      ? "Facilitator neemt besluit"
-      : isPerRole
-        ? "Kies voor jouw rol"
-        : "Team-beslissing gevraagd"
+  const headline = already ? "Jouw keuze is ingediend" : "Kies voor jouw rol"
 
   return (
     <div className="rounded-xl border-2 border-yellow-500/40 bg-yellow-500/5 px-4 py-3 flex flex-col gap-2">
@@ -564,15 +532,15 @@ function DecisionTicket({
         <span className="font-mono text-[11px] uppercase tracking-wider text-yellow-700 dark:text-yellow-400">
           {headline}
         </span>
-        {participantRole && isPerRole && (
+        {participantRole && (
           <span className="font-mono text-[9px] rounded-full border border-yellow-500/40 px-1.5 py-0.5 text-yellow-700 dark:text-yellow-400">
             {ROLE_META[participantRole]?.label ?? participantRole}
           </span>
         )}
       </div>
-      <p className="text-sm font-medium">{dd.prompt}</p>
+      <p className="text-sm font-medium">{ad.prompt}</p>
       {already && (
-        <div className="rounded border border-emerald-500/40 bg-emerald-500/5 px-2 py-1.5 text-xs">
+        <div className="rounded border border-tt-border bg-tt-bright/5 px-2 py-1.5 text-xs">
           Ingediend: <span className="font-medium">{already.actionLabel}</span>
         </div>
       )}
@@ -588,14 +556,14 @@ function DecisionTicket({
               disabled={!canSubmit || !!already || isSubmitting}
               className={`flex items-center gap-2 rounded border px-2 py-1.5 text-xs text-left transition-colors ${
                 isThisChoice
-                  ? "border-emerald-500/60 bg-emerald-500/10"
+                  ? "border-tt-accent/60 bg-tt-accent/5"
                   : canSubmit && !already
                     ? "border-border bg-background hover:border-yellow-500/60 hover:bg-yellow-500/5 cursor-pointer"
                     : "border-border bg-background/40 cursor-default"
               }`}
             >
-              <span className={isThisChoice ? "text-emerald-600" : "text-yellow-600 dark:text-yellow-400"}>
-                {isThisChoice ? "✓" : "→"}
+              <span className={isThisChoice ? "text-tt-accent" : "text-yellow-600 dark:text-yellow-400"}>
+                {isThisChoice ? "•" : "→"}
               </span>
               <span className="flex-1">{opt.label}</span>
               {opt.allowedRole && (

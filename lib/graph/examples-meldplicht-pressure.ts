@@ -164,7 +164,7 @@ export function meldplichtPressureExample(): ScenarioGraph {
             content:
               "MDR-team stopt met alert-follow-up: geen escalatie ontvangen, ze zetten het incident op 'awaiting client'. " +
               "Attacker heeft 4 uur ruimte gekregen om lateraal te bewegen. " +
-              "\n\n[Facilitator-hint] Dit is de kostenpost van 'wachten tot ochtend' — je krijgt geen tweede kans in R2.",
+              "",
             source: "MDR", senderName: "MDR SOC", timestamp: "07:12",
             targetTeam: "all", reliability: "fact",
           },
@@ -270,7 +270,7 @@ export function meldplichtPressureExample(): ScenarioGraph {
             title: "AP heeft signaal opgevangen — komt bij ons",
             content:
               "AP mailt: 'wij ontvingen een klacht van klant X over vermoedelijk PII-lek. Kunt u toelichten of u dit gemeld heeft?' " +
-              "\n\n[Facilitator-hint] Als je de 72u-melding niet zelf opende, komt de AP nú naar jou — proactief. " +
+              "" +
               "Boete-risico stijgt substantieel.",
             source: "Autoriteit Persoonsgegevens", senderName: "AP toezicht", timestamp: "17:22",
             targetTeam: "all", reliability: "fact",
@@ -390,7 +390,7 @@ export function meldplichtPressureExample(): ScenarioGraph {
             content:
               "NRC publiceert 17:58: 'Woordvoerder ontkent dat klantdata is buitgemaakt' — terwijl Eye Security in R2 exfiltratie bevestigde. " +
               "Twitter pikt de tegenspraak op binnen 6 minuten. " +
-              "\n\n[Facilitator-hint] Dit is waarom 'we hebben niks te verbergen' zonder afstemming forensics gevaarlijk is. Verhaal loopt door, maar reputatiepunt verloren.",
+              "",
             source: "NRC", senderName: "M. Vermeulen", timestamp: "17:58",
             targetTeam: "all", reliability: "fact",
           },
@@ -487,7 +487,7 @@ export function meldplichtPressureExample(): ScenarioGraph {
             title: "OFAC-listing geconstateerd door forensics",
             content:
               "Eye Security laat weten: attacker-wallet is 1 hop verwijderd van een OFAC-sanctielijst-cluster (bekende Russische groep). " +
-              "\n\n[Facilitator-hint] Als je had gekozen om te betalen, was dit een sanctie-overtreding geworden. Verhaal loopt door, punt is duur gemaakt.",
+              "",
             source: "Eye Security", senderName: "Eye compliance", timestamp: "20:14",
             targetTeam: "all", reliability: "fact",
           },
