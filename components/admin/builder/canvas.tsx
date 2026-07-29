@@ -224,23 +224,45 @@ function InnerCanvas() {
 
   const handleAutoFixCoverage = useCallback((areaId: string) => {
     const id = `dec_${areaId}_${Math.random().toString(36).slice(2, 6)}`
-    // WHY: anchor new nodes near the Start node so they land inside the viewport
-    // instead of at (0,0) which is off-screen once the graph has been panned.
     const startNode = nodes.find(n => n.type === "start")
     const anchor = startNode
       ? { x: startNode.position.x + 320, y: startNode.position.y + 120 + Math.random() * 120 }
       : { x: 320, y: 240 + Math.random() * 120 }
+    const areaLabel = areaId.replace(/_/g, " ")
+    // Auto-fix maakt een perRole DecisionNode met 2 placeholder per-rol opties
+    // (CISO + Legal — meest voorkomend voor compliance-testgebieden). Author
+    // vult de vraag/labels/scoring in via de inspector.
     const newFlowNode: Node = {
       id,
       type: "decision",
       position: anchor,
       data: {
         kind: "decision",
-        prompt: `Beslissing over ${areaId.replace(/_/g, " ")}`,
+        prompt: `Wat doen we m.b.t. ${areaLabel}?`,
         measuredBy: "participant_choice",
+        advancesGraph: false,
+        perRole: true,
         options: [
-          { id: `opt_${Math.random().toString(36).slice(2, 6)}`, label: "Optie A" },
-          { id: `opt_${Math.random().toString(36).slice(2, 6)}`, label: "Optie B" },
+          {
+            id: `opt_${Math.random().toString(36).slice(2, 6)}`,
+            label: `CISO — pro-actieve stap voor ${areaLabel}`,
+            allowedRole: "ciso",
+            scoreImpacts: { compliance_awareness: 2, decision_quality: 1 },
+            qualityRank: "best",
+          },
+          {
+            id: `opt_${Math.random().toString(36).slice(2, 6)}`,
+            label: `Legal — vastlegging + juridisch afdekken`,
+            allowedRole: "legal",
+            scoreImpacts: { compliance_awareness: 2, communication_clarity: 1 },
+            qualityRank: "best",
+          },
+          {
+            id: `opt_${Math.random().toString(36).slice(2, 6)}`,
+            label: "Uitstellen tot volgende ronde",
+            scoreImpacts: { compliance_awareness: -2, decision_speed: -1 },
+            qualityRank: "poor",
+          },
         ],
         supervisionAreas: [areaId as never],
       } as unknown as Record<string, unknown>,

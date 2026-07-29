@@ -18,6 +18,7 @@ import type {
   RoundNodeData,
   SpecialNodeData,
 } from "@/lib/graph/types"
+import type { ChoiceQuality, ScoreImpacts } from "@/lib/types"
 import { DYNAMIC_FILL_TOKENS } from "@/lib/graph/types"
 import { AspectPillBar, isAspectActive } from "./evaluation-aspects"
 import { ROLE_META } from "@/lib/types"
@@ -751,6 +752,15 @@ function DecisionForm({
         />
         <span>Beslissing laat graph vertakken (uit = alleen scoring, geen branch)</span>
       </label>
+      <label className="flex items-center gap-2 text-[11px]">
+        <input
+          type="checkbox"
+          checked={local.perRole === true}
+          onChange={e => commit({ ...local, perRole: e.target.checked || undefined })}
+          className="size-3"
+        />
+        <span>Elke rol kiest eigen optie (per-rol keuzes ipv één facilitator-pick)</span>
+      </label>
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Options</span>
@@ -763,57 +773,13 @@ function DecisionForm({
         </div>
         {aiError && <p className="text-[11px] text-destructive">{aiError}</p>}
         {local.options.map((opt, idx) => (
-          <div key={opt.id} className="flex flex-col gap-1 rounded border border-border bg-background p-2">
-            <div className="flex items-center gap-2">
-              <Input
-                value={opt.label}
-                onChange={e => updateOption(idx, { label: e.target.value })}
-                placeholder="Label"
-                className="h-7"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => removeOption(idx)}
-                className="h-7 text-destructive"
-              >
-                Remove
-              </Button>
-            </div>
-            <Input
-              value={opt.roleActionId ?? ""}
-              onChange={e => updateOption(idx, { roleActionId: e.target.value || undefined })}
-              placeholder="Optional: matching roleAction id"
-              className="h-7 font-mono text-[11px]"
-            />
-            <div className="flex items-center gap-1.5">
-              <select
-                value={opt.linkedDimension ?? ""}
-                onChange={e => updateOption(idx, { linkedDimension: e.target.value ? (e.target.value as Dim) : undefined })}
-                className="rounded border border-border bg-background px-1.5 py-1 font-mono text-[10px] flex-1"
-              >
-                <option value="">— dimension —</option>
-                {DIMENSIONS.map(d => <option key={d} value={d}>{d.replace(/_/g, " ")}</option>)}
-              </select>
-              <Input
-                type="number"
-                min={-10}
-                max={10}
-                value={opt.scoreImpact ?? ""}
-                onChange={e => updateOption(idx, { scoreImpact: e.target.value ? Number(e.target.value) : undefined })}
-                placeholder="±10"
-                className="h-7 w-16 font-mono text-[11px]"
-              />
-            </div>
-            <Textarea
-              rows={2}
-              value={opt.lessonLearned ?? ""}
-              onChange={e => updateOption(idx, { lessonLearned: e.target.value })}
-              placeholder="Lesson learned"
-              className="text-[11px]"
-            />
-          </div>
+          <DecisionOptionEditor
+            key={opt.id}
+            option={opt}
+            perRole={local.perRole === true}
+            onChange={patch => updateOption(idx, patch)}
+            onRemove={() => removeOption(idx)}
+          />
         ))}
       </div>
       <Section title="Testgebieden (toezichthouder)" count={local.supervisionAreas?.length ?? 0}>
@@ -1155,6 +1121,118 @@ function InjectSpanEditor({
           />
         </div>
       )}
+    </div>
+  )
+}
+
+const DECISION_PRIMARY_DIMS: Array<{ key: 'decision_speed' | 'decision_quality' | 'compliance_awareness' | 'communication_clarity'; label: string }> = [
+  { key: 'decision_speed',        label: 'Snelheid' },
+  { key: 'decision_quality',      label: 'Kwaliteit' },
+  { key: 'compliance_awareness',  label: 'Compliance' },
+  { key: 'communication_clarity', label: 'Communicatie' },
+]
+
+const DECISION_QUALITY_RANKS: Array<{ key: ChoiceQuality; label: string; className: string }> = [
+  { key: 'best',  label: 'Best',      className: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40' },
+  { key: 'good',  label: 'Goed',      className: 'bg-sky-500/15 text-sky-600 border-sky-500/40' },
+  { key: 'poor',  label: 'Kon beter', className: 'bg-amber-500/15 text-amber-600 border-amber-500/40' },
+  { key: 'wrong', label: 'Fout',      className: 'bg-red-500/15 text-red-600 border-red-500/40' },
+]
+
+function DecisionOptionEditor({
+  option,
+  perRole,
+  onChange,
+  onRemove,
+}: {
+  option: DecisionNodeData["options"][number]
+  perRole: boolean
+  onChange: (patch: Partial<DecisionNodeData["options"][number]>) => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded border border-border bg-background p-2">
+      <div className="flex items-center gap-2">
+        <Input
+          value={option.label}
+          onChange={e => onChange({ label: e.target.value })}
+          placeholder="Label van deze keuze"
+          className="h-7"
+        />
+        <Button type="button" variant="ghost" size="sm" onClick={onRemove} className="h-7 text-destructive">
+          Remove
+        </Button>
+      </div>
+      {perRole && (
+        <select
+          value={option.allowedRole ?? ""}
+          onChange={e => onChange({ allowedRole: e.target.value ? (e.target.value as Role) : undefined })}
+          className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px]"
+        >
+          <option value="">Voor alle rollen</option>
+          {(Object.keys(ROLE_META) as Role[]).map(r => (
+            <option key={r} value={r}>{ROLE_META[r].label}</option>
+          ))}
+        </select>
+      )}
+      {/* Score-impact per dimensie (max 2 raken is prima) */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {DECISION_PRIMARY_DIMS.map(d => (
+          <label key={d.key} className="flex items-center gap-1.5 rounded border border-border bg-background px-1.5 py-1">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground flex-1 min-w-0 truncate">{d.label}</span>
+            <Input
+              type="number"
+              min={-5}
+              max={5}
+              value={option.scoreImpacts?.[d.key] ?? ""}
+              onChange={e => {
+                const raw = e.target.value
+                const next: ScoreImpacts = { ...(option.scoreImpacts ?? {}) }
+                if (raw === "" || Number(raw) === 0) delete next[d.key]
+                else next[d.key] = Number(raw)
+                onChange({ scoreImpacts: Object.keys(next).length ? next : undefined })
+              }}
+              placeholder="0"
+              className="h-6 w-14 font-mono text-[11px] text-right"
+            />
+          </label>
+        ))}
+      </div>
+      {/* Kwaliteit-ranking */}
+      <div className="flex items-center gap-1.5">
+        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground shrink-0">Kwaliteit</span>
+        <div className="flex gap-1 flex-1">
+          {DECISION_QUALITY_RANKS.map(r => {
+            const on = option.qualityRank === r.key
+            return (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => onChange({ qualityRank: on ? undefined : r.key })}
+                className={`rounded border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition-colors ${
+                  on ? r.className : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                {r.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <Textarea
+        rows={2}
+        value={option.facilitatorCommentary ?? ""}
+        onChange={e => onChange({ facilitatorCommentary: e.target.value || undefined })}
+        placeholder="IR-retainer perspectief — verschijnt in review-fase én rapport"
+        className="text-[11px]"
+      />
+      <Textarea
+        rows={2}
+        value={option.lessonLearned ?? ""}
+        onChange={e => onChange({ lessonLearned: e.target.value || undefined })}
+        placeholder="Lesson learned (1 zin voor debrief)"
+        className="text-[11px]"
+      />
     </div>
   )
 }

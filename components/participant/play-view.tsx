@@ -486,8 +486,21 @@ function RoleDocumentsPanel({ docs }: { docs: RoleDocument[] }) {
   )
 }
 
-// ─── Soft-decision ticket ───
-function DecisionTicket({ session }: { session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]> }) {
+// ─── Decision ticket — één UI voor graph-DecisionNodes ───
+// perRole=true → participants submitten zelf (elke rol z'n eigen optie),
+// perRole=false → facilitator picks (read-only voor participants).
+function DecisionTicket({
+  session,
+  participantId,
+  participantRole,
+}: {
+  session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>
+  participantId?: string
+  participantRole?: Role
+}) {
+  const [submitting, setSubmitting] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
   const graphState = (session as unknown as { graphState?: { currentNodeId: string } }).graphState
   const graph = (session as unknown as { graph?: { nodes: Array<{ id: string; type: string; data: unknown }> } }).graph
   if (!graph || !graphState) return null
@@ -497,33 +510,105 @@ function DecisionTicket({ session }: { session: NonNullable<ReturnType<typeof us
     prompt: string
     measuredBy: string
     advancesGraph?: boolean
-    options: Array<{ id: string; label: string; roleActionId?: string }>
+    perRole?: boolean
+    options: Array<{ id: string; label: string; roleActionId?: string; allowedRole?: Role }>
   }
+
   const isFacilitator = dd.measuredBy === "facilitator_trigger"
-  const isSoft = dd.advancesGraph === false
+  const isPerRole = dd.perRole === true
+  const canSubmit = isPerRole && !!participantId && !!participantRole
+  const roundIndex = session.currentRound
+
+  // Al ingediend voor deze ronde? Toon locked staat.
+  const already = (session.submittedDecisions ?? []).find(
+    d => d.participantId === participantId && d.roundIndex === roundIndex,
+  )
+
+  // Rol-fallback: als geen enkele optie mijn rol match, alle opties open.
+  const mine = participantRole
+    ? dd.options.filter(o => !o.allowedRole || o.allowedRole === participantRole)
+    : dd.options
+  const visibleOptions = mine.length > 0 ? mine : dd.options
+
+  async function pick(optionId: string) {
+    if (!participantId || !participantRole || !canSubmit) return
+    setError(null)
+    setSubmitting(optionId)
+    try {
+      await api.submitDecision({
+        participantId,
+        participantName: session.participants.find(p => p.id === participantId)?.name ?? "",
+        roundIndex,
+        actionId: optionId,
+        reasoning: "",
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Indienen mislukt")
+    } finally {
+      setSubmitting(null)
+    }
+  }
+
+  const headline = already
+    ? "Jouw keuze is ingediend"
+    : isFacilitator
+      ? "Facilitator neemt besluit"
+      : isPerRole
+        ? "Kies voor jouw rol"
+        : "Team-beslissing gevraagd"
+
   return (
     <div className="rounded-xl border-2 border-yellow-500/40 bg-yellow-500/5 px-4 py-3 flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <span className="font-mono text-lg">🎯</span>
         <span className="font-mono text-[11px] uppercase tracking-wider text-yellow-700 dark:text-yellow-400">
-          {isFacilitator ? "Facilitator neemt besluit" : isSoft ? "Extra keuze — scoring only" : "Team-beslissing gevraagd"}
+          {headline}
         </span>
+        {participantRole && isPerRole && (
+          <span className="font-mono text-[9px] rounded-full border border-yellow-500/40 px-1.5 py-0.5 text-yellow-700 dark:text-yellow-400">
+            {ROLE_META[participantRole]?.label ?? participantRole}
+          </span>
+        )}
       </div>
       <p className="text-sm font-medium">{dd.prompt}</p>
+      {already && (
+        <div className="rounded border border-emerald-500/40 bg-emerald-500/5 px-2 py-1.5 text-xs">
+          Ingediend: <span className="font-medium">{already.actionLabel}</span>
+        </div>
+      )}
       <div className="flex flex-col gap-1">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-          {isFacilitator ? "Wachten op facilitator" : "Selecteer een van deze acties uit je actielijst"}
-        </span>
-        {dd.options.map(opt => (
-          <div key={opt.id} className="flex items-center gap-2 rounded border border-border bg-background px-2 py-1 text-xs">
-            <span className="text-yellow-600 dark:text-yellow-400">→</span>
-            <span className="flex-1">{opt.label}</span>
-            {opt.roleActionId && (
-              <span className="font-mono text-[9px] text-muted-foreground opacity-60">actie: {opt.roleActionId}</span>
-            )}
-          </div>
-        ))}
+        {visibleOptions.map(opt => {
+          const isSubmitting = submitting === opt.id
+          const isThisChoice = already?.actionId === opt.id
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => canSubmit && !already && pick(opt.id)}
+              disabled={!canSubmit || !!already || isSubmitting}
+              className={`flex items-center gap-2 rounded border px-2 py-1.5 text-xs text-left transition-colors ${
+                isThisChoice
+                  ? "border-emerald-500/60 bg-emerald-500/10"
+                  : canSubmit && !already
+                    ? "border-border bg-background hover:border-yellow-500/60 hover:bg-yellow-500/5 cursor-pointer"
+                    : "border-border bg-background/40 cursor-default"
+              }`}
+            >
+              <span className={isThisChoice ? "text-emerald-600" : "text-yellow-600 dark:text-yellow-400"}>
+                {isThisChoice ? "✓" : "→"}
+              </span>
+              <span className="flex-1">{opt.label}</span>
+              {opt.allowedRole && (
+                <span className="font-mono text-[9px] rounded-full border border-border px-1.5 py-0.5 text-muted-foreground">
+                  {ROLE_META[opt.allowedRole]?.label ?? opt.allowedRole}
+                </span>
+              )}
+              {isSubmitting && <span className="font-mono text-[9px] text-muted-foreground">…</span>}
+            </button>
+          )
+        })}
       </div>
+      {error && <p className="text-[10px] text-destructive">{error}</p>}
     </div>
   )
 }
@@ -946,7 +1031,7 @@ export function PlayView() {
             )}
 
             {/* Soft-decision ticket — shown when graph is on a Decision node */}
-            {status === "active" && <DecisionTicket session={session} />}
+            {status === "active" && <DecisionTicket session={session} participantId={participantId ?? undefined} participantRole={participantRole} />}
 
             {/* Round situation */}
             {currentRound ? (

@@ -1071,7 +1071,34 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
   const round = session.scenario.rounds[input.roundIndex]
   if (!round) return { ok: false, error: "Invalid round." }
 
-  const action: RoleAction | undefined = round.roleActions?.find(a => a.id === input.actionId)
+  // Lookup #1: legacy roleAction op de ronde. Lookup #2: option op de huidige
+  // graph-DecisionNode. Zo werkt één submit-endpoint voor beide authoring-paden.
+  let action: RoleAction | undefined = round.roleActions?.find(a => a.id === input.actionId)
+  if (!action && session.graph && session.graphState) {
+    const node = session.graph.nodes.find(n => n.id === session.graphState!.currentNodeId)
+    if (node?.type === 'decision') {
+      const dd = node.data as DecisionNodeData
+      const opt = dd.options.find(o => o.id === input.actionId)
+      if (opt) {
+        // Map de optie op de RoleAction-shape zodat de rest van submitDecision
+        // ongewijzigd blijft werken (governance flags, scoring, timeline).
+        action = {
+          id: opt.id,
+          label: opt.label,
+          description: opt.label,
+          allowedRoles: opt.allowedRole ? [opt.allowedRole] : [],
+          isRecommended: opt.qualityRank === 'best',
+          irPlanAligned: opt.qualityRank !== 'wrong',
+          scoreImpact: opt.scoreImpact,
+          linkedDimension: opt.linkedDimension,
+          scoreImpacts: opt.scoreImpacts,
+          qualityRank: opt.qualityRank,
+          facilitatorCommentary: opt.facilitatorCommentary,
+          lessonLearned: opt.lessonLearned,
+        }
+      }
+    }
+  }
   if (!action) return { ok: false, error: "Invalid action." }
 
   // C2: reject decisions submitted during briefing or review — only allow during discussion/decision.

@@ -86,6 +86,11 @@ export interface DecisionNodeData {
     id: string
     label: string
     roleActionId?: string
+    // allowedRole: alleen deze rol ziet deze optie als kiesbaar. Als er
+    // niemand met deze rol is geïnnjoined + geen fallback → optie wordt
+    // voor iedereen kiesbaar (in de participant view).
+    // Undefined = beschikbaar voor alle rollen.
+    allowedRole?: Role
     scoreImpact?: number                       // legacy single-dim
     linkedDimension?: AssessmentDimensionKey   // legacy single-dim
     scoreImpacts?: ScoreImpacts                // new: multi-dim trade-off
@@ -97,6 +102,9 @@ export interface DecisionNodeData {
   // Facilitator kan Volgende ronde klikken zonder dat er is gekozen.
   // Deelnemer-keuze telt alleen voor scoring, niet voor branching.
   advancesGraph?: boolean
+  // perRole=true: participants submitten zelf, elke rol kiest onafhankelijk.
+  // perRole=false (default): facilitator-triggered single pick.
+  perRole?: boolean
   supervisionAreas?: SupervisionArea[]
 }
 
