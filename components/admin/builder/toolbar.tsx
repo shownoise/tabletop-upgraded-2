@@ -19,6 +19,7 @@ import type { ScenarioType } from "@/lib/types"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { PreviewDialog } from "./preview-dialog"
 import { WizardDialog } from "./wizard-dialog"
+import { DryRunDialog } from "./dry-run-dialog"
 
 interface Props {
   graph: ScenarioGraph
@@ -55,6 +56,7 @@ export function Toolbar({
   const [loadOpen, setLoadOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [dryRunOpen, setDryRunOpen] = useState(false)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [playbookOpen, setPlaybookOpen] = useState(false)
   const [loadable, setLoadable] = useState<ScenarioGraph[] | null>(null)
@@ -118,6 +120,10 @@ export function Toolbar({
       <div className="flex items-center gap-1 pl-2 border-l border-border">
         <Button size="sm" variant="ghost" onClick={handleValidate} title="Controleer graph op fouten">Validate</Button>
         <Button size="sm" variant="ghost" onClick={() => setPreviewOpen(true)} title="Bekijk hoe deelnemers dit zien">Preview</Button>
+        <Button size="sm" variant="ghost" onClick={() => setDryRunOpen(true)} title="Simuleer scenario en score de uitkomst">Dry-run</Button>
+        <Button size="sm" variant="ghost" asChild title="Print rolkaarten voor deze scenario">
+          <a href={`/admin/role-cards?graph=${graph.id}`} target="_blank" rel="noopener noreferrer">Rolkaarten</a>
+        </Button>
         <Button size="sm" variant="outline" onClick={onSave} disabled={saving} title="Sla wijzigingen op">
           {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
           Save
@@ -155,6 +161,7 @@ export function Toolbar({
       </Dialog>
 
       <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} graph={graph} />
+      <DryRunDialog open={dryRunOpen} onOpenChange={setDryRunOpen} graph={graph} />
       <WizardDialog open={wizardOpen} onOpenChange={setWizardOpen} onGraphGenerated={g => { onLoad(g); }} />
 
       <Dialog open={playbookOpen} onOpenChange={setPlaybookOpen}>

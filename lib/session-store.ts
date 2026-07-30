@@ -1129,6 +1129,15 @@ export async function setPhase(phase: RoundPhase): Promise<{ ok: boolean; error?
   return result
 }
 
+// Deel B §2 — SimulationMode toggle. Bepaalt of scoring MANDAAT/AANNAME/DELEN/
+// VOLHOUD maskt (mode-matrix). Mode kan live gewisseld worden; scoring wordt
+// bij de volgende poll direct herberekend.
+export async function setMode(mode: 'event' | 'training'): Promise<{ ok: boolean; error?: string }> {
+  const result = await mutate(s => ({ ...s, mode }))
+  if (result.ok) emit("phase_changed", { mode })  // hergebruik phase_changed event zodat clients herladen
+  return result
+}
+
 // ─── Role assignment ──────────────────────────────────────────
 
 export async function assignRole(input: { participantId: string; role: Role }): Promise<{ ok: boolean; error?: string }> {
