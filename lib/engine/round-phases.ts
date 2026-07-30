@@ -8,9 +8,10 @@ export interface RoundPhaseTiming {
 }
 
 export const ROUND_PHASE_TIMINGS: RoundPhaseTiming[] = [
-  { id: "inject",     label: "Briefing",   weight: 0.15, minSeconds: 60  },
-  { id: "discussion", label: "Discussie",  weight: 0.55, minSeconds: 180 },
-  { id: "decision",   label: "Beslissing", weight: 0.20, minSeconds: 90  },
+  { id: "inject",     label: "Briefing",   weight: 0.14, minSeconds: 60  },
+  { id: "discussion", label: "Discussie",  weight: 0.53, minSeconds: 180 },
+  { id: "decision",   label: "Beslissing", weight: 0.19, minSeconds: 90  },
+  { id: "lock",       label: "Vastgezet",  weight: 0.04, minSeconds: 15  },  // Deel B §4.2: reveal-berekening
   { id: "review",     label: "Review",     weight: 0.10, minSeconds: 45  },
 ]
 

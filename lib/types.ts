@@ -144,7 +144,10 @@ export const ROLE_FALLBACK: Partial<Record<Role, Role[]>> = {
 }
 
 export type SimulationMode = 'event' | 'training'
-export type RoundPhase = 'inject' | 'discussion' | 'decision' | 'review'
+// Deel B §4.2 — 'lock' is server-authoritatieve fase tussen decision en review
+// waarin geen mutaties meer worden geaccepteerd (Event Mode reveal-berekening).
+// In ASSESSMENT-mode blijft de flow decision → review; lock wordt geskipt.
+export type RoundPhase = 'inject' | 'discussion' | 'decision' | 'lock' | 'review'
 
 export type AssessmentDimensionKey =
   | 'decision_speed'

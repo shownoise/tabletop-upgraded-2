@@ -20,6 +20,8 @@ import { InjectRoutePlan } from "./inject-route-plan"
 import { FactCheckPanel } from "./fact-check-panel"
 import { NotificationTracker } from "./notification-tracker"
 import { SupervisionReportView } from "./supervision-report"
+import { ScoringPanel } from "./scoring-panel"
+import { RevealPanel } from "./reveal-panel"
 import { buildTeamRoles } from "@/lib/team-roster"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
@@ -962,6 +964,14 @@ export function ControlDashboard() {
 
             {/* Graph path panel — only for graph-driven sessions */}
             {session.graph && <GraphPathPanel session={session} />}
+
+            {/* Live scoring — polt /api/session/score */}
+            {session.graph && isActive && <ScoringPanel visible={true} />}
+
+            {/* Reveal (Deel B §5.2) — verschijnt tijdens lock/review */}
+            {session.graph && isActive && (session.roundPhase === "lock" || session.roundPhase === "review") && (
+              <RevealPanel visible={true} currentRound={currentIndex + 1} />
+            )}
 
             {/* Locked-at-start inject → recipient routing */}
             {(session.injectRoutePlan || session.status === "active") && (

@@ -1197,8 +1197,9 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
   }
   if (!action) return { ok: false, error: "Invalid action." }
 
-  // C2: reject decisions submitted during briefing or review — only allow during discussion/decision.
-  if (session.roundPhase === 'inject' || session.roundPhase === 'review') {
+  // C2: reject decisions submitted during briefing, lock or review — only allow during discussion/decision.
+  // Deel B §4.2: 'lock' is server-authoritatief; geen mutaties na LOCK.
+  if (session.roundPhase === 'inject' || session.roundPhase === 'lock' || session.roundPhase === 'review') {
     return { ok: false, error: `Beslissingen kunnen niet worden ingediend tijdens de '${session.roundPhase}' fase.` }
   }
 

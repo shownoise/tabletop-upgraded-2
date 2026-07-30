@@ -38,6 +38,17 @@ export interface StartNodeData {
   kind: "start"
 }
 
+// Deel A §5 — zes uitkomstdimensies. Vast, nooit per klant aanpassen.
+export type OutcomeDimensionKey = 'CONT' | 'FOR' | 'BC' | 'JUR' | 'VER' | 'KOS'
+export type OutcomeVector = Record<OutcomeDimensionKey, number>
+
+// Deel A §7.1 — richttijd (Δ_ref) voor tempo-scoring. Als undefined valt de
+// scoring terug op timerMinutes en anders op 20.
+export interface RoundScoringConfig {
+  designTimeMinutes?: number
+  outcomeWeights?: OutcomeVector  // Deel A §5 — per-ronde weging over de 6 dimensies
+}
+
 export interface RoundNodeData {
   kind: "round"
   title: string
@@ -59,6 +70,8 @@ export interface RoundNodeData {
   // de gerichte prompt naar Claude gestuurd; de response vervangt title +
   // situation_update. Bij fout blijft de originele tekst staan.
   aiPromptTemplate?: string
+  // Deel A §5/§7.1 — scoring-annotatie voor deze ronde. Opt-in.
+  scoring?: RoundScoringConfig
 }
 
 export interface InjectNodeData extends Omit<Inject, "id"> {
@@ -66,6 +79,11 @@ export interface InjectNodeData extends Omit<Inject, "id"> {
   evaluationAspects?: EvaluationAspect[]
   dynamic?: DynamicFillConfig
   aiPromptTemplate?: string
+  // Deel A §3.1 — 'crucial' telt in de D-noemer van BESLUIT + geldt als
+  // materieel event voor ADAPT. Undefined → adapter inferreert uit urgency.
+  importance?: 'crucial' | 'info'
+  // Deel A §4.2c — misroute: welke rol had deze inject 'moeten' krijgen.
+  correctRoute?: Role
 }
 
 export type DynamicFillToken = 'sector' | 'companySize' | 'crownJewels' | 'criticalSystems' | 'irRetainerName'
@@ -97,6 +115,11 @@ export interface DecisionNodeData {
     qualityRank?: ChoiceQuality
     facilitatorCommentary?: string
     lessonLearned?: string
+    // Deel A §5 — expliciete outcomeVector −2..+2 per dimensie. Als undefined
+    // valt de scoring-adapter terug op scoreImpacts+qualityRank inferentie.
+    outcomeVector?: OutcomeVector
+    // Deel B §7.1 — impliciete "geen besluit" optie.
+    implicit?: boolean
   }>
   // Soft-decision: als false, blokkeert deze decision de graph-flow niet.
   // Facilitator kan Volgende ronde klikken zonder dat er is gekozen.

@@ -21,6 +21,7 @@ import type {
 import type { ChoiceQuality, ScoreImpacts } from "@/lib/types"
 import { DYNAMIC_FILL_TOKENS } from "@/lib/graph/types"
 import { AspectPillBar, isAspectActive } from "./evaluation-aspects"
+import { RoundScoringFields, InjectScoringFields, OptionScoringFields } from "./scoring-fields"
 import { ROLE_META } from "@/lib/types"
 import type {
   BobPhase,
@@ -305,6 +306,7 @@ function RoundForm({
           </div>
         </Section>
       )}
+      <RoundScoringFields data={local} onSave={commit} />
     </div>
   )
 }
@@ -489,6 +491,7 @@ function InjectForm({ data, features, onSave }: { data: InjectNodeData; features
           )}
         </div>
       </Section>
+      <InjectScoringFields data={local} onSave={commit} />
     </div>
   )
 }
@@ -1164,6 +1167,7 @@ function DecisionOptionEditor({
         placeholder="Lesson learned (1 zin voor debrief)"
         className="text-[11px]"
       />
+      <OptionScoringFields option={option} onChange={onChange} />
     </div>
   )
 }

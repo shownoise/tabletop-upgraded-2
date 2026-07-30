@@ -49,8 +49,8 @@ export function graphToScenarioSpec(graph: ScenarioGraph, opts: GraphToScoringOp
     const rd = n.data as RoundNodeData
     return {
       number: roundNumberByNodeId.get(n.id) ?? 1,
-      designTimeMinutes: rd.timerMinutes ?? defaultDesign,
-      outcomeWeights: defaultWeights,
+      designTimeMinutes: rd.scoring?.designTimeMinutes ?? rd.timerMinutes ?? defaultDesign,
+      outcomeWeights: rd.scoring?.outcomeWeights ?? defaultWeights,
     }
   }).sort((a, b) => a.number - b.number)
 
@@ -197,12 +197,13 @@ function findParentRoundNumber(
 }
 
 function injectFromNode(id: string, d: InjectNodeData | Omit<AppInject, 'id'>, round: number, origin: 'scenario' | 'facilitator'): InjectSpec {
+  const asInjectNode = d as InjectNodeData
   return {
     id,
     round,
-    importance: inferImportance(d),
+    importance: asInjectNode.importance ?? inferImportance(d),
     visibleTo: (d.targetRoles ?? []).map(r => toSpecRole(r as Role)),
-    correctRoute: undefined,   // gap 6: geen correctRoute-veld in de graph, kan later gevuld
+    correctRoute: asInjectNode.correctRoute ? toSpecRole(asInjectNode.correctRoute) : undefined,
     origin,
   }
 }
@@ -244,13 +245,15 @@ function inferOwnerFromOptions(dd: DecisionNodeData): string {
   return 'CRISIS_LEAD'
 }
 
-// Gap 2 workaround — bouw outcomeVector uit ScoreImpacts + qualityRank.
+// Gap 2 workaround — bouw outcomeVector uit ScoreImpacts + qualityRank, tenzij
+// de author expliciet een outcomeVector heeft gezet (dan die gebruiken).
 function optionFromDecision(o: DecisionNodeData['options'][number]): OptionSpec {
   return {
     id: o.id,
     label: o.label,
-    outcomeVector: outcomeVectorFromImpacts(resolveScoreImpacts(o), o.qualityRank),
+    outcomeVector: o.outcomeVector ?? outcomeVectorFromImpacts(resolveScoreImpacts(o), o.qualityRank),
     debriefNote: o.lessonLearned ?? o.facilitatorCommentary,
+    implicit: o.implicit,
   }
 }
 
