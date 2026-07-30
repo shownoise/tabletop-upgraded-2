@@ -677,6 +677,37 @@ function DecisionForm({
           ))}
         </select>
       </Field>
+      <Field label="Scoring §4.2a — Domein">
+        <select
+          value={local.scoringDomain ?? ""}
+          onChange={e => commit({ ...local, scoringDomain: e.target.value ? e.target.value as NonNullable<DecisionNodeData['scoringDomain']> : undefined })}
+          className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
+        >
+          <option value="">— auto (uit supervisionAreas of allowedRole) —</option>
+          <option value="CONTAINMENT">Containment</option>
+          <option value="FORENSIEK">Forensiek</option>
+          <option value="HERSTEL">Herstel</option>
+          <option value="JURIDISCH">Juridisch</option>
+          <option value="EXTERNE_COMMS">Externe communicatie</option>
+          <option value="INTERNE_COMMS">Interne communicatie</option>
+          <option value="PERSONEEL">Personeel</option>
+          <option value="BEDRIJFSPROCES">Bedrijfsproces</option>
+          <option value="GELD">Geld</option>
+          <option value="EXTERNE_PARTIJEN">Externe partijen</option>
+        </select>
+      </Field>
+      <Field label="Scoring §4.2a — Ontwerp-eigenaar">
+        <select
+          value={local.scoringOwner ?? ""}
+          onChange={e => commit({ ...local, scoringOwner: e.target.value ? (e.target.value as Role) : undefined })}
+          className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
+        >
+          <option value="">— auto (uit triggerRole of eerste optie) —</option>
+          {(Object.keys(ROLE_META) as Role[]).map(r => (
+            <option key={r} value={r}>{ROLE_META[r].label}</option>
+          ))}
+        </select>
+      </Field>
       <label className="flex items-center gap-2 text-[11px] pt-1">
         <input
           type="checkbox"

@@ -20,7 +20,15 @@ const DIM_LABELS: Record<string, string> = {
   DELEN:   "Informatiedeling",
 }
 
-export function ScoringPanel({ visible = true, pollMs = 5000 }: { visible?: boolean; pollMs?: number }) {
+export function ScoringPanel({
+  visible = true,
+  pollMs = 5000,
+  mode = "ASSESSMENT",
+}: {
+  visible?: boolean
+  pollMs?: number
+  mode?: "ASSESSMENT" | "EVENT"
+}) {
   const [scoring, setScoring] = useState<ScoringOutput | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -30,7 +38,7 @@ export function ScoringPanel({ visible = true, pollMs = 5000 }: { visible?: bool
     let cancelled = false
     async function tick() {
       try {
-        const res = await fetch("/api/session/score")
+        const res = await fetch(`/api/session/score?mode=${mode}`)
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
           if (!cancelled) setError(data.error ?? `HTTP ${res.status}`)
@@ -45,7 +53,7 @@ export function ScoringPanel({ visible = true, pollMs = 5000 }: { visible?: bool
     tick()
     const id = setInterval(tick, pollMs)
     return () => { cancelled = true; clearInterval(id) }
-  }, [visible, pollMs])
+  }, [visible, pollMs, mode])
 
   if (!visible) return null
 

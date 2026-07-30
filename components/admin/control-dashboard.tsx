@@ -965,8 +965,13 @@ export function ControlDashboard() {
             {/* Graph path panel — only for graph-driven sessions */}
             {session.graph && <GraphPathPanel session={session} />}
 
-            {/* Live scoring — polt /api/session/score */}
-            {session.graph && isActive && <ScoringPanel visible={true} />}
+            {/* Live scoring — polt /api/session/score. Mode volgt session.mode. */}
+            {session.graph && isActive && (
+              <ScoringPanel
+                visible={true}
+                mode={session.mode === "event" ? "EVENT" : "ASSESSMENT"}
+              />
+            )}
 
             {/* Reveal (Deel B §5.2) — verschijnt tijdens lock/review */}
             {session.graph && isActive && (session.roundPhase === "lock" || session.roundPhase === "review") && (

@@ -1155,6 +1155,7 @@ export interface SubmitDecisionInput {
   roundIndex: number
   actionId: string
   reasoning: string
+  confidence?: 1 | 2 | 3 | 4 | 5
 }
 
 export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: boolean; error?: string }> {
@@ -1218,6 +1219,7 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     submittedAt: new Date().toISOString(),
     isWrongRole,
     isIrDeviation,
+    confidence: input.confidence,
   }
 
   // Remove any existing decision for this participant+round then add new one

@@ -41,6 +41,7 @@ export function DecisionPanel({
 }: Props) {
   const [selectedActionId, setSelectedActionId] = useState<string>(existingDecision?.actionId ?? "")
   const [reasoning, setReasoning] = useState(existingDecision?.reasoning ?? "")
+  const [confidence, setConfidence] = useState<1 | 2 | 3 | 4 | 5 | undefined>(existingDecision?.confidence)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState<SubmittedDecision | null>(existingDecision ?? null)
   const [error, setError] = useState<string | null>(null)
@@ -56,6 +57,7 @@ export function DecisionPanel({
         roundIndex,
         actionId: selectedActionId,
         reasoning,
+        confidence,
       })
       const action = roundActions.find(a => a.id === selectedActionId)
       const isWrongRole = action && participantRole
@@ -72,6 +74,7 @@ export function DecisionPanel({
         submittedAt: new Date().toISOString(),
         isWrongRole: isWrongRole ?? false,
         isIrDeviation: action ? !action.irPlanAligned : false,
+        confidence,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Indienen mislukt")
@@ -228,6 +231,33 @@ export function DecisionPanel({
                 rows={2}
                 className="resize-none font-mono text-xs bg-tt-bright/5 border-tt-border text-tt-bright placeholder:text-tt-dim focus:border-tt-accent/40"
               />
+            </div>
+
+            {/* Confidence — Deel B §7.2 zekerheidstap 1..5 voor KALIBRATIE */}
+            <div className="flex flex-col gap-1.5">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
+                Hoe zeker ben je? (optioneel)
+              </span>
+              <div className="flex gap-1.5">
+                {([1, 2, 3, 4, 5] as const).map(v => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setConfidence(confidence === v ? undefined : v)}
+                    className={`flex-1 rounded border px-2 py-1.5 font-mono text-xs transition-colors ${
+                      confidence === v
+                        ? "border-tt-accent bg-tt-accent/20 text-tt-accent"
+                        : "border-tt-border bg-tt-bright/5 text-tt-dim hover:border-tt-accent/40"
+                    }`}
+                    aria-label={`Zekerheid ${v} van 5`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <span className="font-mono text-[9px] text-tt-dim">
+                1 = onzeker · 5 = heel zeker
+              </span>
             </div>
 
             {error && (

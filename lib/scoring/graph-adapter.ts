@@ -75,9 +75,11 @@ export function graphToScenarioSpec(graph: ScenarioGraph, opts: GraphToScoringOp
     decisionPoints.push({
       id: n.id,
       round: parentRound,
-      domain: inferDomainFromDecision(dd),
-      designedOwner: dd.triggerRole ? toSpecRole(dd.triggerRole) : inferOwnerFromOptions(dd),
-      consulted: [],
+      domain: dd.scoringDomain ?? inferDomainFromDecision(dd),
+      designedOwner: dd.scoringOwner ? toSpecRole(dd.scoringOwner)
+        : dd.triggerRole ? toSpecRole(dd.triggerRole)
+        : inferOwnerFromOptions(dd),
+      consulted: (dd.scoringConsulted ?? []).map(r => toSpecRole(r)),
       required: dd.advancesGraph !== false,
       options: dd.options.map(o => optionFromDecision(o)),
     })
@@ -198,11 +200,15 @@ function findParentRoundNumber(
 
 function injectFromNode(id: string, d: InjectNodeData | Omit<AppInject, 'id'>, round: number, origin: 'scenario' | 'facilitator'): InjectSpec {
   const asInjectNode = d as InjectNodeData
+  // Alleen als visibility='exclusive' ís de inject asymmetrisch (DELEN-relevant).
+  // Bij 'shared' (default) laten we visibleTo leeg — dan gedraagt scoring het als
+  // gedeelde inject, geen deel-actie nodig.
+  const isExclusive = asInjectNode.visibility === 'exclusive'
   return {
     id,
     round,
     importance: asInjectNode.importance ?? inferImportance(d),
-    visibleTo: (d.targetRoles ?? []).map(r => toSpecRole(r as Role)),
+    visibleTo: isExclusive ? (d.targetRoles ?? []).map(r => toSpecRole(r as Role)) : undefined,
     correctRoute: asInjectNode.correctRoute ? toSpecRole(asInjectNode.correctRoute) : undefined,
     origin,
   }
@@ -364,6 +370,7 @@ function submittedDecisionToEvent(d: SubmittedDecision, session: SessionState): 
     decisionPointId: d.actionId,   // in de app is er geen aparte decisionPointId — actionId doet dienst
     optionId: d.actionId,
     by: toSpecRole(d.role),
+    confidence: d.confidence,
   }
 }
 

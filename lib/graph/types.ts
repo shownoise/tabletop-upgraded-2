@@ -84,6 +84,11 @@ export interface InjectNodeData extends Omit<Inject, "id"> {
   importance?: 'crucial' | 'info'
   // Deel A §4.2c — misroute: welke rol had deze inject 'moeten' krijgen.
   correctRoute?: Role
+  // Deel A §4.2b — asymmetrische zichtbaarheid.
+  //   'shared' (default): iedereen in de sessie ziet de inject.
+  //   'exclusive': alleen `targetRoles` zien 'm — anderen zien niets tot een deel-actie.
+  //   Vergt bezette targetRoles; anders val terug op fallback via adaptive-routing.
+  visibility?: 'shared' | 'exclusive'
 }
 
 export type DynamicFillToken = 'sector' | 'companySize' | 'crownJewels' | 'criticalSystems' | 'irRetainerName'
@@ -95,11 +100,25 @@ export interface DynamicFillConfig {
 
 export const DYNAMIC_FILL_TOKENS: DynamicFillToken[] = ['sector', 'companySize', 'crownJewels', 'criticalSystems', 'irRetainerName']
 
+// Deel A §4.1 — 10 operationele domeinen (spec §4.2a: DecisionPoint.domain).
+export type SpecDomain =
+  | 'CONTAINMENT' | 'FORENSIEK' | 'HERSTEL' | 'JURIDISCH'
+  | 'EXTERNE_COMMS' | 'INTERNE_COMMS' | 'PERSONEEL'
+  | 'BEDRIJFSPROCES' | 'GELD' | 'EXTERNE_PARTIJEN'
+
 export interface DecisionNodeData {
   kind: "decision"
   prompt: string
   measuredBy: "participant_choice" | "facilitator_trigger"
   triggerRole?: Role
+  // Deel A §4.2a — operationeel domein van dit beslispunt. Bepaalt effectiveOwner
+  // via de fallbackketen (Deel B §1.1). Optioneel; adapter infereert uit
+  // supervisionAreas als ontbrekend.
+  scoringDomain?: SpecDomain
+  // Ontwerp-eigenaar (app-rol). Undefined → adapter kiest triggerRole of eerste optie.allowedRole.
+  scoringOwner?: Role
+  // Consulted rollen voor debrief-context (Deel A §5.1).
+  scoringConsulted?: Role[]
   options: Array<{
     id: string
     label: string

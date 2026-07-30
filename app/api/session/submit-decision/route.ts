@@ -11,12 +11,16 @@ export async function POST(req: Request) {
     roundIndex?: number
     actionId?: string
     reasoning?: string
+    confidence?: number
   }
   if (!body.participantId || typeof body.participantId !== "string" ||
       !body.actionId    || typeof body.actionId    !== "string" ||
       typeof body.roundIndex !== "number") {
     return NextResponse.json({ ok: false, error: "Missing required fields." }, { status: 400 })
   }
+  const confidence = typeof body.confidence === "number" && body.confidence >= 1 && body.confidence <= 5
+    ? Math.round(body.confidence) as 1 | 2 | 3 | 4 | 5
+    : undefined
   const { submitDecision } = await import("@/lib/session-store")
   const result = await submitDecision({
     participantId: body.participantId,
@@ -24,6 +28,7 @@ export async function POST(req: Request) {
     roundIndex: body.roundIndex,
     actionId: body.actionId,
     reasoning: (body.reasoning ?? "").slice(0, MAX_REASONING),
+    confidence,
   })
   if (!result.ok) return NextResponse.json(result, { status: 400 })
   return NextResponse.json(result)

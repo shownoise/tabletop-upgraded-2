@@ -140,6 +140,21 @@ export function InjectScoringFields({ data, onSave }: { data: InjectNodeData; on
             <option value="system_admin">System Admin</option>
           </select>
         </label>
+
+        <label className="block">
+          <span className="text-xs text-muted-foreground">Zichtbaarheid §4.2b</span>
+          <select
+            value={data.visibility ?? "shared"}
+            onChange={e => onSave({ ...data, visibility: e.target.value as InjectNodeData['visibility'] })}
+            className="w-full border rounded px-2 py-1 text-sm mt-1"
+          >
+            <option value="shared">gedeeld — iedereen ziet 'm (default)</option>
+            <option value="exclusive">exclusief — alleen targetRoles zien 'm (delen is een actie)</option>
+          </select>
+          <span className="text-[10px] text-muted-foreground block mt-1">
+            Exclusive activeert de informatie-asymmetrie voor DELEN-scoring (§7.7).
+          </span>
+        </label>
       </div>
     </details>
   )

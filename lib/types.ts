@@ -285,6 +285,9 @@ export interface SubmittedDecision {
   submittedAt: string
   isWrongRole: boolean
   isIrDeviation: boolean
+  // Deel B §7.2 — zekerheidstap 1..5 bij inzending, voor KALIBRATIE-scoring.
+  // Optioneel; ontbrekend → KALIBRATIE valt uit de weging.
+  confidence?: 1 | 2 | 3 | 4 | 5
 }
 
 export interface GovernanceFlag {
