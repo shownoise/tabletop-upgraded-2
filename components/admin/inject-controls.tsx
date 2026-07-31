@@ -39,7 +39,15 @@ export function InjectControls({ session, disabled, lang = "en" }: { session: Se
   const currentIndex = session.currentRound
   const isLobby = session.status === "lobby"
   const isEnded = session.status === "ended"
-  const round = currentIndex >= 0 ? session.scenario.rounds[currentIndex] : null
+
+  // Facilitator kan kiezen welke ronde-injects zichtbaar zijn (voor push-vooraf).
+  // Default: huidige ronde.
+  const [selectedRoundIdx, setSelectedRoundIdx] = useState<number>(Math.max(0, currentIndex))
+  useEffect(() => {
+    // Sync met sessie-ronde als die verandert.
+    if (currentIndex >= 0) setSelectedRoundIdx(currentIndex)
+  }, [currentIndex])
+  const round = session.scenario.rounds[selectedRoundIdx] ?? null
 
   const pushedIndex = new Map(session.pushedInjects.map((p) => [p.inject.id, p]))
   const [busy, setBusy] = useState<string | null>(null)
@@ -53,11 +61,11 @@ export function InjectControls({ session, disabled, lang = "en" }: { session: Se
   const teamRoles = useMemo(buildTeamRoles, [])
 
   async function handlePush(injectId: string) {
-    if (currentIndex < 0) return
+    if (selectedRoundIdx < 0) return
     setBusy(injectId)
     setError(null)
     try {
-      await api.pushInject({ roundIndex: currentIndex, injectId })
+      await api.pushInject({ roundIndex: selectedRoundIdx, injectId })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Push failed")
     } finally {
@@ -81,9 +89,30 @@ export function InjectControls({ session, disabled, lang = "en" }: { session: Se
           </div>
 
           <div className="flex flex-col gap-3">
+            {/* Ronde-selector: facilitator kan een toekomstige ronde openen om
+                injects daaruit alvast te pushen. Handig voor drip-controle. */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Ronde:</span>
+              <select
+                value={selectedRoundIdx}
+                onChange={e => setSelectedRoundIdx(Number(e.target.value))}
+                className="rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+              >
+                {session.scenario.rounds.map((r, i) => (
+                  <option key={i} value={i}>
+                    R{i + 1} — {r.title}{i === currentIndex ? " (huidig)" : ""}
+                  </option>
+                ))}
+              </select>
+              {selectedRoundIdx !== currentIndex && (
+                <span className="font-mono text-[10px] text-amber-600 dark:text-amber-400">
+                  Injects van andere ronde — je pusht ze naar het huidige team.
+                </span>
+              )}
+            </div>
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                Planned injects ({round.injects.length})
+                Injects in deze ronde ({round.injects.length})
               </span>
               <SurpriseInjectDialog disabled={disabled || isLobby || isEnded} />
             </div>

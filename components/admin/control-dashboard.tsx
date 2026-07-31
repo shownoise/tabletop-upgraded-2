@@ -35,7 +35,7 @@ import { buildExerciseConfig } from "@/lib/engine/exercise-config"
 import { buildFacilitatorContext, BOB_PHASES, OODA_PHASES } from "@/lib/engine/facilitator-support"
 import type { AssessmentDimensionId, GoalId } from "@/lib/engine/types"
 
-const PHASE_ORDER: RoundPhase[] = ["inject", "discussion", "decision", "review"]
+const PHASE_ORDER: RoundPhase[] = ["inject", "discussion", "decision", "lock", "review"]
 
 // ─── Discussion phase stepper ─────────────────────────────────
 

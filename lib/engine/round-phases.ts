@@ -7,12 +7,15 @@ export interface RoundPhaseTiming {
   minSeconds: number
 }
 
+// Fase-tijden: korte minima zodat facilitator sneller kan itereren.
+// De facilitator kan altijd handmatig "Volgende fase" klikken om te versnellen.
+// Voor een normale sessie van 15min per ronde: 45s briefing + 8m discussie + 4m beslissing + 20s lock + 2m review.
 export const ROUND_PHASE_TIMINGS: RoundPhaseTiming[] = [
-  { id: "inject",     label: "Briefing",   weight: 0.14, minSeconds: 60  },
-  { id: "discussion", label: "Discussie",  weight: 0.53, minSeconds: 180 },
-  { id: "decision",   label: "Beslissing", weight: 0.19, minSeconds: 90  },
-  { id: "lock",       label: "Vastgezet",  weight: 0.04, minSeconds: 15  },  // Deel B §4.2: reveal-berekening
-  { id: "review",     label: "Review",     weight: 0.10, minSeconds: 45  },
+  { id: "inject",     label: "Briefing",   weight: 0.10, minSeconds: 30  },
+  { id: "discussion", label: "Discussie",  weight: 0.55, minSeconds: 120 },
+  { id: "decision",   label: "Beslissing", weight: 0.22, minSeconds: 60  },
+  { id: "lock",       label: "Vastgezet",  weight: 0.03, minSeconds: 15  },
+  { id: "review",     label: "Review",     weight: 0.10, minSeconds: 30  },
 ]
 
 export function computeRoundPhaseDurations(roundBudgetSeconds: number): Record<RoundPhase, number> {

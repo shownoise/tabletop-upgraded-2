@@ -334,14 +334,15 @@ function projectActiveDecision(session: SessionState): import("./types").ActiveD
   const current = nodeById.get(currentId)
   if (!current) return undefined
 
+  // Peek in ALLE fases zodat keuzes direct zichtbaar zijn bij ronde-start.
+  // Participants kunnen alvast de opties zien tijdens briefing/discussion;
+  // submit-decision blokkeert nog wel inzenden buiten discussion/decision.
   const isReview = session.roundPhase === 'review'
-  const phaseAllowsPeek = session.roundPhase === 'decision' || session.roundPhase === 'discussion' || isReview
 
   let dnode: import("./graph/types").GraphNode | undefined
   if (current.type === 'decision') {
     dnode = current
-  } else if (current.type === 'round' && phaseAllowsPeek) {
-    // Zoek eerstvolgende decision via sequence-edges (max 1 hop diep).
+  } else if (current.type === 'round') {
     const nextEdge = session.graph.edges.find(e => e.source === currentId && e.type === 'sequence')
     if (nextEdge) {
       const cand = nodeById.get(nextEdge.target)
@@ -1331,9 +1332,10 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
   }
   if (!action) return { ok: false, error: "Invalid action." }
 
-  // C2: reject decisions submitted during briefing, lock or review — only allow during discussion/decision.
+  // C2: reject decisions submitted during lock or review — allow briefing/discussion/decision.
   // Deel B §4.2: 'lock' is server-authoritatief; geen mutaties na LOCK.
-  if (session.roundPhase === 'inject' || session.roundPhase === 'lock' || session.roundPhase === 'review') {
+  // Briefing (inject-fase) is nu ook OK — participants kunnen alvast klikken als ze zeker zijn.
+  if (session.roundPhase === 'lock' || session.roundPhase === 'review') {
     return { ok: false, error: `Beslissingen kunnen niet worden ingediend tijdens de '${session.roundPhase}' fase.` }
   }
 
