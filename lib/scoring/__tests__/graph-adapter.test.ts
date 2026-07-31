@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { graphToScenarioSpec, sessionToEvents, sessionToScoringInput } from '../graph-adapter'
 import { scoreExercise } from '../score-exercise'
-import { meldplichtPressureExample } from '@/lib/graph/examples-meldplicht-pressure'
+import { simpleStoryExample as meldplichtPressureExample } from '@/lib/graph/examples-simple-story'
 import type { SessionState } from '@/lib/types'
 
 describe('graph-adapter — bridge tussen ScenarioGraph en scoring input', () => {
@@ -17,7 +17,7 @@ describe('graph-adapter — bridge tussen ScenarioGraph en scoring input', () =>
 
   it('graphToScenarioSpec: elke inject-node wordt een InjectSpec', () => {
     const scenario = graphToScenarioSpec(graph)
-    const injectCount = graph.nodes.filter(n => n.type === 'inject').length
+    const injectCount = graph.nodes.filter((n: { type: string }) => n.type === 'inject').length
     // Chasers voegen ook injects toe — dus totaal ≥ inject-nodes.
     expect(scenario.injects.length).toBeGreaterThanOrEqual(injectCount)
   })

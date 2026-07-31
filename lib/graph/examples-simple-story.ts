@@ -2,10 +2,10 @@ import type { ScenarioGraph, DecisionNodeData, InjectNodeData, RoundNodeData, Ou
 import { EYE_SECURITY_RETAINER } from "./types"
 import type { Role } from "@/lib/types"
 
-// Ransomware crisis — 7 rondes met per-rol parallel keuzes.
-// Elke ronde: 1 DecisionNode met opties gefilterd per rol (allowedRole).
-// CISO / Legal / CEO / Comms / CFO / HR / Ops — elk kiest voor de eigen rol.
-// Scoring is 6-dim outcomeVector per optie. Debrief-noten leggen keuzes uit.
+// Ransomware Crisis — realistische 7-ronde showcase.
+// Per ronde 1 DecisionNode met per-rol opties (allowedRole). Elke ronde
+// meerdere injects met MDR-alert-niveau content. Diepe situaties.
+// 3 uitkomsten via cumulatieve score.
 
 export function simpleStoryExample(): ScenarioGraph {
   const now = Date.now()
@@ -21,11 +21,8 @@ export function simpleStoryExample(): ScenarioGraph {
   }
   function decisionData(prompt: string, opts: OptSpec[]): DecisionNodeData {
     return {
-      kind: "decision",
-      prompt,
-      measuredBy: "participant_choice",
-      perRole: true,
-      advancesGraph: false,
+      kind: "decision", prompt, measuredBy: "participant_choice",
+      perRole: true, advancesGraph: false,
       options: opts.map(o => ({
         id: `${o.role}_${rnd()}`,
         label: o.label,
@@ -39,29 +36,22 @@ export function simpleStoryExample(): ScenarioGraph {
       })),
     }
   }
-
   function roundData(title: string, situation: string, timer: number): RoundNodeData {
     return { kind: "round", title, situation_update: situation, timerMinutes: timer }
   }
-
   function injectData(cfg: Partial<InjectNodeData> & Pick<InjectNodeData, "title" | "content">): InjectNodeData {
     return {
       kind: "inject",
       type: cfg.type ?? "alert",
       channel: cfg.channel ?? "email",
       urgency: cfg.urgency ?? "medium",
-      title: cfg.title,
-      content: cfg.content,
-      senderName: cfg.senderName,
-      source: cfg.source,
+      title: cfg.title, content: cfg.content,
+      senderName: cfg.senderName, source: cfg.source, timestamp: cfg.timestamp,
       importance: cfg.importance ?? "info",
-      visibility: cfg.visibility,
-      targetRoles: cfg.targetRoles,
-      correctRoute: cfg.correctRoute,
-      deliverySeconds: cfg.deliverySeconds,   // drip-timing binnen de ronde
+      visibility: cfg.visibility, targetRoles: cfg.targetRoles,
+      correctRoute: cfg.correctRoute, deliverySeconds: cfg.deliverySeconds,
     }
   }
-
   function outcomeData(cfg: Omit<OutcomeNodeData, "kind">): OutcomeNodeData {
     return { kind: "outcome", ...cfg }
   }
@@ -69,7 +59,7 @@ export function simpleStoryExample(): ScenarioGraph {
   const startId = id("start")
   const r = [1,2,3,4,5,6,7].map(() => id("round"))
   const dec = [1,2,3,4,5,6,7].map(() => id("dec"))
-  const outWin  = id("out"), outMixed = id("out"), outLose = id("out")
+  const outWin = id("out"), outMixed = id("out"), outLose = id("out")
 
   const inj: Record<string, string> = {}
   const injIds = (n: number, count: number) => Array.from({ length: count }, (_, i) => {
@@ -77,345 +67,616 @@ export function simpleStoryExample(): ScenarioGraph {
     inj[key] = id("inj")
     return { key, id: inj[key] }
   })
-  const r1i = injIds(1, 2), r2i = injIds(2, 3), r3i = injIds(3, 2), r4i = injIds(4, 3)
-  const r5i = injIds(5, 2), r6i = injIds(6, 2), r7i = injIds(7, 1)
+  const r1i = injIds(1, 3), r2i = injIds(2, 4), r3i = injIds(3, 3), r4i = injIds(4, 3)
+  const r5i = injIds(5, 3), r6i = injIds(6, 3), r7i = injIds(7, 2)
 
   const nodes: ScenarioGraph["nodes"] = [
     { id: startId, type: "start", position: { x: 40, y: 260 }, data: { kind: "start" } },
 
-    // ── R1 — Detectie ──
+    // ── R1 ──
     { id: r[0], type: "round", position: { x: 220, y: 220 }, data: roundData(
-      "R1 — Detectie",
-      "Om 03:11 op zondag ziet de MDR-provider verdachte activiteit op meerdere endpoints. Encoded PowerShell, off-hours logins. Scope onduidelijk. Het team wordt gebeld.",
+      "R1 — Zondagnacht: het begint",
+      "Zondag 02:47. In het datacenter draait alles routine. Bij Eye Security (MDR-provider) beginnen alerts binnen te tikken: encoded PowerShell vanuit user-context, off-hours logins vanuit een verdachte IP-range, anomale DNS-lookups naar één C2-host. De MDR-analist op wacht escaleert om 03:11.\n\nGeen encryptie waargenomen. Geen data-exfiltratie zichtbaar in de eerste 30 minuten. Wel: patroon wijst op initial access via een phishing-payload van ~72u eerder, en de aanvaller lijkt bezig met 'living off the land' — verkennen van shares, dumpen van credentials, opzetten van persistence.\n\nDit zit in het pre-encryption reconnaissance venster: containment nu is realistisch. De klok tikt.",
       12,
     )},
     { id: r1i[0].id, type: "inject", position: { x: 260, y: 440 }, data: injectData({
-      title: "MDR-alert — lateral movement",
-      content: "3 endpoints met verdacht gedrag. Nog geen encryptie. Aanvaller lijkt nog verkennend.",
-      type: "alert", channel: "siem", urgency: "high", senderName: "MDR SOC on-call",
+      title: "MDR — Priority 1 alert: lateral movement patroon",
+      content:
+        "URGENT — Managed Detection & Response detectie\n\n" +
+        "Detectietijd: 02:47:14 CET\n" +
+        "Signature: T1059.001 (PowerShell) + T1021 (Remote Services) + T1003 (OS Credential Dumping)\n" +
+        "Betrokken hosts: LAP-NL-1247, LAP-NL-0892, SRV-FILE-03 (via SMB-relay)\n\n" +
+        "IOCs waargenomen:\n" +
+        "  • base64-encoded PowerShell downloader → C2: 185.147.34.211:443 (Cobalt Strike beacon signature)\n" +
+        "  • Mimikatz-artefacten in LSASS-memory dump op LAP-NL-1247\n" +
+        "  • Nieuw scheduled task 'MSUpdateHelper' op 3 hosts — persistence-mechanisme\n\n" +
+        "Analist-notitie: Dit patroon komt overeen met LockBit/BlackCat-affiliates in verkenningsfase. Ze zijn ~4 uur binnen. Verwacht window tot encryption: 12–36 uur.\n\n" +
+        "Aanbeveling: NU escaleren, EDR-isolatie op de 3 hosts, forensische image maken vóór eventuele wipe. Ons IR-team staat klaar. Bel het 24/7-nummer.",
+      type: "alert", channel: "siem", urgency: "critical",
+      senderName: "MDR SOC — Analist op wacht", timestamp: "03:11",
       importance: "crucial", deliverySeconds: 0,
     })},
     { id: r1i[1].id, type: "inject", position: { x: 440, y: 440 }, data: injectData({
-      title: "Servicedesk — bestandsproblemen",
-      content: "Twee gebruikers melden dat ze bestanden op de fileshare niet kunnen openen.",
-      type: "internal", channel: "phone", urgency: "medium", senderName: "Servicedesk avond",
-      importance: "info", deliverySeconds: 180,
+      title: "Servicedesk — 'ik kan mijn bestanden niet openen'",
+      content:
+        "Twee inkomende meldingen op de nacht-lijn tussen 02:55 en 03:08:\n\n" +
+        "1) Medewerker Financiën (thuisdienst maandopeinde): 'Mijn Excel-bestanden op de shared drive geven een vreemde error. Het zijn allemaal .xlsx bestanden en ineens kan Excel ze niet meer openen. Dit is dringend, ik moet vanavond af.'\n\n" +
+        "2) Medewerker Operations (avond-shift logistiek): 'De WMS-koppeling laadt niet. Onze shift-planning is gebaseerd op die data — als dit morgenochtend niet werkt hebben we een probleem.'\n\n" +
+        "Servicedesk-nachtdienst heeft ticket aangemaakt. Geen escalatie naar IT-management ingezet. Vraagt: 'is dit gerelateerd aan het MDR-alert?'",
+      type: "internal", channel: "phone", urgency: "medium",
+      senderName: "Servicedesk avond", timestamp: "03:14",
+      importance: "info", deliverySeconds: 240,
     })},
-    { id: dec[0], type: "decision", position: { x: 620, y: 220 }, data: decisionData(
-      "Ronde 1 — Wat zet ieder van jullie in gang?",
+    { id: r1i[2].id, type: "inject", position: { x: 620, y: 440 }, data: injectData({
+      title: "Eye Security — 'we kunnen nu draaien'",
+      content:
+        "Marc de Vries (IR Lead Eye Security) op de 24/7-lijn:\n\n" +
+        "'We hebben het alert ook zien binnenkomen. Als jullie ons nu activeren zijn we binnen 15 minuten aangesloten. Dan doen we drie dingen tegelijk: forensische image van de 3 endpoints, EDR-isolatie van de verdachte hosts (verkeer geblokkeerd behalve naar onze IR-relay), en scope-analyse — hoe ver is de aanvaller? Wat we NU niet moeten doen: die endpoints herstarten of opschonen. Dan vernielen we het bewijs en zien we niet welke andere systemen ze hebben aangeraakt.\n\n" +
+        "Ik heb Legal ook stand-by gezet — voor als de scope groter blijkt dan we nu denken en meldplicht gaat spelen. Zullen we?'",
+      type: "executive", channel: "phone", urgency: "high",
+      senderName: "Marc de Vries — Eye Security IR",
+      importance: "info", deliverySeconds: 480,
+    })},
+    { id: dec[0], type: "decision", position: { x: 820, y: 220 }, data: decisionData(
+      "Wat zet ieder van jullie NU in gang?",
       [
-        { role: "ciso", label: "Bel Eye Security direct (24/7 retainer)",
+        { role: "ciso", label: "Eye Security activeren — 24/7 retainer, meteen containment",
           vec: { CONT: 2, FOR: 2, VER: 1, KOS: -1 }, quality: "best",
-          note: "24/7-retainer is er om 03:00 gebeld te worden. Forensiek + containment starten direct." },
-        { role: "ciso", label: "Wachten tot ochtend, intern beoordelen",
-          vec: { CONT: -2, JUR: -1 }, quality: "poor",
-          note: "Elk uur wachten geeft de aanvaller voorsprong. Verspreiding gebeurt vaak stil." },
-        { role: "legal", label: "Meldplicht-klok warm zetten (24u/72u)",
+          note: "24/7-retainer is er om 03:00 gebeld te worden. Snelheid + bewijsbehoud in één beweging." },
+        { role: "ciso", label: "Wachten tot 08:00, eerst intern IT-team laten kijken",
+          vec: { CONT: -2, FOR: -1, JUR: -1 }, quality: "poor",
+          note: "5 uur wachten in pre-encryption reconnaissance venster = aanvaller wint. Elke uur telt." },
+        { role: "legal", label: "Meldplicht-klok warm zetten (24u NIS2 / 72u AVG)",
           vec: { JUR: 2, VER: 1 }, quality: "best",
-          note: "Legal opent de checklist — zodat je op T+24u niet hoeft te improviseren." },
-        { role: "legal", label: "Afwachten tot scope duidelijk is",
-          vec: { JUR: -1 }, quality: "poor",
-          note: "Deadlines beginnen bij detectie, niet bij bevestiging. Klok tikt al." },
-        { role: "ceo", label: "Crisisteam formeren + board informeren",
+          note: "Klok start bij detectie, niet bij bevestiging. Voorbereiden ≠ melden." },
+        { role: "legal", label: "Wachten tot scope duidelijk is",
+          vec: { JUR: -2 }, quality: "poor",
+          note: "Deadlines wachten niet op scope. Te laat = boete-risico ook zonder daadwerkelijke exfil." },
+        { role: "ceo", label: "Crisisteam formeren, board informeren via bestuur-groepsapp",
           vec: { VER: 1, CONT: 1 }, quality: "best",
-          note: "Duidelijk mandaat versnelt alle andere rollen." },
-        { role: "ceo", label: "Nog geen board — te vroeg",
-          vec: { VER: -1, JUR: -1 }, quality: "poor",
-          note: "Board hoort van jou, niet van de pers of een klant." },
+          note: "Mandaat + zichtbaarheid. Board hoort van jou, niet van de pers of een klant." },
+        { role: "ceo", label: "Nog niet escaleren — 'het kan een false positive zijn'",
+          vec: { VER: -2, CONT: -1, JUR: -1 }, quality: "wrong",
+          note: "MDR met 3 gecorreleerde signatures + Cobalt Strike C2 = geen false positive. Vertraging kost tijd." },
       ],
     )},
 
-    // ── R2 — Scope & Impact ──
-    { id: r[1], type: "round", position: { x: 800, y: 220 }, data: roundData(
-      "R2 — Scope & Impact",
-      "T+6u. Eye Security bevestigt: 400 GB uitgaand verkeer richting onbekende host. Persoonsgegevens bevestigd in de export. Ransomware-payload staat klaar maar niet gedetoneerd.",
+    // ── R2 ──
+    { id: r[1], type: "round", position: { x: 1000, y: 220 }, data: roundData(
+      "R2 — De omvang wordt duidelijk",
+      "Zes uur later. 09:30 op maandag. Eye Security's forensisch team is sinds 03:45 aan het werk. De eerste rapportage komt binnen: dit is groter dan de initial scope suggereerde.\n\nDe aanvaller heeft zich in de afgelopen 72 uur systematisch verplaatst: van de eerste laptop via SMB naar file-servers, van file-servers via delegated accounts naar Active Directory, en van AD terug naar database-servers waar de kroonjuwelen staan.\n\nEye Security bevestigt: 400 GB uitgaand verkeer richting één specifieke host, gespreid over 4 nachten. In die 400 GB: klant-databases (naam, adres, contract-details, betaalgegevens), een deel van het HR-personeelsdossier, én de contracten-database met contractuele geheimhoudingsbedingen van de 20 grootste klanten.\n\nDe ransomware-payload staat klaar op 60% van de file-servers. Nog niet gedetoneerd. Persoonsgegevens exfiltratie = AVG melding 72u vanaf detectie: donderdag 03:11.",
       15,
     )},
-    { id: r2i[0].id, type: "inject", position: { x: 830, y: 440 }, data: injectData({
-      title: "MDR — payload identificatie",
-      content: "LockBit 3.0-variant. Cobalt Strike beacons. 60% van file-servers heeft actieve session.",
-      type: "technical", channel: "siem", urgency: "critical", senderName: "Eye Security",
+    { id: r2i[0].id, type: "inject", position: { x: 1040, y: 440 }, data: injectData({
+      title: "Eye Security — Volledig scope rapport (draft)",
+      content:
+        "IR-rapport draft 1 — 09:15 CET\n\n" +
+        "Aanvaller: waarschijnlijk BlackCat/ALPHV affiliate 'Sphynx'\n" +
+        "Initial access: phishing-email 27/7, klik op malicious document → Cobalt Strike loader\n" +
+        "Persistence: 3 scheduled tasks + 1 service + 2 WMI event subscriptions\n" +
+        "Privilegie-escalatie: DPAPI-decryptie op AD-service-account, gevolgd door DCSync-attack → krbtgt hash bemachtigd → golden ticket mogelijk\n\n" +
+        "EXFILTRATIE BEVESTIGD:\n" +
+        "  • 412 GB gearchiveerd naar C:\\ProgramData\\.cache\\backup*.7z (staged)\n" +
+        "  • Uitgestuurd via rclone naar Mega.nz over 4 nachten (72u–24u geleden)\n" +
+        "  • Data-samples in memory-dumps geïdentificeerd: SQL-dumps klant-DB, HR-CSV export, scan van fileshare 'Contracten\\Klanten\\Top20'\n\n" +
+        "AANBEVELING:\n" +
+        "  • Meldplicht is niet meer optioneel. AVG-schade bewezen.\n" +
+        "  • Ransomware-payload nog niet gedetoneerd — containment NU is prioriteit.\n" +
+        "  • Alle DC's moeten worden geïsoleerd + admin-credentials gereset (golden ticket risico).\n" +
+        "  • Wij adviseren dringend: schakel forensische partner voor rechtsgeldigheid van bewijs.",
+      type: "technical", channel: "email", urgency: "critical",
+      senderName: "Eye Security IR Team", timestamp: "09:15",
       importance: "crucial", targetRoles: ["ciso"], visibility: "exclusive",
       deliverySeconds: 0,
     })},
-    { id: r2i[1].id, type: "inject", position: { x: 1010, y: 440 }, data: injectData({
-      title: "Legal — AVG + NIS2 klok tikt",
-      content: "Persoonsgegevens exfiltratie bevestigd. AVG-melding 72u vanaf detectie. NIS2 early warning binnen 24u.",
-      type: "regulatory", channel: "email", urgency: "high", senderName: "Legal Counsel",
+    { id: r2i[1].id, type: "inject", position: { x: 1220, y: 440 }, data: injectData({
+      title: "Legal — Meldplicht-analyse (spoed)",
+      content:
+        "Van: Marloes Jansen, Legal Counsel — 09:32\n\n" +
+        "Op basis van Eye's rapportage:\n\n" +
+        "1) AVG artikel 33 — 72u meldingsplicht aan AP. Klok tikt sinds 03:11. Deadline: donderdag 03:11.\n" +
+        "2) NIS2 — jullie zijn 'essentiële entiteit'. Early warning binnen 24u aan NCSC (dus vóór morgenvroeg). Volledige melding: 72u.\n" +
+        "3) Contractueel — Top 5 klanten hebben datalek-clausules. Meldingsplicht aan hen binnen 48u van detectie. Twee daarvan hebben opzegrecht bij niet-melden.\n" +
+        "4) Beursregels — wij zijn beursgenoteerd. Materiële informatie moet openbaar gemaakt als dit koersgevoelig is. Onze inschatting: JA, dit is materieel.\n\n" +
+        "Aanbeveling: NCSC vandaag bellen (early warning + gesprek over aanpak), AP-melding voorbereiden, klant-communicatie uitwerken. Geen 'wachten tot we zeker weten': deadlines zijn absoluut.",
+      type: "regulatory", channel: "email", urgency: "high",
+      senderName: "Marloes Jansen — Legal", timestamp: "09:32",
       importance: "crucial", targetRoles: ["legal"], visibility: "exclusive",
       deliverySeconds: 120,
     })},
-    { id: r2i[2].id, type: "inject", position: { x: 1190, y: 440 }, data: injectData({
-      title: "CFO — verzekeraar 24u-clausule",
-      content: "Cyberverzekeraar heeft 24u-notificatie clausule. Nu bellen = dekking geldig. Later = argument voor niet-dekken.",
-      type: "executive", channel: "phone", urgency: "high", senderName: "Verzekerings-broker",
+    { id: r2i[2].id, type: "inject", position: { x: 1400, y: 440 }, data: injectData({
+      title: "Cyberverzekeraar — 24u-clausule",
+      content:
+        "Van: Erik van der Meer, Cyber-broker — 09:45\n\n" +
+        "'Ik heb het bericht van Eye Security ontvangen. Je moet weten: onze polis heeft een 24u-notificatie clausule. De klok is 03:11 gaan lopen. Dat betekent 2 dingen:\n\n" +
+        "1) Als jullie NU officieel bij ons melden zijn we volledig gedekt. Dekking omvat: forensiek, losgeld-adviseur, PR-crisis-firma, juridische kosten, business-interruption tot €5M, klant-notificatie kosten, cyber-remediation.\n\n" +
+        "2) Als jullie later melden (na 24u) heeft de underwriter een argument om claim af te wijzen of te limiteren. In alle recente cases hebben we dat gezien.\n\n" +
+        "Ik heb Eye Security al gebeld voor een joint IR-plan. Ik moet nu formeel bevestiging van jullie CFO. Één email volstaat, formele claim komt later.'",
+      type: "executive", channel: "phone", urgency: "high",
+      senderName: "Erik van der Meer — Broker", timestamp: "09:45",
       importance: "crucial", targetRoles: ["cfo"], visibility: "exclusive",
       deliverySeconds: 300,
     })},
-    { id: dec[1], type: "decision", position: { x: 1400, y: 220 }, data: decisionData(
-      "Ronde 2 — Scope-actie",
+    { id: r2i[3].id, type: "inject", position: { x: 1580, y: 440 }, data: injectData({
+      title: "COO — 'Kritieke systemen wankelen'",
+      content:
+        "Van: Sanne Bakker — COO — 09:52\n\n" +
+        "'Ik hoor het van IT: de ransomware zit klaar op 60% van de file-servers. Als die aangaat vandaag of morgen kunnen we 3-5 dagen niet werken. Onze 3 hoofdproducten zijn afhankelijk van die shares.\n\n" +
+        "Ik wil weten of we noodplan aan moeten. Dat betekent: 40% capaciteit, handmatige processen voor orders, en de klantenservice krijgt een goed verhaal. Geen paniek maar wel afwijken van hoe we het normaal doen.\n\n" +
+        "Kan iemand mij een indicatie geven of de encryption in de komende 24u komt of niet? Ik moet nu besluiten of ik het management-team van elke lijn oproep.'",
+      type: "internal", channel: "teams", urgency: "high",
+      senderName: "Sanne Bakker — COO", timestamp: "09:52",
+      importance: "info", targetRoles: ["ops_manager"],
+      deliverySeconds: 450,
+    })},
+    { id: dec[1], type: "decision", position: { x: 1780, y: 220 }, data: decisionData(
+      "Scope is duidelijk — wat besluit ieder van jullie?",
       [
-        { role: "ciso", label: "Segmenten isoleren + EDR-isolatie op verdachte hosts",
-          vec: { CONT: 2, FOR: 2, BC: 0 }, quality: "best",
-          note: "Snelheid + bewijsbehoud. Referentie-aanpak van Eye Security." },
+        { role: "ciso", label: "Volledig containment: segmenten isoleren, DC's uit, AD-reset",
+          vec: { CONT: 2, FOR: 1, BC: -1, KOS: -1 }, quality: "best",
+          note: "Golden ticket-risico = AD-reset is niet optioneel. Kort BC-verlies maar containment werkt." },
         { role: "ciso", label: "Alles offline — volledige netwerk-shutdown",
-          vec: { CONT: 2, FOR: -1, BC: -2, KOS: -2 }, quality: "poor",
-          note: "Overkill. Verliest volatiele forensische data + stopt legitieme operatie." },
-        { role: "legal", label: "NIS2 early warning + AVG-melding starten",
+          vec: { CONT: 2, FOR: -2, BC: -2, KOS: -2 }, quality: "poor",
+          note: "Overkill. Verliest volatiele forensische data + stopt legitieme operatie onnodig." },
+        { role: "ciso", label: "Alleen de al bekende 3 hosts isoleren",
+          vec: { CONT: -2, FOR: 0, BC: 1 }, quality: "wrong",
+          note: "Golden ticket = aanvaller heeft AD-toegang. 3 hosts isoleren doet niks meer." },
+        { role: "legal", label: "NIS2 early warning + AVG voorbereiden + NCSC-gesprek vandaag",
           vec: { JUR: 2, VER: 1, KOS: -1 }, quality: "best",
-          note: "Op tijd melden = geen boete + toezichthouder aan jouw zijde." },
-        { role: "legal", label: "Wachten op complete forensiek",
-          vec: { JUR: -2, VER: -1 }, quality: "wrong",
-          note: "72u AVG start bij DETECTIE. Wachten kost sowieso boete-risico." },
-        { role: "cfo", label: "Verzekeraar direct informeren (24u-clausule)",
-          vec: { KOS: 1, JUR: 1 }, quality: "best",
-          note: "Vroege notificatie = dekkingsgarantie + verzekeraar helpt met de rest." },
-        { role: "cfo", label: "Wachten tot schade duidelijk is",
+          note: "Op tijd melden = toezichthouder wordt bondgenoot. Later = tegenstander." },
+        { role: "legal", label: "Alleen NIS2 doen, AVG afwachten tot data-verlies bevestigd",
+          vec: { JUR: -1 }, quality: "poor",
+          note: "AVG-klok tikt sinds detectie, niet sinds bevestiging. Twee klokken = twee acties." },
+        { role: "cfo", label: "Verzekeraar formeel bevestigen, joint IR-plan starten",
+          vec: { KOS: 2, JUR: 1, VER: 1 }, quality: "best",
+          note: "24u-clausule + hun IR-adviseur = miljoenen dekking + expertise." },
+        { role: "cfo", label: "Wachten tot schade in cijfers uit te drukken is",
           vec: { KOS: -2, JUR: -1 }, quality: "wrong",
-          note: "Standaard-clausules eisen 24u. Te laat = geen dekking." },
+          note: "Wachten = argument voor niet-dekken. 24u-clausule is industry-standaard." },
+        { role: "ops_manager", label: "Noodplan aan + management-team oproepen + klantenservice briefen",
+          vec: { BC: 2, VER: 1 }, quality: "best",
+          note: "Klanten voelen niks, mensen weten wat te doen. Downtime wordt logistiek." },
+        { role: "ops_manager", label: "Wachten tot encryption daadwerkelijk aangaat",
+          vec: { BC: -2, VER: -1 }, quality: "poor",
+          note: "Reactief zijn op ransomware = 3 dagen chaos. Proactief = orde." },
       ],
     )},
 
-    // ── R3 — Ransom note ──
-    { id: r[2], type: "round", position: { x: 1580, y: 220 }, data: roundData(
-      "R3 — Ransom note & Dilemma",
-      "T+18u. Aanvallers eisen 5 BTC binnen 48u. Bij niet-betaling: publicatie van 400 GB op leaksite. Media pikt eerste geruchten op.",
+    // ── R3 ──
+    { id: r[2], type: "round", position: { x: 1960, y: 220 }, data: roundData(
+      "R3 — De losgeld-eis komt binnen",
+      "12:47 op maandag. Er komt een geëncrypteerd bericht binnen op info@. Ransom-note van 'Sphynx': 5 BTC (~€312.000) binnen 48 uur, te betalen naar een specifieke wallet. Als betaling niet komt: publicatie van 400 GB + automatische encryption van de payload.\n\nOm 13:03 belt een journalist van een landelijk vakmedium. Ze heeft 'signalen' dat er iets speelt en wil binnen 2 uur een reactie. Ze spreekt op dit moment iemand van HR omdat de servicedesk 'geen commentaar' zei.\n\nAls je gaat betalen: terug in bedrijf maar (a) je financiert de volgende aanval, (b) niets garandeert dat de data alsnog niet gepubliceerd wordt, (c) 50% van betalers krijgt sleutels die niet volledig werken. Als je NIET betaalt: encryption + publicatie. En dat wordt binnen 24u nieuws.",
       15,
     )},
-    { id: r3i[0].id, type: "inject", position: { x: 1620, y: 440 }, data: injectData({
-      title: "Losgeld-note ontvangen",
-      content: "5 BTC (≈€300k). 48u deadline. 'Wij hebben database met klantgegevens, medische data, HR-dossiers.'",
-      type: "executive", channel: "raw", urgency: "critical", senderName: "Ranshub",
+    { id: r3i[0].id, type: "inject", position: { x: 2000, y: 440 }, data: injectData({
+      title: "Losgeld-note — 'Sphynx'",
+      content:
+        "[Ontvangen op info@ om 12:47]\n\n" +
+        "HELLO. WE ARE SPHYNX.\n\n" +
+        "We have exfiltrated 412 GB of your data. This includes:\n" +
+        "  • Full customer database with contact details, contracts, payment info\n" +
+        "  • HR files including employee salaries, appraisals, and one termination case\n" +
+        "  • Top 20 customer contracts with confidentiality clauses that you signed\n" +
+        "  • Board minutes 2023-2026 including your acquisition discussions\n\n" +
+        "We have also prepared ransomware payload on 60% of your file servers.\n" +
+        "It will activate in 48 hours unless you pay.\n\n" +
+        "PAYMENT: 5 BTC (~€312,000)\n" +
+        "WALLET: bc1qxyz...\n" +
+        "DEADLINE: Wednesday 12:47 CET\n\n" +
+        "If paid on time:\n" +
+        "  1. We provide decryption keys (guaranteed for at least 80% of files)\n" +
+        "  2. We delete our copy of your data (we provide proof)\n" +
+        "  3. You avoid publication on our leaksite\n\n" +
+        "If not paid:\n" +
+        "  1. Encryption activates automatically Wednesday 12:47\n" +
+        "  2. Sample of data published on leaksite Wednesday 15:00\n" +
+        "  3. Full dataset published Friday 12:00\n" +
+        "  4. Ranshub crawler feeds it to security researchers who will contact your clients\n\n" +
+        "Reply to this address to negotiate. Silence = we assume you chose publication.",
+      type: "executive", channel: "raw", urgency: "critical",
+      senderName: "Sphynx / anonymous", timestamp: "12:47",
       importance: "crucial", deliverySeconds: 0,
     })},
-    { id: r3i[1].id, type: "inject", position: { x: 1800, y: 440 }, data: injectData({
-      title: "Journalist NL-Cyber belt HR",
-      content: "'Klopt het dat medewerkers naar huis zijn gestuurd i.v.m. cyberincident?' Wil binnen 2 uur reactie.",
-      type: "media", channel: "phone", urgency: "medium", senderName: "NL-Cyber redactie",
+    { id: r3i[1].id, type: "inject", position: { x: 2200, y: 440 }, data: injectData({
+      title: "Journalist NL-Vakblad belt HR-lijn",
+      content:
+        "Servicedesk verwijst deze door naar HR omdat de journalist vraagt naar 'medewerkers-impact'.\n\n" +
+        "'Hoi, Rianne Prins hier van [Vakblad]. Ik hoor van een bron dat er bij jullie een cyber-incident speelt en dat medewerkers thuis werken vandaag. Klopt dat? Ik werk aan een kort artikel voor vanavond en wil jullie de kans geven om een reactie te geven. Zonder reactie schrijf ik het verhaal op basis van wat ik heb. Ik heb 2 uur.'\n\n" +
+        "HR-medewerker (jong, geen crisis-ervaring) heeft haar door 'te gaan checken en terug te bellen'. Ze wacht nu op reactie. Als het bericht gepubliceerd wordt vóór jullie eigen verklaring, verlies je de framing.",
+      type: "media", channel: "phone", urgency: "medium",
+      senderName: "Rianne Prins — Vakblad", timestamp: "13:03",
       importance: "info", targetRoles: ["hr_lead"],
       correctRoute: "head_of_comms", visibility: "exclusive",
       deliverySeconds: 240,
     })},
-    { id: dec[2], type: "decision", position: { x: 1980, y: 220 }, data: decisionData(
-      "Ronde 3 — Losgeld & Media",
+    { id: r3i[2].id, type: "inject", position: { x: 2400, y: 440 }, data: injectData({
+      title: "Eye Security IR — 'Onze aanbeveling'",
+      content:
+        "Van: Marc de Vries (Eye Security IR Lead) — 13:15\n\n" +
+        "'We hebben de ransom-note geanalyseerd. Onze positie:\n\n" +
+        "1) NIET betalen. Reden: (a) betaling wordt door NCSC afgekeurd + verzekeraar heeft voorwaarden om betaling wél te dekken maar wij raden af, (b) 50%+ decrypt-tools werken niet volledig, (c) je bent daarna target voor Sphynx-partners.\n\n" +
+        "2) WEL onderhandelen — via een IR-partner (wij hebben dat gedaan). Doel is niet betalen maar TIJD KOPEN. Elke 12u onderhandeling = 12u recovery-window.\n\n" +
+        "3) Recovery-strategie: wij bouwen clean-room. Nieuwe infrastructuur, van backups die getest zijn (backups >7 dagen oud, dus vóór aanvaller binnen was). Duurt 3-4 dagen. In die tijd is de organisatie 40% operationeel.\n\n" +
+        "4) NCSC + AP nu volledig informeren. Verzekeraar formeel activeren. Klanten pro-actief bellen over jullie top-20 — nog vóór media publicatie.\n\n" +
+        "Dit is een integriteitsmoment: doe het goed, en over 6 weken is dit een leerverhaal.'",
+      type: "executive", channel: "email", urgency: "high",
+      senderName: "Marc de Vries — Eye Security", timestamp: "13:15",
+      importance: "crucial", deliverySeconds: 480,
+    })},
+    { id: dec[2], type: "decision", position: { x: 2600, y: 220 }, data: decisionData(
+      "Losgeld & Media — hoe reageer je?",
       [
-        { role: "ceo", label: "Geen betaling — principiële weigering",
-          vec: { JUR: 2, VER: 2 }, quality: "best",
-          note: "Betalen financiert volgende aanvallen én garandeert niets. NCSC en verzekeraar waarderen weigering." },
-        { role: "ceo", label: "Onderhandelen via IR-partner — tijd kopen",
-          vec: { CONT: 1, JUR: 1, KOS: -1 }, quality: "good",
-          note: "Elk uur onderhandeling = uur voor herstel. Geen commitment aan betaling." },
-        { role: "ceo", label: "Betalen — snelste ontsleuteling",
-          vec: { JUR: -2, VER: -2, KOS: -2 }, quality: "wrong",
-          note: "Sleutels werken vaak deels; aanvaller komt terug. Boetes én reputatieschade." },
-        { role: "head_of_comms", label: "Proactieve verklaring — 'incident, we werken eraan'",
-          vec: { VER: 2, JUR: 0 }, quality: "best",
-          note: "Zelf de framing bepalen voordat journalisten het overnemen." },
-        { role: "head_of_comms", label: "No comment tot forensisch klaar",
+        { role: "ceo", label: "Geen betaling — principiële weigering, via IR-partner tijd kopen",
+          vec: { CONT: 1, JUR: 2, VER: 2 }, quality: "best",
+          note: "NCSC, verzekeraar en aandeelhouders belonen dit. Onderhandeling ≠ betalen." },
+        { role: "ceo", label: "Betalen — snelste terugkeer, minst nieuws",
+          vec: { CONT: -1, JUR: -2, VER: -2, KOS: -2 }, quality: "wrong",
+          note: "Geen garantie dat data verwijderd wordt. Aanvaller komt terug. Boetes én reputatieschade." },
+        { role: "ceo", label: "Nog wachten — misschien overwaarderen we het",
+          vec: { CONT: -2, VER: -1, JUR: -1 }, quality: "poor",
+          note: "Elke uur wachten = aanvaller escaleert. 48u-deadline is echt." },
+        { role: "head_of_comms", label: "Proactieve verklaring vandaag — 'we werken aan een cyberincident'",
+          vec: { VER: 2, JUR: 1 }, quality: "best",
+          note: "Zelf de framing bepalen voordat de journalist het overneemt." },
+        { role: "head_of_comms", label: "'No comment' via advocaten",
           vec: { VER: -2 }, quality: "poor",
-          note: "Silence wordt gelezen als schuld. De speculatie wordt jouw verhaal." },
-        { role: "hr_lead", label: "Journalist meteen doorverbinden naar Comms",
-          vec: { VER: 1 }, quality: "best",
-          note: "Correcte routing — HR is niet de woordvoerder." },
-        { role: "hr_lead", label: "Zelf antwoord geven — 'geen commentaar'",
+          note: "Klinkt schuldig. Advocatentaal weerhoudt journalisten niet, verergert speculatie." },
+        { role: "head_of_comms", label: "Wachten tot forensisch rapport volledig is",
+          vec: { VER: -2, JUR: 0 }, quality: "poor",
+          note: "Media wacht niet. Silence wordt door hen ingevuld." },
+        { role: "hr_lead", label: "Journalist doorverbinden naar Comms (correcte routing)",
+          vec: { VER: 1, JUR: 1 }, quality: "best",
+          note: "HR is geen woordvoerder. Doorverbinden voordat er iets stoms wordt gezegd." },
+        { role: "hr_lead", label: "Zelf antwoord geven — 'geen commentaar' herhalen",
           vec: { VER: -1, JUR: -1 }, quality: "poor",
-          note: "Zonder briefing niet aan de pers. HR-antwoord wordt jullie officiële statement." },
+          note: "Elk woord aan de pers zonder briefing = officiële statement." },
       ],
     )},
 
-    // ── R4 — Cascaderende comms ──
-    { id: r[3], type: "round", position: { x: 2160, y: 220 }, data: roundData(
-      "R4 — Cascaderende communicatie",
-      "T+30u. Verklaring is uit. Twee grote klanten bellen. Medewerkers vragen op Slack wat er speelt. NCSC vraagt een intake-gesprek.",
+    // ── R4 ──
+    { id: r[3], type: "round", position: { x: 2780, y: 220 }, data: roundData(
+      "R4 — Iedereen belt tegelijk",
+      "Dinsdag 08:00. Persverklaring is gisteravond uitgegaan. Reguliere media pikt op: 3 landelijke titels, 6 vakbladen, LinkedIn brandt. Aandelenkoers daalt in pre-market 4%.\n\nDe grootste klant (30% van omzet) belt om 08:15. Hun contract heeft opzegrecht bij datalek.\n\nInterne Slack ontgint: 200+ berichten in #general voordat HR erop kan reageren.\n\nNCSC belt: NIS2 early warning ontvangen, wil vandaag intake — waar staan jullie met containment, hoe communiceren jullie naar klanten. Dit is geen formele hearing maar ook geen vrijblijvend gesprek.",
       15,
     )},
-    { id: r4i[0].id, type: "inject", position: { x: 2200, y: 440 }, data: injectData({
-      title: "Klant #1 — 'zijn onze contractdata veilig?'",
-      content: "Grootste klant (30% omzet). Contract heeft datalek-clausule met opzegrecht.",
-      type: "executive", channel: "email", urgency: "high", senderName: "Klant #1 CIO",
+    { id: r4i[0].id, type: "inject", position: { x: 2820, y: 440 }, data: injectData({
+      title: "Klant #1 — CIO belt CFO direct",
+      content:
+        "Van: Peter Vorstenbosch, CIO — [Grootste Klant] — 08:15\n\n" +
+        "'Ik heb je verklaring gelezen. Ik heb 20 minuten. Direct: is onze data in de exfil? Ons contract met jullie heeft een datalek-clausule (artikel 14.3). Als jullie ons niet actief informeren binnen 48u en het blijkt achteraf dat wij erin zaten, dan hebben wij het recht om onmiddellijk op te zeggen én schadevergoeding te eisen.\n\n" +
+        "Ik ga jullie niet meteen aan het kruis nagelen. Maar ik wil vandaag antwoord op DRIE dingen:\n\n" +
+        "1) Zit onze data in de exfil?\n" +
+        "2) Welke categorieën data? (Namen? Contracten? Betalingen?)\n" +
+        "3) Wat is jullie plan om te voorkomen dat onze klanten dit via publicatie ontdekken?\n\n" +
+        "Als jullie proactief bellen, ben ik jullie bondgenoot. Als ik het via de pers hoor, ben ik jullie ex-klant.'",
+      type: "executive", channel: "phone", urgency: "critical",
+      senderName: "Peter Vorstenbosch — Klant CIO", timestamp: "08:15",
       importance: "crucial", targetRoles: ["cfo"], visibility: "exclusive",
       deliverySeconds: 0,
     })},
-    { id: r4i[1].id, type: "inject", position: { x: 2380, y: 440 }, data: injectData({
-      title: "Medewerkers-onrust op Slack",
-      content: "150+ berichten in #general. 'Klopt ransomware?', 'Kunnen wij morgen wel werken?'",
-      type: "internal", channel: "slack", urgency: "medium", senderName: "HR monitoring",
+    { id: r4i[1].id, type: "inject", position: { x: 3020, y: 440 }, data: injectData({
+      title: "Slack #general — medewerkers onrust",
+      content:
+        "Van: HR monitoring — 08:30\n\n" +
+        "Berichten in #general: 247. Sentiment: 60% ongerust, 25% boos, 15% neutraal.\n\n" +
+        "Top-3 vragen:\n" +
+        "  1. 'Zijn onze salarissen ook gelekt?' (78 upvotes)\n" +
+        "  2. 'Wat vertel ik als journalisten mij privé bellen?' (44 upvotes)\n" +
+        "  3. 'Kunnen we morgen wel werken? Is thuiswerken veilig nu?' (39 upvotes)\n\n" +
+        "Ondernemingsraad heeft om spoedoverleg gevraagd. Voorzitter OR: 'Wij horen dit via de pers, niet via HR. Dat vinden wij onacceptabel.'\n\n" +
+        "Twee medewerkers hebben op LinkedIn commentaar geplaatst — één klopt, één verkeerd (paniekverhaal 'alle data weg').",
+      type: "internal", channel: "slack", urgency: "high",
+      senderName: "HR monitoring", timestamp: "08:30",
       importance: "crucial", targetRoles: ["hr_lead"], visibility: "exclusive",
-      deliverySeconds: 150,
+      deliverySeconds: 200,
     })},
-    { id: r4i[2].id, type: "inject", position: { x: 2560, y: 440 }, data: injectData({
-      title: "NCSC — intake gesprek",
-      content: "NCSC bevestigt NIS2-melding. Wil intake vandaag: containment-status, betaling, klantmelding.",
-      type: "regulatory", channel: "phone", urgency: "high", senderName: "NCSC",
+    { id: r4i[2].id, type: "inject", position: { x: 3220, y: 440 }, data: injectData({
+      title: "NCSC — intake gesprek gepland",
+      content:
+        "Van: NCSC — Adviseur Bijzondere Zaken — 09:00\n\n" +
+        "'Bedankt voor het snel melden. Ik zou vandaag met jullie willen spreken. Niet als toezichthouder maar als adviseur.\n\n" +
+        "  • Waar staan jullie qua containment? Is de aanvaller er nog?\n" +
+        "  • Wat is jullie besluit op betaling? (Ons standpunt: doe het niet, we adviseren daarover.)\n" +
+        "  • Hebben jullie klant-communicatie voorbereid?\n" +
+        "  • Wat is jullie herstel-strategie?\n\n" +
+        "Als jullie transparant zijn en de goede stappen zetten, staan wij achter jullie in de eindrapportage naar AP. Als jullie afsluiten of vertragen worden wij formeel én dat is niet in jullie belang.\n\n" +
+        "Ik kan vandaag 14:00 of 16:00. Legal, CISO en CEO uitgenodigd.'",
+      type: "regulatory", channel: "phone", urgency: "high",
+      senderName: "NCSC — Adviseur", timestamp: "09:00",
       importance: "crucial", targetRoles: ["legal"], visibility: "exclusive",
-      deliverySeconds: 360,
+      deliverySeconds: 400,
     })},
-    { id: dec[3], type: "decision", position: { x: 2740, y: 220 }, data: decisionData(
-      "Ronde 4 — Stakeholders bedienen",
+    { id: dec[3], type: "decision", position: { x: 3420, y: 220 }, data: decisionData(
+      "Stakeholders bedienen — wie doet wat?",
       [
-        { role: "cfo", label: "Klant proactief bellen + status delen",
+        { role: "cfo", label: "Klant #1 zelf terugbellen — proactief + eerlijk + met plan",
           vec: { VER: 2, JUR: 1 }, quality: "best",
-          note: "Klant een bondgenoot maken. Blijft loyaal als je eerlijk bent." },
-        { role: "cfo", label: "Wachten op zekerheid, dan pas contact",
+          note: "Klant een bondgenoot maken. Kost 1 uur nu, redt de relatie voor 5+ jaar." },
+        { role: "cfo", label: "Generic mail naar alle klanten tegelijk",
           vec: { VER: -1 }, quality: "poor",
-          note: "Klant hoort het via de pers = contract-issue." },
-        { role: "hr_lead", label: "All-hands binnen 2 uur + FAQ",
-          vec: { VER: 1, BC: 1 }, quality: "best",
-          note: "Duidelijke interne comms voorkomt Slack-chaos en werknemer-leaks." },
-        { role: "hr_lead", label: "Generic mail — 'we werken eraan'",
-          vec: { VER: -1 }, quality: "poor",
-          note: "Medewerkers zijn ambassadeurs, geen ontvangers. Detail werkt beter." },
-        { role: "legal", label: "NCSC intake vandaag — volle transparantie",
+          note: "Top-klant verdient top-behandeling. Generic mail = respectloos in crisis." },
+        { role: "cfo", label: "Wachten tot Legal zegt wat we mogen zeggen",
+          vec: { VER: -2, JUR: 0 }, quality: "poor",
+          note: "Legal-verlamming is een klassieke fout. Klanten wachten niet." },
+        { role: "hr_lead", label: "All-hands binnen 2 uur + FAQ + OR briefen",
+          vec: { VER: 2, BC: 1 }, quality: "best",
+          note: "Medewerkers zijn ambassadeurs. Onderrichte medewerkers voorkomen social-media schade." },
+        { role: "hr_lead", label: "Generic 'we werken eraan' mail",
+          vec: { VER: -2 }, quality: "poor",
+          note: "247 berichten in #general laten zien dat generic niet werkt." },
+        { role: "legal", label: "NCSC intake vandaag 14:00 — volle openheid",
           vec: { JUR: 2, VER: 1 }, quality: "best",
-          note: "Toezichthouder respecteert openheid. Wordt in latere fase je advocaat." },
-        { role: "legal", label: "Intake pas na advocaten-overleg",
-          vec: { JUR: -2 }, quality: "poor",
-          note: "NCSC hulp verspelen aan de start = eindeloze problemen later." },
+          note: "NCSC helpt actief bij AP-rapportage. Bondgenoot vandaag = respijt volgend week." },
+        { role: "legal", label: "Intake pas na intern advocaten-team",
+          vec: { JUR: -2, VER: -1 }, quality: "poor",
+          note: "NCSC-toon verandert. Wat vandaag advies is, wordt volgende week vermaning." },
       ],
     )},
 
-    // ── R5 — Herstel begint ──
-    { id: r[4], type: "round", position: { x: 2920, y: 220 }, data: roundData(
-      "R5 — Herstel begint",
-      "T+48u. Van 12 backup-sets zijn er 4 versleuteld, 8 zijn week-oud maar getest. Losgeld-deadline over 24u.",
+    // ── R5 ──
+    { id: r[4], type: "round", position: { x: 3600, y: 220 }, data: roundData(
+      "R5 — Kiezen: herstellen of onderhandelen",
+      "Dinsdag 16:30. Deadline losgeld = morgen 12:47. Nog 20 uur. IR-partner voert onderhandeling. Sphynx bereid deadline met 24u te verlengen als er 'goede intentie' getoond wordt — 0.5 BTC 'goodwill' (~€30k).\n\nBackups: 4 sets versleuteld, 8 zijn 7 dagen oud. Clean-room bouwen: 3-4 dagen, 7 dagen data-verlies. Kritieke ERP heeft eigen shadow-copy — daar kan 24u uit teruggehaald worden.\n\nAls clean-room + encryption gaat vandaag/morgen aan op bestaande systemen: zowel oude infra kwijt als nieuwe niet af. IT vraagt keuze.",
       15,
     )},
-    { id: r5i[0].id, type: "inject", position: { x: 2960, y: 440 }, data: injectData({
-      title: "Backup-lead rapporteert",
-      content: "Clean-room herbouw: 4 dagen. Data-verlies: ~7 werkdagen. Kritieke ERP: eigen shadow-copy — 24u.",
-      type: "technical", channel: "teams", urgency: "high", senderName: "Backup lead",
+    { id: r5i[0].id, type: "inject", position: { x: 3640, y: 440 }, data: injectData({
+      title: "Backup-lead rapport — 'wat kunnen we terughalen?'",
+      content:
+        "Van: Bas van Rijn — Backup & Recovery lead — 16:45\n\n" +
+        "STATUS BACKUPS (van 12 backup-sets):\n" +
+        "  • 4 sets: versleuteld door LockBit-variant\n" +
+        "  • 8 sets: intact, laatst gevalideerd donderdag 25/7 22:00 (7 dagen data-verlies)\n" +
+        "  • Air-gapped tape: laatst gedraaid vorige zondag — 9 dagen oud\n\n" +
+        "OPTIE A — CLEAN ROOM (aanbevolen door Eye Security):\n" +
+        "  Nieuwe infra opzetten in cloud, week-oude backup restoren, alle admin-credentials nieuw, DNS + AD helemaal opnieuw. Duur: 3-4 dagen. Data-verlies: 7 werkdagen. Zeker: aanvaller is 100% weg, forensisch bewijs volledig behouden. Kosten: €150k voor cloud + IR extra uren.\n\n" +
+        "OPTIE B — GEFASEERD:\n" +
+        "  Kritieke systemen (ERP, klantportaal) uit shadow-copy herstellen, rest later. Duur: 24u voor essentie, 5 dagen totaal. Data-verlies: 24u kritiek, 3-7 dagen rest. Risico: aanvaller kan nog terugkomen als niet alle credentials geroteerd zijn.\n\n" +
+        "OPTIE C — PROD-RESTORE:\n" +
+        "  Backups over bestaande systemen zetten. Snelst (12u). Maar: als aanvaller nog persistence heeft = direct terug bij af. Verliest ook forensische data. Niet aanbevolen.",
+      type: "technical", channel: "teams", urgency: "high",
+      senderName: "Bas van Rijn — Backup lead", timestamp: "16:45",
       importance: "crucial", targetRoles: ["ciso"], deliverySeconds: 0,
     })},
-    { id: r5i[1].id, type: "inject", position: { x: 3140, y: 440 }, data: injectData({
-      title: "Ops — noodplan werkinstructies",
-      content: "Handmatige processen voor de 3 kritieke processen zijn klaar. Kost 40% capaciteit maar houdt operatie op de been.",
-      type: "internal", channel: "email", urgency: "medium", senderName: "Ops Manager",
-      importance: "info", targetRoles: ["ops_manager"], deliverySeconds: 210,
+    { id: r5i[1].id, type: "inject", position: { x: 3840, y: 440 }, data: injectData({
+      title: "COO — 'noodplan werkinstructies klaar'",
+      content:
+        "Van: Sanne Bakker (COO) — 17:00\n\n" +
+        "'Noodplan-instructies zijn klaar voor de 3 kritieke processen:\n\n" +
+        "  • Klantenservice: telefoon werkt, papieren order-formulieren geprint, facturatie kan handmatig — 40% extra tijd maar loopt door.\n" +
+        "  • Logistiek: WMS-vervanger op Excel opgezet, dagelijkse output-lijsten getekend + gescand.\n" +
+        "  • Financiën: incidentele betalingen via telefonisch contact bank. Loonverwerking eventueel handmatig via oud systeem.\n\n" +
+        "Kost 40% capaciteit maar houdt operatie op de been. Als IT 3-4 dagen niet ligt, kunnen wij 5-7 dagen doorbrengen zonder klantverlies.\n\n" +
+        "Beslissing nodig: activeer ik het noodplan nu?'",
+      type: "internal", channel: "email", urgency: "high",
+      senderName: "Sanne Bakker — COO", timestamp: "17:00",
+      importance: "info", targetRoles: ["ops_manager"], deliverySeconds: 300,
     })},
-    { id: dec[4], type: "decision", position: { x: 3320, y: 220 }, data: decisionData(
-      "Ronde 5 — Recovery pad",
+    { id: r5i[2].id, type: "inject", position: { x: 4040, y: 440 }, data: injectData({
+      title: "IR-partner — onderhandelingsresultaat",
+      content:
+        "Van: Marc de Vries (Eye Security IR) — 17:20\n\n" +
+        "'Update van onderhandeling:\n\n" +
+        "Sphynx biedt: 24u deadline-verlenging tegen 0.5 BTC (~€30k) 'goodwill-betaling'. Als jullie die betalen, deadline schuift naar overmorgen 12:47.\n\n" +
+        "MIJN ADVIES: Doen. Reden — die €30k is NIET om te betalen, het is om TIJD TE KOPEN. Met 24u extra kan Bas het clean-room bijna af hebben. Als Sphynx daarna de encryption trekt en de leak start, hebben jullie al nieuwe infra draaien en kunnen jullie transparant zijn richting klanten met 'we zijn terug in bedrijf'.\n\n" +
+        "Als jullie helemaal niet betalen: encryption gaat morgen aan, jullie zitten 4 dagen zonder IT én zonder narratief.\n\n" +
+        "Verzekeraar heeft goedkeuring gegeven voor deze €30k als 'IR-kosten' — niet als losgeld. Beslissing?'",
+      type: "executive", channel: "phone", urgency: "critical",
+      senderName: "Marc de Vries — Eye Security", timestamp: "17:20",
+      importance: "crucial", deliverySeconds: 600,
+    })},
+    { id: dec[4], type: "decision", position: { x: 4240, y: 220 }, data: decisionData(
+      "Recovery-strategie — welke koers?",
       [
-        { role: "ciso", label: "Clean-room herbouw (4d) — behoud forensiek",
-          vec: { CONT: 2, FOR: 2, BC: -2, KOS: -2 }, quality: "best",
-          note: "Langere hersteltijd maar sluitend bewijs + zekerheid dat aanvaller weg is." },
-        { role: "ciso", label: "Prod-restore op bestaande systemen (12u)",
-          vec: { CONT: -1, FOR: -2, BC: 2, KOS: -1 }, quality: "poor",
-          note: "Snel, maar bewijs overschreven en beacons kunnen blijven zitten." },
-        { role: "ops_manager", label: "Noodplan aan + handmatige processen",
+        { role: "ciso", label: "Clean-room + goodwill-betaling voor tijd — 4 dagen bouwen",
+          vec: { CONT: 2, FOR: 2, BC: -1, KOS: -1 }, quality: "best",
+          note: "Langste hersteltijd maar zekerheid + forensisch bewijs volledig. Referentie-aanpak." },
+        { role: "ciso", label: "Gefaseerd — snel kritiek terug, geleidelijk de rest",
+          vec: { CONT: 0, FOR: 0, BC: 1, KOS: 0 }, quality: "good",
+          note: "Sneller operationeel maar risico dat aanvaller nog terugkomt. Compromis." },
+        { role: "ciso", label: "Prod-restore — backups over bestaande hosts",
+          vec: { CONT: -2, FOR: -2, BC: 2, KOS: -1 }, quality: "wrong",
+          note: "Verliest bewijs, aanvaller kan nog persistence hebben. Klassiek zelf-in-de-voet." },
+        { role: "ops_manager", label: "Noodplan aan + management-team briefen + klantenservice op standby",
           vec: { BC: 2, VER: 1 }, quality: "best",
-          note: "Klanten voelen niets. Downtime wordt operationele last, niet reputatieschade." },
-        { role: "ops_manager", label: "Wachten op IT-herstel — geen noodplan",
-          vec: { BC: -2, VER: -2 }, quality: "wrong",
-          note: "3 dagen niet leveren = klanten weg + boeteclausules." },
+          note: "3-4 dagen downtime wordt behapbaar. Klanten voelen 40% capaciteit niet." },
+        { role: "ops_manager", label: "Noodplan pas activeren als IT-herstel faalt",
+          vec: { BC: -2, VER: -1 }, quality: "poor",
+          note: "Reactief = paniek. Proactief = beheersing." },
+        { role: "cfo", label: "Goodwill-betaling €30k toestaan als IR-kosten (verzekerd)",
+          vec: { CONT: 1, KOS: -1 }, quality: "good",
+          note: "Tijd kopen is legitiem — dit is geen losgeld maar een IR-tactiek. Verzekerd." },
+        { role: "cfo", label: "Geen enkele betaling — ook geen goodwill",
+          vec: { CONT: -2, JUR: 0, KOS: 1 }, quality: "poor",
+          note: "Principe verheerlijken kost hier 4 dagen extra downtime. Legitieme IR-tactiek." },
       ],
     )},
 
-    // ── R6 — Leaksite live ──
-    { id: r[5], type: "round", position: { x: 3500, y: 220 }, data: roundData(
-      "R6 — Leaksite live",
-      "T+72u. Losgeld niet betaald. Aanvaller publiceert eerste sample: 500 klant-emails + intern management-rapport. Media pikt het op.",
+    // ── R6 ──
+    { id: r[5], type: "round", position: { x: 4420, y: 220 }, data: roundData(
+      "R6 — De leaksite gaat live",
+      "Donderdag 15:00. Deadline is gepasseerd. Clean-room is voor 80% klaar. Sphynx heeft de eerste sample gepubliceerd: 500 klant-emails + intern management-rapport. Landelijke media pikt het binnen 15 min op.\n\nTrending term wordt jullie bedrijfsnaam. Vier interview-verzoeken. Board-vergadering ingelast voor 20:00.\n\nLegal wijst erop dat 500 gelekte klant-mails betekent dat individuele meldingen aan die klanten verplicht zijn (aanvullende AVG-melding, 72u vanaf publicatie). Advocatenkantoor kan helpen maar wil NU besluit — communicatie is niet meer optioneel.",
       15,
     )},
-    { id: r6i[0].id, type: "inject", position: { x: 3540, y: 440 }, data: injectData({
-      title: "AD.nl — 'Grote NL-organisatie slachtoffer'",
-      content: "Landelijke media pikt leak op. Interview-verzoeken van 4 media. Sociale media woedend + speculatief.",
-      type: "media", channel: "news", urgency: "high", senderName: "Media-monitoring",
+    { id: r6i[0].id, type: "inject", position: { x: 4460, y: 440 }, data: injectData({
+      title: "AD.nl / RTL / NOS — 'Grote NL-organisatie slachtoffer'",
+      content:
+        "Van: Media-monitoring — 15:12\n\n" +
+        "PUBLICATIES afgelopen 12 min:\n" +
+        "  • AD.nl — 'Ransomware bij [bedrijfsnaam]: klantdata gelekt' (15:04)\n" +
+        "  • RTL Z — Beursreactie: -6% in 8 minuten (15:07)\n" +
+        "  • NOS — Persbericht opgevraagd (15:09)\n" +
+        "  • De Telegraaf — twitter-post: 'reactie?' (15:10)\n" +
+        "  • FD — Diepgaande analyse aangekondigd voor morgen\n\n" +
+        "SOCIAL SENTIMENT: Twitter 87% negatief, hashtag #DataLek trending NL. LinkedIn 60% negatief maar meer nuance.\n\n" +
+        "INTERVIEW-VERZOEKEN (deadline vandaag):\n" +
+        "  • NOS Journaal — CEO voor 18:00 uitzending\n" +
+        "  • FD — hoofdredacteur zelf, CEO of CFO\n" +
+        "  • RTL Boulevard — bureau-drama\n" +
+        "  • Nieuwsuur — CISO, technisch-diepgaand\n\n" +
+        "Als jullie NIEMAND leveren tegen 17:00, wordt het verhaal geschreven met 'geen reactie'.",
+      type: "media", channel: "news", urgency: "critical",
+      senderName: "Media-monitoring", timestamp: "15:12",
       importance: "crucial", deliverySeconds: 0,
     })},
-    { id: r6i[1].id, type: "inject", position: { x: 3720, y: 440 }, data: injectData({
-      title: "Board-vergadering ingelast",
-      content: "Aandeelhouders vragen positie. Externe adviesraad wil vergadering vanavond.",
-      type: "executive", channel: "email", urgency: "critical", senderName: "Company Secretary",
+    { id: r6i[1].id, type: "inject", position: { x: 4660, y: 440 }, data: injectData({
+      title: "Board — spoedvergadering 20:00 vanavond",
+      content:
+        "Van: Company Secretary — 15:30\n\n" +
+        "'CEO, Board-voorzitter vraagt spoedvergadering. Alle 5 board-leden + 2 externe adviesraad + executive team.\n\n" +
+        "Agenda:\n" +
+        "  1. Status update — waar staan we NU?\n" +
+        "  2. Communicatie-strategie — pers, klanten, aandeelhouders\n" +
+        "  3. Financiële impact & verzekering\n" +
+        "  4. Herstel timeline & vertrouwen\n" +
+        "  5. Governance — wie leidt, wat is onze positie?\n\n" +
+        "Board-voorzitter privé: 'ik verwacht LEIDERSCHAP vanavond, niet excuses. Als er vragen zijn — beantwoord ze. Als er fouten zijn — benoem ze. Wij staan achter jou zolang jij ons niet verrast met dingen die we hadden moeten weten.'\n\n" +
+        "Externe advies: minstens 1 board-lid stelt vraag over jouw persoonlijke positie. Wees voorbereid.",
+      type: "executive", channel: "email", urgency: "critical",
+      senderName: "Company Secretary", timestamp: "15:30",
       importance: "crucial", targetRoles: ["ceo"], visibility: "exclusive",
       deliverySeconds: 300,
     })},
-    { id: dec[5], type: "decision", position: { x: 3900, y: 220 }, data: decisionData(
-      "Ronde 6 — Reactie op leaksite",
+    { id: r6i[2].id, type: "inject", position: { x: 4860, y: 440 }, data: injectData({
+      title: "Legal — aanvullende AVG-melding + individuele klant-notif's",
+      content:
+        "Van: Marloes Jansen — Legal — 15:45\n\n" +
+        "URGENT — na publicatie van 500 klant-emails is aanvullende AVG-melding vereist:\n\n" +
+        "1) Melding aan AP: aanvullende informatie datalek. Deadline: 72u vanaf publicatie (zondag 15:00).\n" +
+        "2) Individuele melding aan 500 betrokkenen. AVG art. 34 — 'hoog risico'. Publicatie op leaksite = hoog risico. GEEN uitstel.\n\n" +
+        "OPTIES:\n" +
+        "  A) Mail-template, morgen versturen naar 500 mensen. Kans op backlash: hoog. Legitiem-boete-risico: laag.\n" +
+        "  B) Handmatig bellen via specialistisch bureau. Kosten €25k. Ontvangst: veel beter. Duur: 3 dagen.\n" +
+        "  C) Combi: proactief massa-mail vandaag, telefonische follow-up binnen 48u. Kosten €10k. AANBEVOLEN.\n\n" +
+        "Beslissing nodig vandaag 17:00.",
+      type: "regulatory", channel: "email", urgency: "high",
+      senderName: "Marloes Jansen — Legal", timestamp: "15:45",
+      importance: "crucial", targetRoles: ["legal"], visibility: "exclusive",
+      deliverySeconds: 480,
+    })},
+    { id: dec[5], type: "decision", position: { x: 5060, y: 220 }, data: decisionData(
+      "Reactie op leak — hoe positioneren?",
       [
-        { role: "head_of_comms", label: "Actieve pers-briefing + FAQ live",
+        { role: "ceo", label: "NOS Journaal vanavond — jij in beeld, transparant + met plan",
           vec: { VER: 2, JUR: 1 }, quality: "best",
-          note: "Publieke opinie vragen om vertrouwen — zichtbaarheid is de valuta." },
+          note: "Boardvoorzitter vraagt leiderschap. Zichtbaarheid onder druk = gouden moment." },
+        { role: "ceo", label: "COO of externe woordvoerder inzetten",
+          vec: { VER: -2 }, quality: "poor",
+          note: "Delegeren in crisis voedt kritiek." },
+        { role: "ceo", label: "Alleen schriftelijke verklaring, geen interviews",
+          vec: { VER: -1 }, quality: "poor",
+          note: "Statement zonder gezicht = 'wat verbergen ze?'" },
+        { role: "head_of_comms", label: "Actieve pers-briefing + FAQ + 1-op-1 met key media",
+          vec: { VER: 2, JUR: 1 }, quality: "best",
+          note: "Nu bepaal je de framing, later is het te laat." },
         { role: "head_of_comms", label: "Statement via advocaten alleen",
           vec: { VER: -2 }, quality: "poor",
-          note: "Klinkt schuldig. Advocatentaal weerhoudt journalisten niet." },
-        { role: "legal", label: "Aanvullende AVG-melding + individuele notif's",
-          vec: { JUR: 2, VER: 1, KOS: -1 }, quality: "best",
-          note: "500 klant-mails gelekt = individuele meldplicht." },
-        { role: "legal", label: "Wachten tot volledige omvang bekend",
+          note: "Klinkt schuldig. Journalisten schrijven het verhaal zonder jou." },
+        { role: "legal", label: "Optie C — mass mail + telefonische follow-up (aanbevolen)",
+          vec: { JUR: 2, VER: 2, KOS: -1 }, quality: "best",
+          note: "Compliance + menselijkheid. Optimale mix voor kosten en effect." },
+        { role: "legal", label: "Alleen massa-mail — snelst en goedkoopst",
+          vec: { JUR: 1, VER: -1 }, quality: "poor",
+          note: "500 mensen die zichzelf op leaksite tegenkomen willen persoonlijk contact." },
+        { role: "legal", label: "Wachten tot 500-lijst definitief geverifieerd is",
           vec: { JUR: -2 }, quality: "wrong",
-          note: "AVG-boete op vertraging is 4% wereldwijde omzet." },
-        { role: "ceo", label: "Board live in beeld — 'ik leid dit'",
-          vec: { VER: 2 }, quality: "best",
-          note: "Aandeelhouders willen leiderschap zien." },
-        { role: "ceo", label: "Delegeren aan COO of externe woordvoerder",
-          vec: { VER: -1 }, quality: "poor",
-          note: "In crisis wil de wereld het gezicht van de organisatie zien." },
+          note: "AVG-boete 4% wereldwijde omzet bij vertraging. Deadline is deadline." },
       ],
     )},
 
-    // ── R7 — Post-mortem ──
-    { id: r[6], type: "round", position: { x: 4080, y: 220 }, data: roundData(
-      "R7 — Post-mortem & Lessen",
-      "T+7d. Herstel op 80%. Toezichthouder is inhoudelijk positief. Board vraagt: wat gaat structureel veranderen?",
+    // ── R7 ──
+    { id: r[6], type: "round", position: { x: 5240, y: 220 }, data: roundData(
+      "R7 — Zeven dagen later: wat verandert er?",
+      "Volgende week donderdag. 08:00 in het board-room. De acute fase is voorbij. Clean-room draait, operatie is op 90% capaciteit terug, klant-notificaties afgerond (450 van de 500 gereageerd, 3 kleine klanten opgezegd, 1 grote klant heeft juist vertrouwen bevestigd publiekelijk op LinkedIn). Media-aandacht grotendeels verstomd, Nieuwsuur volgt met documentaire over 6 maanden. NCSC 'positief-onder-voorbehoud' bevinding.\n\nBoard vraagt: 'wat leren we hiervan? Wat gaan we structureel anders doen? Concrete commitments, met eigenaar en budget?'\n\nDit is de kans om deze crisis te verzilveren. Doe je het slim: aanleiding om cyberweerbaarheid blijvende prioriteit te maken. Doe je het slecht: goede voornemens die over 6 maanden verstoft zijn.",
       12,
     )},
-    { id: r7i[0].id, type: "inject", position: { x: 4120, y: 440 }, data: injectData({
-      title: "Post-mortem template — wat gaan we anders doen?",
-      content: "Elke rol schrijft 1 structurele verandering op. Board wil concrete commitments + budget.",
-      type: "internal", channel: "memo", urgency: "low", senderName: "Company Secretary",
-      importance: "info",
+    { id: r7i[0].id, type: "inject", position: { x: 5280, y: 440 }, data: injectData({
+      title: "Post-mortem template — Board vraagt concrete commitments",
+      content:
+        "Van: Company Secretary — 08:00\n\n" +
+        "'Elk executive team-lid schrijft één structurele verandering op:\n\n" +
+        "  1. Concrete actie (geen 'we gaan kijken naar')\n" +
+        "  2. Eigenaar (naam)\n" +
+        "  3. Deadline (datum)\n" +
+        "  4. Budget (bedrag)\n" +
+        "  5. Success-metric (hoe meten we dat het werkt?)\n\n" +
+        "Board weet dat dit incident €4M gekost heeft. Ze zijn bereid tot 3x dat bedrag te investeren IF commitments concreet + meetbaar zijn.\n\n" +
+        "Generalities ('we gaan awareness verhogen') → investering gaat NIET door. Concreet ('MDR-uitbreiding naar 24/7 tier-3 + jaarlijkse full-scope oefening met externe leverancier + purple-team assessment Q3') → budget goedgekeurd.'",
+      type: "internal", channel: "memo", urgency: "medium",
+      senderName: "Company Secretary", timestamp: "08:00",
+      importance: "info", deliverySeconds: 0,
     })},
-    { id: dec[6], type: "decision", position: { x: 4300, y: 220 }, data: decisionData(
-      "Ronde 7 — Structurele lessen",
+    { id: r7i[1].id, type: "inject", position: { x: 5480, y: 440 }, data: injectData({
+      title: "Aandeelhoudersvertegenwoordiging — vertrouwenscheck",
+      content:
+        "Van: David Boersma — Voorzitter aandeelhoudersvertegenwoordiging — 08:30\n\n" +
+        "'Onze aandeelhouders volgen de post-mortem met scherpe aandacht:\n\n" +
+        "  • Directie heeft de crisis integer aangepakt — waardering.\n" +
+        "  • Aandelenkoers is voor 60% hersteld — rendez-vous met Q3-jaarcijfer volgt.\n" +
+        "  • ZORG: organisatie MOET structureel iets leren, anders is dit reputatie-krediet-verlies opnieuw op de horizon.\n\n" +
+        "Wij verwachten:\n" +
+        "  1. Cyberweerbaarheid als STRATEGISCHE prioriteit in de jaarrekening\n" +
+        "  2. Externe periodieke assessment (jaarlijks) met openbare samenvatting\n" +
+        "  3. Board-level cyber-risk-comité (kwartaalrapportage)\n" +
+        "  4. Budget: € [x] structureel per jaar boven op de huidige IT-uitgaven\n\n" +
+        "4 dingen concreet → wij blijven investerend. 'Business as usual' → significant deel positie in Q4 naar concurrenten.'",
+      type: "executive", channel: "email", urgency: "high",
+      senderName: "David Boersma — Aandeelhouders",
+      importance: "info", targetRoles: ["ceo"], visibility: "exclusive",
+      deliverySeconds: 300,
+    })},
+    { id: dec[6], type: "decision", position: { x: 5680, y: 220 }, data: decisionData(
+      "Structurele lessen — waar committen jullie op?",
       [
-        { role: "ciso", label: "Extra Eye Security services + MDR uitbreiding",
+        { role: "ciso", label: "Eye Security uitbreiden naar 24/7 tier-3 + purple-team + budget €[X]",
           vec: { CONT: 2, FOR: 1, KOS: -1 }, quality: "best",
-          note: "Deze crisis was minder erg door de retainer — nu is het moment voor uitbreiding." },
-        { role: "ciso", label: "Alleen interne SOC uitbouwen",
+          note: "Concreet, meetbaar, board-approved. Voorkomt herhaling; expertise blijft extern." },
+        { role: "ciso", label: "Interne SOC-team opzetten (2M+/jaar)",
           vec: { CONT: -1, KOS: -2 }, quality: "poor",
-          note: "24/7 SOC bouwen kost 2M+/jaar. Niet realistisch." },
-        { role: "legal", label: "Vaste incident-runbook + jaarlijkse oefening",
+          note: "24/7 SOC bouwen kost 2M+/jaar, jaren doorlooptijd. Onrealistisch." },
+        { role: "ciso", label: "Alleen awareness-training uitrollen",
+          vec: { CONT: -1 }, quality: "wrong",
+          note: "Awareness alleen voorkomt geen ransomware." },
+        { role: "legal", label: "Incident-runbook + jaarlijkse oefening + kwartaal-review",
           vec: { JUR: 2, VER: 1 }, quality: "best",
-          note: "Meldplicht-fouten voorkom je door repetitie, niet door goede intenties." },
-        { role: "legal", label: "Alleen documenteren wat er gebeurd is",
+          note: "Meldplicht-fouten voorkom je door repetitie." },
+        { role: "legal", label: "Alleen dit incident documenteren",
           vec: { JUR: -1 }, quality: "poor",
           note: "Documentatie zonder training = plank-materiaal." },
-        { role: "ceo", label: "Cyberweerbaarheid als strategische prioriteit",
+        { role: "ceo", label: "Cyber-risk-comité op board-niveau + externe assessment + budget €[X]/jaar",
           vec: { CONT: 1, VER: 2, KOS: -2 }, quality: "best",
-          note: "Cyberrisico is business-risico. Board-level commitment nu vs. crisis-mode over 2 jaar." },
-        { role: "ceo", label: "Business-as-usual, geen structurele wijziging",
+          note: "Board-level commitment = strategisch. Aandeelhouders vragen dit expliciet." },
+        { role: "ceo", label: "Alleen budget verhogen, geen governance-verandering",
+          vec: { CONT: 0, VER: 0 }, quality: "poor",
+          note: "Meer geld ≠ meer effect. Structuur is de multiplier." },
+        { role: "ceo", label: "Business-as-usual — 'we hebben geleerd'",
           vec: { CONT: -2, VER: -2 }, quality: "wrong",
           note: "Terug naar dagorde = tweede crisis binnen 3 jaar." },
       ],
     )},
 
-    // ── Outcomes — cumulatieve score bepaalt welk pad ──
-    { id: outWin, type: "outcome", position: { x: 4480, y: 80 }, data: outcomeData({
+    // ── Outcomes ──
+    { id: outWin, type: "outcome", position: { x: 5860, y: 80 }, data: outcomeData({
       key: "gewonnen",
-      label: "Contained met integriteit",
+      label: "Contained met integriteit — case study voor de sector",
       narrative:
-        "Zes weken later. Toezichthouder gebruikt jullie case als voorbeeld voor de sector. " +
-        "Klanten waarderen de proactieve communicatie — grote klant blijft. Aandeelhouders verhogen cyberbudget met 40%. " +
-        "Aanvaller geïdentificeerd binnen 3 maanden door forensisch bewijs.",
-      lessonLearned: "Snelheid + integriteit + transparantie is het referentiepad.",
-      scoreRange: { min: 15 },
+        "Zes maanden later. Jullie case is voorbeeld voor de sector geworden. NCSC gebruikt jullie aanpak in trainings. De Autoriteit Persoonsgegevens heeft de melding als 'proportioneel en tijdig' gekwalificeerd — geen boete. Verzekeraar heeft de claim volledig gehonoreerd (€2.8M dekking uitgekeerd). Klantverlies bleef bij 3 kleine klanten; grote klanten hebben publiekelijk vertrouwen bevestigd. Aandelenkoers is 8% hoger dan vóór de crisis. De post-mortem-commitments zijn uitgevoerd; het cyber-risk-comité vergadert kwartaal, de externe assessment loopt jaarlijks. Aanvaller geïdentificeerd door forensisch bewijs; 3 arrestaties.",
+      lessonLearned: "Snelheid + integriteit + transparantie — geen shortcuts, wel discipline.",
+      scoreRange: { min: 18 },
     })},
-    { id: outMixed, type: "outcome", position: { x: 4480, y: 240 }, data: outcomeData({
+    { id: outMixed, type: "outcome", position: { x: 5860, y: 260 }, data: outcomeData({
       key: "gemengd",
       label: "Overleefd — met kleerscheuren",
       narrative:
-        "Organisatie is er nog. Kleine boete voor te late aanvullende melding (€ 150k). " +
-        "Twee klanten weg (5% omzetdaling). Media-aandacht vervaagt na 2 weken. Board wil evaluatie en versterking.",
-      lessonLearned: "Verkeerde volgorde in comms kostte meer dan de technische keuzes.",
-      scoreRange: { min: 3, max: 14 },
+        "Zes maanden later. Organisatie draait weer op volle capaciteit. Boete van €280k van AP voor te late aanvullende melding — 'proportioneel gezien de verzachtende omstandigheden'. Verzekeraar heeft 70% van de claim gedekt. Vijf klanten weg (1 grote, 4 kleine) — 5-7% omzetdaling. Media-aandacht vervaagd. Aandelenkoers is teruggevallen naar pre-crisis niveau. Board heeft budget goedgekeurd voor structurele veranderingen (helft van wat werd gehoopt). CEO heeft board-vertrouwen behouden.",
+      lessonLearned: "Verkeerde volgorde in communicatie kostte meer dan de technische keuzes. Nog steeds herstelbaar, maar bittere lessen.",
+      scoreRange: { min: 3, max: 17 },
     })},
-    { id: outLose, type: "outcome", position: { x: 4480, y: 400 }, data: outcomeData({
+    { id: outLose, type: "outcome", position: { x: 5860, y: 440 }, data: outcomeData({
       key: "verloren",
-      label: "Cascaded failure",
+      label: "Cascaded failure — lange herstelweg",
       narrative:
-        "Boete van 1,2% wereldwijde omzet. Persaandacht wekenlang. Grote klanten stappen over. " +
-        "Aandeelhouders roepen externe consultant in; CEO stapt op na Q2. Aanvaller nooit gepakt.",
-      lessonLearned: "Deadlines zijn deadlines. Compliance eerst, dan techniek — geen shortcuts.",
+        "Zes maanden later. AVG-boete van €1.8M — 1.2% van wereldwijde omzet. Verzekeraar heeft claim afgewezen wegens niet-nakomen 24u-clausule. Drie grote klanten vertrokken (18% omzetdaling). Aandelenkoers is 32% lager dan pre-crisis; activistische aandeelhouder-groep wil zittende bestuur vervangen. Aanvaller nooit gepakt. CEO opgestapt na buitengewone aandeelhoudersvergadering in Q2. Interimmer wordt zoekend. NCSC heeft in publieke eindrapportage 'onvoldoende voortvarendheid' benoemd. Sector heeft onze case als afschrikwekkend voorbeeld.",
+      lessonLearned: "Deadlines zijn deadlines. Compliance eerst, dan techniek. Beslissingen onder druk waren impulsief; structuur ontbrak.",
       scoreRange: { max: 2 },
     })},
   ]
@@ -423,7 +684,6 @@ export function simpleStoryExample(): ScenarioGraph {
   const edges: ScenarioGraph["edges"] = [
     { id: id("e"), source: startId, target: r[0], type: "sequence" },
   ]
-
   const injectsPerRound = [r1i, r2i, r3i, r4i, r5i, r6i, r7i]
   for (let i = 0; i < 7; i++) {
     for (const inj of injectsPerRound[i]) {
@@ -434,7 +694,6 @@ export function simpleStoryExample(): ScenarioGraph {
       edges.push({ id: id("e"), source: dec[i], target: r[i + 1], type: "sequence" })
     }
   }
-  // Laatste decision → 3 outcomes; engine kiest via scoreRange
   edges.push({ id: id("e"), source: dec[6], target: outWin,   type: "sequence" })
   edges.push({ id: id("e"), source: dec[6], target: outMixed, type: "sequence" })
   edges.push({ id: id("e"), source: dec[6], target: outLose,  type: "sequence" })

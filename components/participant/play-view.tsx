@@ -494,21 +494,26 @@ function DecisionTicket({
   } }).activeDecision
   if (!ad || !ad.perRole) return null
 
-  const canSubmit = !!participantId && !!participantRole
+  // In EVENT-mode: iPad = team, alle opties zichtbaar (team beslist voor alle rollen).
+  // In ASSESSMENT-mode: filter op eigen rol.
+  const isEventMode = session.mode === "event"
+  const canSubmit = !!participantId && (isEventMode || !!participantRole)
   const roundIndex = session.currentRound
 
   const already = (session.submittedDecisions ?? []).find(
     d => d.participantId === participantId && d.roundIndex === roundIndex,
   )
 
-  // Rol-fallback: als geen enkele optie mijn rol match, alle opties open.
-  const mine = participantRole
-    ? ad.options.filter(o => !o.allowedRole || o.allowedRole === participantRole)
-    : ad.options
+  // Event mode: alle opties. Assessment: filter op rol.
+  const mine = isEventMode
+    ? ad.options
+    : participantRole
+      ? ad.options.filter(o => !o.allowedRole || o.allowedRole === participantRole)
+      : ad.options
   const visibleOptions = mine.length > 0 ? mine : ad.options
 
   async function pick(optionId: string) {
-    if (!participantId || !participantRole || !canSubmit) return
+    if (!participantId || !canSubmit) return
     setError(null)
     setSubmitting(optionId)
     try {
@@ -998,8 +1003,8 @@ export function PlayView() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Feed — main column; flex allows order-first on DecisionPanel for mobile */}
           <div className="flex flex-col gap-5 lg:col-span-2">
-            {/* Role picker — visible while participant has no role, OR always in lobby so they can see others' claims */}
-            {participantId && status !== "ended" && (status === "lobby" || !participantRole) && (
+            {/* Role picker — alleen in ASSESSMENT mode. In EVENT: iPad = team, geen individuele rol nodig. */}
+            {participantId && status !== "ended" && session.mode !== "event" && (status === "lobby" || !participantRole) && (
               <RolePickerLobby
                 session={session}
                 participantId={participantId}
@@ -1076,116 +1081,7 @@ export function PlayView() {
               )
             })()}
 
-            {/* DISCUSSION PHASE — BOB/OODA phase prompt + stepper, then prep */}
-            {session.roundPhase === "discussion" && (() => {
-              const framework = session.config?.decisionFramework
-              const hasBobOoda = framework === 'bob' || framework === 'ooda'
-              const phaseIndex = session.currentDiscussionPhaseIndex ?? -1
-              const totalPhases = framework === 'ooda' ? 4 : 3
-              const isLastPhase = phaseIndex >= totalPhases - 1
-              return (
-                <>
-                  {session.currentDiscussionPrompt && (
-                    <div
-                      className="border border-tt-border bg-tt-surface overflow-hidden"
-                      style={{ borderLeft: "3px solid var(--tt-accent)" }}
-                    >
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-tt-bright/5 border-b border-tt-border">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">
-                            Discussie — huidige fase
-                          </span>
-                          {hasBobOoda && phaseIndex >= 0 && (
-                            <span className="font-mono text-[9px] text-tt-dim">
-                              {phaseIndex + 1}/{totalPhases}
-                            </span>
-                          )}
-                        </div>
-                        {isSessionLead && hasBobOoda && !isLastPhase && (
-                          <button
-                            onClick={async () => {
-                              try {
-                                await api.setDiscussionPhase({
-                                  roundNumber: session.currentRound,
-                                  phaseIndex: phaseIndex + 1,
-                                  action: 'set',
-                                })
-                              } catch { /* ignore */ }
-                            }}
-                            className="font-mono text-[9px] uppercase tracking-widest text-tt-dim hover:text-tt-accent border border-tt-border/50 hover:border-tt-accent/40 px-2.5 py-1 transition-colors"
-                          >
-                            Volgende fase →
-                          </button>
-                        )}
-                      </div>
-                      {hasBobOoda && session.activeDiscussionPhase && session.currentDiscussionPhaseEffectiveSeconds && (
-                        <div className="border-b border-tt-border/50 px-4 py-3 flex flex-col gap-2">
-                          <PhaseSegments
-                            totalPhases={totalPhases}
-                            phaseIndex={phaseIndex}
-                          />
-                          <PhaseTimer
-                            phaseName={PARTICIPANT_PHASE_NAMES[framework === 'ooda' ? 'ooda' : 'bob'][phaseIndex] ?? ''}
-                            phaseIndex={phaseIndex}
-                            totalPhases={totalPhases}
-                            startedAt={session.activeDiscussionPhase.phaseStartedAt}
-                            effectiveDurationSeconds={session.currentDiscussionPhaseEffectiveSeconds}
-                            paused={!!session.currentDiscussionPhasePaused}
-                          />
-                        </div>
-                      )}
-                      <p className="font-mono text-sm text-tt-bright leading-relaxed p-4">{session.currentDiscussionPrompt}</p>
-                      {isLastPhase && (
-                        <div className="border-t border-tt-border px-4 py-2.5 flex items-center gap-2 bg-tt-accent/5">
-                          <span className="size-1.5 rounded-full bg-tt-accent animate-pulse shrink-0" />
-                          <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">
-                            {isSessionLead
-                              ? "Alle fases doorlopen — wacht op beslissing van de facilitator"
-                              : "Alle fases doorlopen — het beslismoment komt eraan"}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Discussion prep — previews role-specific decisions */}
-                  {currentRound?.roleActions && participantRole && (() => {
-                    const myActions = currentRound.roleActions!.filter(
-                      a => a.allowedRoles.length === 0 || a.allowedRoles.includes(participantRole)
-                    )
-                    if (myActions.length === 0) return null
-                    return (
-                      <div
-                        className="border border-tt-border bg-tt-surface overflow-hidden"
-                        style={{ borderLeft: "3px solid color-mix(in srgb, var(--tt-accent) 30%, transparent)" }}
-                      >
-                        <div className="flex items-center gap-2 px-4 py-2.5 bg-tt-bright/5 border-b border-tt-border">
-                          <span className="font-mono text-[10px] font-bold tracking-widest text-tt-accent">VOORBEREIDING — {ROLE_META[participantRole].label.toUpperCase()}</span>
-                          <span className="font-mono text-[9px] text-tt-dim ml-auto">Straks te beslissen</span>
-                        </div>
-                        <div className="px-4 py-3 flex flex-col gap-2">
-                          <p className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">Jouw keuzes in deze ronde — bedenk welke actie je gaat bepleiten en waarom</p>
-                          {myActions.map(action => (
-                            <div key={action.id} className="flex items-start gap-3 border border-tt-border px-3 py-2.5"
-                              style={{ borderLeft: "3px solid color-mix(in srgb, var(--tt-accent) 30%, transparent)" }}>
-                              <span className="font-mono text-[9px] text-tt-accent shrink-0 mt-0.5">
-                                {action.isRecommended ? "★" : "○"}
-                              </span>
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-mono text-xs text-tt-bright">{stripMarkdown(stripBobPrefix(action.label))}</span>
-                                {action.description && (
-                                  <p className="font-mono text-[10px] text-tt-dim leading-relaxed">{stripMarkdown(stripBobPrefix(action.description))}</p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })()}
-                </>
-              )
-            })()}
+            {/* BOB/OODA discussion prompts + prep uitgezet voor cleane story-modus */}
 
             {/* Fact-check review — shown when the current round reaches the review phase */}
             {session.roundPhase === "review" && participantId && (

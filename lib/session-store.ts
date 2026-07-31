@@ -113,37 +113,41 @@ function tickRoundPhase(session: SessionState): SessionState {
   const state = session.activeRoundPhaseState
   if (!state) return session
   if (session.phaseAutoAdvancePaused) return session
-  // WHY: graph-based sessies gebruikten de auto-tick niet; daardoor bleven
-  // participants zonder tijdsdruk hangen. Nu volgen ze dezelfde fase-cyclus.
 
-  const durationMs = (state.durations[state.currentPhase] ?? 0) * 1000
-  const elapsedMs = Date.now() - state.phaseStartedAt
-  if (elapsedMs < durationMs) return session
-
-  const order: RoundPhase[] = ["inject", "discussion", "decision", "review"]
-  const currentIdx = order.indexOf(state.currentPhase)
-  const nextPhase = order[currentIdx + 1]
-  if (!nextPhase) return session
-
-  const enteringDiscussion = nextPhase === "discussion"
-  const now = Date.now()
-  return {
-    ...session,
-    roundPhase: nextPhase,
-    activeRoundPhaseState: {
-      ...state,
-      currentPhase: nextPhase,
-      phaseStartedAt: state.phaseStartedAt + durationMs,
-    },
-    activeDiscussionPhase: enteringDiscussion
-      ? {
-          roundNumber: state.roundNumber,
-          phaseIndex: 0,
-          phaseStartedAt: now,
-          extended: false,
-        }
-      : session.activeDiscussionPhase,
+  // Loop: kan meerdere fases overslaan als de tick lang niet is gedraaid.
+  let cur = state
+  let s = session
+  const order: RoundPhase[] = ["inject", "discussion", "decision", "lock", "review"]
+  // Max 5 stappen — één full ronde.
+  for (let step = 0; step < 5; step++) {
+    const durationMs = (cur.durations[cur.currentPhase] ?? 0) * 1000
+    const elapsedMs = Date.now() - cur.phaseStartedAt
+    if (elapsedMs < durationMs) return s
+    const currentIdx = order.indexOf(cur.currentPhase)
+    const nextPhase = order[currentIdx + 1]
+    if (!nextPhase) return s
+    const nextStart = cur.phaseStartedAt + durationMs
+    const enteringDiscussion = nextPhase === "discussion"
+    s = {
+      ...s,
+      roundPhase: nextPhase,
+      activeRoundPhaseState: {
+        ...cur,
+        currentPhase: nextPhase,
+        phaseStartedAt: nextStart,
+      },
+      activeDiscussionPhase: enteringDiscussion
+        ? {
+            roundNumber: cur.roundNumber,
+            phaseIndex: 0,
+            phaseStartedAt: Date.now(),
+            extended: false,
+          }
+        : s.activeDiscussionPhase,
+    }
+    cur = s.activeRoundPhaseState!
   }
+  return s
 }
 
 // ─── Phase auto-advance (Phase 10) ─────────────────────────────
@@ -398,6 +402,20 @@ export function subscribeParticipant(listener: Listener): () => void {
 
 export async function getState(): Promise<PublicState> {
   return { session: await dbGetSession() }
+}
+
+// Tick round-phase auto-advance + persist als er iets veranderd is.
+// Wordt aangeroepen door de state-route zodat fases automatisch verlopen ook
+// zonder mutations van gebruikers.
+export async function settleAndGetState(): Promise<PublicState> {
+  const session = await dbGetSession()
+  if (!session) return { session: null }
+  const ticked = tickPhases(tickRoundPhase(session))
+  if (ticked !== session && ticked.roundPhase !== session.roundPhase) {
+    await dbSetSession(ticked)
+    broadcastState(ticked)
+  }
+  return { session: ticked }
 }
 
 export async function getSession(): Promise<SessionState | null> {
