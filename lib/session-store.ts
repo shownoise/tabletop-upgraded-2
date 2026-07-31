@@ -4,7 +4,6 @@
  */
 
 import { randomBytes } from "crypto"
-import { generateScenario } from "./scenario-generator"
 import { evaluateChasersOnRoundStart, stepFromNode, type EngineTrigger, type StepResult } from "./graph/engine"
 import { cumulativeScore, selectOutcomeByScore } from "./graph/outcome-selector"
 import type { DecisionNodeData } from "./graph/types"
@@ -412,10 +411,10 @@ export async function createSession(
   documents?: RoleDocument[],
   graph?: ScenarioGraph,
 ): Promise<SessionState> {
-  const raw = scenario ?? generateScenario(config)
+  if (!scenario) throw new Error("createSession requires a scenario — legacy generator is removed")
   const resolvedScenario = config.selectedRoles?.length
-    ? remapMissingRoles(raw, config.selectedRoles)
-    : raw
+    ? remapMissingRoles(scenario, config.selectedRoles)
+    : scenario
   const startNodeId = graph?.nodes.find(n => n.type === "start")?.id
   const session: SessionState = {
     id: genId("ses"),

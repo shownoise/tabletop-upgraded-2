@@ -20,7 +20,7 @@ import type {
 } from "@/lib/graph/types"
 import type { ChoiceQuality, ScoreImpacts } from "@/lib/types"
 import { DYNAMIC_FILL_TOKENS } from "@/lib/graph/types"
-import { AspectPillBar, isAspectActive } from "./evaluation-aspects"
+import { isAspectActive } from "./evaluation-aspects"
 import { RoundScoringFields, InjectScoringFields, OptionScoringFields } from "./scoring-fields"
 import { ROLE_META } from "@/lib/types"
 import type {
@@ -272,14 +272,6 @@ function RoundForm({
               className="text-xs"
             />
           </Field>
-          <Field label="Aspecten voor rapportage">
-            <AspectPillBar
-              aspects={local.evaluationAspects}
-              nodeType="round"
-              features={features}
-              onChange={next => commit({ ...local, evaluationAspects: next })}
-            />
-          </Field>
         </div>
       </Section>
 
@@ -460,14 +452,6 @@ function InjectForm({ data, features, onSave }: { data: InjectNodeData; features
             <TargetRolesEditor
               value={local.targetRoles}
               onChange={(v: Role[] | undefined) => commit({ ...local, targetRoles: v })}
-            />
-          </Field>
-          <Field label="Aspecten voor rapportage">
-            <AspectPillBar
-              aspects={local.evaluationAspects}
-              nodeType="inject"
-              features={features}
-              onChange={next => commit({ ...local, evaluationAspects: next })}
             />
           </Field>
           {showNis2 && (
@@ -1140,62 +1124,17 @@ function DecisionOptionEditor({
           ))}
         </select>
       )}
-      {/* Score-impact per dimensie (max 2 raken is prima) */}
-      <div className="grid grid-cols-2 gap-1.5">
-        {DECISION_PRIMARY_DIMS.map(d => (
-          <label key={d.key} className="flex items-center gap-1.5 rounded border border-border bg-background px-1.5 py-1">
-            <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground flex-1 min-w-0 truncate">{d.label}</span>
-            <Input
-              type="number"
-              min={-5}
-              max={5}
-              value={option.scoreImpacts?.[d.key] ?? ""}
-              onChange={e => {
-                const raw = e.target.value
-                const next: ScoreImpacts = { ...(option.scoreImpacts ?? {}) }
-                if (raw === "" || Number(raw) === 0) delete next[d.key]
-                else next[d.key] = Number(raw)
-                onChange({ scoreImpacts: Object.keys(next).length ? next : undefined })
-              }}
-              placeholder="0"
-              className="h-6 w-14 font-mono text-[11px] text-right"
-            />
-          </label>
-        ))}
-      </div>
-      {/* Kwaliteit-ranking */}
-      <div className="flex items-center gap-1.5">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground shrink-0">Kwaliteit</span>
-        <div className="flex gap-1 flex-1">
-          {DECISION_QUALITY_RANKS.map(r => {
-            const on = option.qualityRank === r.key
-            return (
-              <button
-                key={r.key}
-                type="button"
-                onClick={() => onChange({ qualityRank: on ? undefined : r.key })}
-                className={`rounded border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition-colors ${
-                  on ? r.className : "border-border bg-background text-muted-foreground hover:border-primary/40"
-                }`}
-              >
-                {r.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      {/* Debrief-noot — één veld voor IR-perspectief én lesson learned.
+          Schrijft canonically naar lessonLearned (Deel A §2 debriefNote).
+          Legacy facilitatorCommentary blijft leesbaar; wordt niet meer bewerkt. */}
       <Textarea
         rows={2}
-        value={option.facilitatorCommentary ?? ""}
-        onChange={e => onChange({ facilitatorCommentary: e.target.value || undefined })}
-        placeholder="IR-retainer perspectief — verschijnt in review-fase én rapport"
-        className="text-[11px]"
-      />
-      <Textarea
-        rows={2}
-        value={option.lessonLearned ?? ""}
-        onChange={e => onChange({ lessonLearned: e.target.value || undefined })}
-        placeholder="Lesson learned (1 zin voor debrief)"
+        value={option.lessonLearned ?? option.facilitatorCommentary ?? ""}
+        onChange={e => onChange({
+          lessonLearned: e.target.value || undefined,
+          facilitatorCommentary: undefined,  // migratie: consolideer bij edit
+        })}
+        placeholder="Debrief-noot — IR-perspectief + lesson learned (1-2 zinnen)"
         className="text-[11px]"
       />
       <OptionScoringFields option={option} onChange={onChange} />

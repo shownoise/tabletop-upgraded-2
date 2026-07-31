@@ -991,58 +991,6 @@ export function SetupForm() {
           ))}
         </div>
 
-        {aiIntensity !== "off" && (
-          <div className="flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground">
-              Optionally upload the client's IR plan to tailor the scenario to their specific gaps and procedures.
-            </p>
-            <div className="flex items-center gap-3">
-              <input ref={fileRef} type="file" accept=".txt,.md,.csv" onChange={handleFileUpload} className="hidden" />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => fileRef.current?.click()}
-                className="gap-2 font-mono uppercase tracking-wider"
-              >
-                <Upload className="size-3.5" />
-                Upload IR plan
-              </Button>
-              {irFileName && (
-                <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm">
-                  <FileText className="size-3.5 text-primary" />
-                  <span className="font-mono text-xs">{irFileName}</span>
-                  <button
-                    type="button"
-                    onClick={() => { setIrFileName(null); setIrTruncated(null); update("irTemplateText", undefined); if (fileRef.current) fileRef.current.value = "" }}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                </div>
-              )}
-              {irTruncated && (
-                <p className="font-mono text-[10px] text-yellow-600 dark:text-yellow-400">
-                  ⚠ IR plan is afgekapt: {irTruncated.original.toLocaleString()} tekens → eerste {irTruncated.kept.toLocaleString()} bewaard.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Section 6b — IR-retainer profiel */}
-      <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs uppercase tracking-wider text-primary">IR-retainer profiel</span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Operationele details voor de retainer-test. Optioneel — als leeg gelaten, gebruikt de sessie wat op de scenario-graph staat.
-        </p>
-        <IrRetainerProfileEditor
-          value={config.irRetainerProfile}
-          onChange={p => update("irRetainerProfile", p)}
-        />
       </div>
 
       {/* Section 7 — Special events */}

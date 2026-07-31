@@ -527,15 +527,8 @@ export async function POST(req: Request) {
 
           scenario = aiSuccess?.scenario ?? null
           if (!scenario) {
-            try {
-              const { generateScenario } = await import("@/lib/scenario-generator")
-              scenario = generateScenario(config)
-            } catch (fallbackErr) {
-              const msg = fallbackErr instanceof Error ? fallbackErr.message : "Fallback generation failed"
-              console.error("[create] fallback scenario error:", msg)
-              send({ stage: "error", message: `Scenario generatie mislukt: ${msg}` })
-              return
-            }
+            send({ stage: "error", message: "Scenario-generatie is mislukt. Kies een graph-scenario via de builder." })
+            return
           }
         }
 
