@@ -1,49 +1,22 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import type { Node } from "@xyflow/react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import type {
-  DecisionNodeData,
-  DynamicFillConfig,
-  DynamicFillToken,
-  EvaluationAspect,
-  GraphFeatures,
-  GraphNodeData,
-  InjectNodeData,
-  OutcomeNodeData,
-  RoundNodeData,
-  SpecialNodeData,
+  DecisionNodeData, GraphFeatures, GraphNodeData,
+  InjectNodeData, OutcomeNodeData, OutcomeVector, RoundNodeData,
 } from "@/lib/graph/types"
-import type { ChoiceQuality, ScoreImpacts } from "@/lib/types"
-import { DYNAMIC_FILL_TOKENS } from "@/lib/graph/types"
-import { isAspectActive } from "./evaluation-aspects"
-import { RoundScoringFields, InjectScoringFields, OptionScoringFields } from "./scoring-fields"
-import { ROLE_META } from "@/lib/types"
-import type {
-  BobPhase,
-  FacilitatorNotes,
-  InjectChannel,
-  InjectReliability,
-  InjectSpanAnnotation,
-  InjectType,
-  LearningObjective,
-  Role,
-  RoleAction,
-  SpecialType,
-  Urgency,
-} from "@/lib/types"
-import { SUPERVISION_AREAS, type SupervisionArea } from "@/lib/engine/supervision"
-import { getSelectionRange, selectionRectRelativeTo, splitTextByAnnotations } from "@/components/shared/span-annotator"
-import { RoleActionsEditor } from "./editors/role-actions-editor"
-import { FacilitatorNotesEditor } from "./editors/facilitator-notes-editor"
-import { LearningObjectivesEditor } from "./editors/learning-objectives-editor"
-import { TargetRolesEditor } from "./editors/target-roles-editor"
-import { NODE_THEME } from "./node-theme"
-import type { GraphNodeType } from "@/lib/graph/types"
+import { ROLE_META, type Role } from "@/lib/types"
+import { Plus, Trash } from "lucide-react"
+
+// Minimal inspector. Alleen wat een auteur nodig heeft voor een story.
+// Rest van de scoring-details (domein, owner, requiresCosign, consulted,
+// aiPromptTemplate, dynamic, supervisionAreas, evaluationAspects) staan
+// nog wel op de types voor backwards compat — hier niet zichtbaar.
 
 interface Props {
   node: Node | null
@@ -56,113 +29,63 @@ interface Props {
   onSaveGraph: () => Promise<boolean>
 }
 
-const INJECT_TYPES: InjectType[] = [
-  "alert", "intel", "media", "executive", "technical", "regulatory", "social", "internal",
+const DIMS: Array<{ key: keyof OutcomeVector; label: string; hint: string }> = [
+  { key: "CONT", label: "Containment", hint: "Verkleint dit de voetafdruk van de aanvaller?" },
+  { key: "FOR",  label: "Forensiek",   hint: "Bewijs & volatiele data blijven bruikbaar?" },
+  { key: "BC",   label: "Continuïteit", hint: "Downtime & workarounds — kosten aan operaties?" },
+  { key: "JUR",  label: "Juridisch",   hint: "Meldplichten, contract, verzekeraar" },
+  { key: "VER",  label: "Vertrouwen",  hint: "Klanten, medewerkers, toezicht, pers" },
+  { key: "KOS",  label: "Kosten",      hint: "Uren + externe kosten" },
 ]
-const INJECT_CHANNELS: InjectChannel[] = [
-  "email", "sms", "phone", "teams", "siem", "edr", "news", "memo", "ransom_note",
-  "whatsapp", "slack", "siem_alert", "news_ticker", "system_alert", "raw",
-]
-const URGENCIES: Urgency[] = ["low", "medium", "high", "critical"]
 
-const SPECIAL_TYPES: SpecialType[] = ["ransomware_negotiation", "ap_notification", "journalist_qa"]
-const OPS: Array<"<" | "<=" | ">" | ">=" | "=="> = ["<", "<=", ">", ">=", "=="]
-const DIMENSIONS = [
-  "decision_speed", "decision_quality", "escalation_timing", "mandate_clarity",
-  "framework_adherence", "dilemma_participation", "communication_clarity", "compliance_awareness",
-] as const
-type Dim = typeof DIMENSIONS[number]
+const ROLES: Role[] = Object.keys(ROLE_META) as Role[]
 
-function makeId(prefix: string) {
-  return `${prefix}_${Math.random().toString(36).slice(2, 8)}`
-}
-
-export function Inspector({ node, graphId, features, onChange, onAddInject, onDelete, onDuplicate, onSaveGraph }: Props) {
+export function Inspector({ node, onChange, onAddInject, onDelete, onDuplicate }: Props) {
   if (!node) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-4 text-center">
-        <p className="text-xs text-muted-foreground">Select a node to edit its properties.</p>
+      <div className="flex h-full flex-col items-center justify-center p-6 text-center text-muted-foreground">
+        <p className="text-sm">Selecteer een node</p>
+        <p className="mt-1 text-xs">Klik op een ronde, inject of decision om te bewerken.</p>
       </div>
     )
   }
 
   const data = node.data as unknown as GraphNodeData
 
-  const nodeType = (node.type ?? "round") as GraphNodeType
-  const theme = NODE_THEME[nodeType]
-  const ThemeIcon = theme.icon
-
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
-      <div className="flex flex-col gap-2 border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className={`flex size-7 items-center justify-center rounded-md ${theme.headerBg} ${theme.headerFg}`}>
-              <ThemeIcon className="size-3.5" />
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span className={`font-mono text-[11px] font-medium ${theme.accentText}`}>{theme.label}</span>
-              <span className="font-mono text-[10px] text-muted-foreground">{node.id.slice(0, 10)}</span>
-            </div>
-          </div>
+    <div className="flex h-full flex-col">
+      <header className="flex items-center justify-between border-b border-border p-3">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          {data.kind}
+        </span>
+        <div className="flex items-center gap-1">
+          {onDuplicate && (
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onDuplicate(node.id)}>Dupliceer</Button>
+          )}
+          <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive" onClick={() => onDelete(node.id)}>
+            <Trash className="size-3" />
+          </Button>
         </div>
-        {node.type !== "start" && (
-          <div className="flex items-center gap-2">
-            {onDuplicate && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => onDuplicate(node.id)}
-              >
-                Duplicate
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-destructive hover:text-destructive"
-              onClick={() => onDelete(node.id)}
-            >
-              Delete
-            </Button>
-          </div>
-        )}
-      </div>
-      <div className="flex-1 p-4">
+      </header>
+      <div className="flex-1 overflow-y-auto p-4">
         {data.kind === "start" && <StartForm />}
         {data.kind === "round" && (
-          <RoundForm
-            key={node.id}
-            data={data}
-            features={features}
-            onSave={next => onChange(node.id, next)}
-            onAddInject={() => onAddInject(node.id)}
-            graphId={graphId}
-            nodeId={node.id}
-            onSaveGraph={onSaveGraph}
-          />
+          <RoundForm data={data} onSave={d => onChange(node.id, d)} onAddInject={() => onAddInject(node.id)} />
         )}
         {data.kind === "inject" && (
-          <InjectForm key={node.id} data={data} features={features} onSave={next => onChange(node.id, next)} />
+          <InjectForm data={data} onSave={d => onChange(node.id, d)} />
         )}
         {data.kind === "decision" && (
-          <DecisionForm
-            key={node.id}
-            data={data}
-            onSave={next => onChange(node.id, next)}
-            graphId={graphId}
-            nodeId={node.id}
-            onSaveGraph={onSaveGraph}
-          />
-        )}
-        {data.kind === "special" && (
-          <SpecialForm key={node.id} data={data} onSave={next => onChange(node.id, next)} />
+          <DecisionForm data={data} onSave={d => onChange(node.id, d)} />
         )}
         {data.kind === "outcome" && (
-          <OutcomeForm key={node.id} data={data} onSave={next => onChange(node.id, next)} />
+          <OutcomeForm data={data} onSave={d => onChange(node.id, d)} />
+        )}
+        {data.kind === "special" && (
+          <p className="text-xs text-muted-foreground">Special-nodes worden niet meer bewerkt — bestaande scenarios blijven werken.</p>
+        )}
+        {data.kind === "chaser" && (
+          <p className="text-xs text-muted-foreground">Chaser-nodes worden niet meer bewerkt — bestaande scenarios blijven werken.</p>
         )}
       </div>
     </div>
@@ -172,462 +95,145 @@ export function Inspector({ node, graphId, features, onChange, onAddInject, onDe
 function StartForm() {
   return (
     <p className="text-xs text-muted-foreground">
-      The start node marks where the scenario begins. Connect a sequence edge from here to your first round.
+      De start-node is het begin van je scenario. Verbind een sequence-edge naar de eerste ronde.
     </p>
   )
 }
 
-function RoundForm({
-  data,
-  features,
-  onSave,
-  onAddInject,
-  graphId,
-  nodeId,
-  onSaveGraph,
-}: {
-  data: RoundNodeData
-  features?: GraphFeatures
-  onSave: (d: RoundNodeData) => void
-  onAddInject: () => void
-  graphId: string
-  nodeId: string
-  onSaveGraph: () => Promise<boolean>
-}) {
-  const [local, setLocal] = useState<RoundNodeData>(data)
-  const [aiBusy, setAiBusy] = useState(false)
-  const [aiError, setAiError] = useState<string | null>(null)
-  useEffect(() => { setLocal(data) }, [data])
+// ── Round ──────────────────────────────────────────────────────────────
 
-  function commit(next: RoundNodeData) {
-    setLocal(next)
-    onSave(next)
-  }
-
-  async function aiFill() {
-    setAiBusy(true)
-    setAiError(null)
-    try {
-      const ok = await onSaveGraph()
-      if (!ok) throw new Error("Save failed — cannot run AI-fill")
-      const res = await fetch("/api/scenario-graph/ai-fill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ graphId, nodeId }),
-      })
-      const payload = await res.json()
-      if (!res.ok || !payload.data) throw new Error(payload.error ?? "AI-fill failed")
-      commit({ ...local, ...payload.data, kind: "round" })
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setAiBusy(false)
-    }
-  }
-
-  const showLessons = isAspectActive(local.evaluationAspects, 'lessons_learned')
+function RoundForm({ data, onSave, onAddInject }: { data: RoundNodeData; onSave: (d: RoundNodeData) => void; onAddInject: () => void }) {
+  const [local, setLocal] = useState(data)
+  useEffect(() => setLocal(data), [data])
+  function commit(next: RoundNodeData) { setLocal(next); onSave(next) }
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Primary — de 3 velden die je bijna altijd nodig hebt */}
-      <Field label="Titel">
-        <Input value={local.title} onChange={e => commit({ ...local, title: e.target.value })} />
-      </Field>
-      <Field label="Situatie">
+    <div className="flex flex-col gap-4">
+      <div>
+        <Label className="text-xs">Titel</Label>
+        <Input
+          value={local.title}
+          onChange={e => commit({ ...local, title: e.target.value })}
+          placeholder="Ronde 1 — Detectie"
+        />
+      </div>
+      <div>
+        <Label className="text-xs">Situatie</Label>
         <Textarea
           rows={5}
           value={local.situation_update}
           onChange={e => commit({ ...local, situation_update: e.target.value })}
-          className={local.dynamic?.enabled ? "border-l-4 border-l-amber-500/60" : undefined}
+          placeholder="Wat gebeurt er in deze ronde? Wat weet het team?"
         />
-      </Field>
-      <Field label="Timer (minuten)">
+      </div>
+      <div>
+        <Label className="text-xs">Tijd per ronde (minuten)</Label>
         <Input
-          type="number"
-          min={1}
+          type="number" min={1} max={60}
           value={local.timerMinutes ?? ""}
           onChange={e => commit({ ...local, timerMinutes: e.target.value ? Number(e.target.value) : undefined })}
+          placeholder="15"
+          className="w-24"
         />
-      </Field>
-
-      <div className="flex flex-wrap gap-2 pt-1">
-        <Button type="button" variant="outline" size="sm" onClick={onAddInject}>+ Inject</Button>
-        <Button type="button" variant="outline" size="sm" onClick={aiFill} disabled={aiBusy}>
-          {aiBusy ? "AI…" : "AI-fill"}
-        </Button>
       </div>
-      {aiError && <p className="text-[11px] text-destructive">{aiError}</p>}
-
-      {/* Geavanceerd — alles wat je zelden nodig hebt in één details */}
-      <Section title="Geavanceerd">
-        <div className="flex flex-col gap-3">
-          <DynamicFillSection value={local.dynamic} onChange={next => commit({ ...local, dynamic: next })} />
-          <AiPromptSection kind="round" value={local.aiPromptTemplate} onChange={next => commit({ ...local, aiPromptTemplate: next })} />
-          <Field label="IR-perspectief (alleen facilitator ziet dit)">
-            <Textarea
-              rows={3}
-              value={local.facilitatorPerspective ?? ""}
-              onChange={e => commit({ ...local, facilitatorPerspective: e.target.value || undefined })}
-              placeholder="Als IR-consultant zou je nu adviseren: ..."
-              className="text-xs"
-            />
-          </Field>
-        </div>
-      </Section>
-
-      {(local.facilitatorNotes || (local.roleActions?.length ?? 0) > 0 || (local.learningObjectives?.length ?? 0) > 0) && (
-        <Section title="Legacy — facilitator notes / role actions / leerdoelen">
-          <div className="flex flex-col gap-3">
-            <FacilitatorNotesEditor
-              value={local.facilitatorNotes}
-              onChange={(v: FacilitatorNotes) => commit({ ...local, facilitatorNotes: v })}
-            />
-            {(local.roleActions?.length ?? 0) > 0 && (
-              <RoleActionsEditor
-                value={local.roleActions ?? []}
-                onChange={(v: RoleAction[]) => commit({ ...local, roleActions: v })}
-                suggestedIdPrefix={nodeId.slice(0, 6)}
-              />
-            )}
-            {showLessons && (local.learningObjectives?.length ?? 0) > 0 && (
-              <LearningObjectivesEditor
-                value={local.learningObjectives ?? []}
-                onChange={(v: LearningObjective[]) => commit({ ...local, learningObjectives: v })}
-              />
-            )}
-          </div>
-        </Section>
-      )}
-      <RoundScoringFields data={local} onSave={commit} />
+      <Button size="sm" variant="outline" onClick={onAddInject} className="gap-2">
+        <Plus className="size-3" /> Inject toevoegen
+      </Button>
     </div>
   )
 }
 
-function Section({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
-  return (
-    <details className="rounded border border-border bg-background/40 group">
-      <summary className="cursor-pointer px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground select-none list-none flex items-center justify-between">
-        <span>{title}{typeof count === "number" ? ` (${count})` : ""}</span>
-        <span className="text-[8px] opacity-50 group-open:hidden">▶</span>
-        <span className="text-[8px] opacity-50 hidden group-open:inline">▼</span>
-      </summary>
-      <div className="px-2.5 pb-2.5 pt-1">
-        {children}
-      </div>
-    </details>
-  )
-}
+// ── Inject ─────────────────────────────────────────────────────────────
 
-function InjectForm({ data, features, onSave }: { data: InjectNodeData; features?: GraphFeatures; onSave: (d: InjectNodeData) => void }) {
-  const [local, setLocal] = useState<InjectNodeData>(data)
-  const [markSpans, setMarkSpans] = useState(false)
-  const [participantPreview, setParticipantPreview] = useState(false)
-  useEffect(() => { setLocal(data) }, [data])
+function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: InjectNodeData) => void }) {
+  const [local, setLocal] = useState(data)
+  useEffect(() => setLocal(data), [data])
+  function commit(next: InjectNodeData) { setLocal(next); onSave(next) }
 
-  function commit(next: InjectNodeData) {
-    setLocal(next)
-    onSave(next)
+  const target = local.targetRoles ?? []
+  function toggleRole(r: Role) {
+    const next = target.includes(r) ? target.filter(x => x !== r) : [...target, r]
+    commit({ ...local, targetRoles: next.length ? next : undefined })
   }
 
-  const showNis2 = isAspectActive(local.evaluationAspects, 'nis2')
-  // markSpans + participantPreview + reliability: legacy state, alleen nog
-  // gebruikt als de author expliciet het toggle-vinkje aan zet. Uit standaard.
-  void markSpans
-
   return (
-    <div className="flex flex-col gap-3">
-      {/* Primary — de velden die je bijna altijd nodig hebt */}
-      <Field label="Titel">
-        <Input value={local.title} onChange={e => commit({ ...local, title: e.target.value })} />
-      </Field>
-      <Field label="Inhoud">
-        {participantPreview ? (
-          <div className="whitespace-pre-wrap rounded border border-border bg-background px-2 py-1.5 text-xs">
-            {local.content || <span className="text-muted-foreground italic">— leeg —</span>}
-          </div>
-        ) : (
-          <Textarea
-            rows={5}
-            value={local.content}
-            onChange={e => commit({ ...local, content: e.target.value })}
-            className={local.dynamic?.enabled ? "border-l-4 border-l-amber-500/60" : undefined}
-          />
-        )}
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Kanaal">
-          <select
-            value={local.channel ?? ""}
-            onChange={e => commit({ ...local, channel: e.target.value ? (e.target.value as InjectChannel) : undefined })}
-            className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-          >
-            <option value="">—</option>
-            {INJECT_CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </Field>
-        <Field label="Urgentie">
-          <select
-            value={local.urgency}
-            onChange={e => commit({ ...local, urgency: e.target.value as Urgency })}
-            className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-          >
-            {URGENCIES.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
-        </Field>
-        <Field label="Vertraging (sec na ronde-start)">
-          <Input
-            type="number"
-            min={0}
-            value={local.deliverySeconds ?? ""}
-            onChange={e => commit({ ...local, deliverySeconds: e.target.value ? Number(e.target.value) : undefined })}
-            placeholder="0 = direct"
-          />
-        </Field>
-        <Field label="Doelteam">
-          <select
-            value={local.targetTeam ?? "all"}
-            onChange={e => commit({ ...local, targetTeam: e.target.value as "all" | "crisis_management" | "technical_it" })}
-            className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-          >
-            <option value="all">Iedereen</option>
-            <option value="crisis_management">Crisis-team</option>
-            <option value="technical_it">Technisch team</option>
-          </select>
-        </Field>
-      </div>
-      <label className="flex items-center gap-2 text-[11px]">
-        <input
-          type="checkbox"
-          checked={participantPreview}
-          onChange={e => setParticipantPreview(e.target.checked)}
-          className="size-3"
+    <div className="flex flex-col gap-4">
+      <div>
+        <Label className="text-xs">Titel</Label>
+        <Input
+          value={local.title ?? ""}
+          onChange={e => commit({ ...local, title: e.target.value })}
+          placeholder="MDR-alert — verdachte activiteit"
         />
-        <span>Preview zoals participant het ziet</span>
-      </label>
-
-      {/* Geavanceerd — alles wat je zelden nodig hebt */}
-      <Section title="Geavanceerd">
-        <div className="flex flex-col gap-3">
-          <DynamicFillSection value={local.dynamic} onChange={next => commit({ ...local, dynamic: next })} />
-          <AiPromptSection kind="inject" value={local.aiPromptTemplate} onChange={next => commit({ ...local, aiPromptTemplate: next })} />
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Type">
-              <select
-                value={local.type}
-                onChange={e => commit({ ...local, type: e.target.value as InjectType })}
-                className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-              >
-                {INJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Tijdstempel">
-              <Input
-                value={local.timestamp ?? ""}
-                onChange={e => commit({ ...local, timestamp: e.target.value || undefined })}
-                placeholder="HH:MM"
-              />
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 gap-1.5">
-            <Input
-              value={local.source ?? ""}
-              onChange={e => commit({ ...local, source: e.target.value || undefined })}
-              placeholder="Bron (organisatie of systeem)"
-              className="h-8 text-xs"
-            />
-            <Input
-              value={local.senderName ?? ""}
-              onChange={e => commit({ ...local, senderName: e.target.value || undefined })}
-              placeholder="Naam afzender"
-              className="h-8 text-xs"
-            />
-            <Input
-              value={local.senderHandle ?? ""}
-              onChange={e => commit({ ...local, senderHandle: e.target.value || undefined })}
-              placeholder="@handle of nummer"
-              className="h-8 text-xs"
-            />
-          </div>
-          <Field label="Alleen naar bepaalde rollen">
-            <TargetRolesEditor
-              value={local.targetRoles}
-              onChange={(v: Role[] | undefined) => commit({ ...local, targetRoles: v })}
-            />
-          </Field>
-          {showNis2 && (
-            <>
-              <label className="flex items-center gap-2 text-[11px]">
-                <input
-                  type="checkbox"
-                  checked={local.nis2Relevant ?? false}
-                  onChange={e => commit({ ...local, nis2Relevant: e.target.checked || undefined })}
-                  className="size-3"
-                />
-                <span>NIS2 relevant</span>
-              </label>
-              <Field label="Testgebieden (toezichthouder)">
-                <SupervisionAreasSelect
-                  value={local.supervisionAreas ?? []}
-                  onChange={v => commit({ ...local, supervisionAreas: v.length ? v : undefined })}
-                />
-              </Field>
-            </>
-          )}
-        </div>
-      </Section>
-      <InjectScoringFields data={local} onSave={commit} />
-    </div>
-  )
-}
-
-function AiPromptSection({
-  value,
-  onChange,
-  kind,
-}: {
-  value: string | undefined
-  onChange: (next: string | undefined) => void
-  kind: 'round' | 'inject'
-}) {
-  const [open, setOpen] = useState(false)
-  const hasValue = (value ?? "").trim().length > 0
-  const placeholder = kind === 'round'
-    ? "Bijv: Schrijf een openingssituatie voor een ransomware-aanval op een {{sector}}-organisatie, focus op {{criticalSystems}}. Toon van SOC."
-    : "Bijv: Schrijf de eerste ransom-note van de aanvaller aan een {{sector}}-organisatie."
-  return (
-    <details className="rounded border border-border bg-background/40" open={open} onToggle={e => setOpen((e.target as HTMLDetailsElement).open)}>
-      <summary className="cursor-pointer px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground select-none list-none flex items-center justify-between">
-        <span>AI opening-prompt{hasValue ? " ●" : ""}</span>
-        <span className="text-[8px] opacity-50">{open ? "▼" : "▶"}</span>
-      </summary>
-      <div className="px-2.5 pb-2.5 pt-1 flex flex-col gap-2">
-        <p className="font-mono text-[10px] text-muted-foreground leading-snug">
-          Bij sessie-start stuurt Claude deze prompt (na token-fill) en schrijft de {kind === 'round' ? 'situatie-update' : 'inject-inhoud'} zelf. Tokens zoals <code>{"{{sector}}"}</code> worden eerst vervangen.
-        </p>
+      </div>
+      <div>
+        <Label className="text-xs">Content</Label>
         <Textarea
           rows={4}
-          value={value ?? ""}
-          onChange={e => onChange(e.target.value || undefined)}
-          placeholder={placeholder}
-          className="text-xs"
+          value={local.content ?? ""}
+          onChange={e => commit({ ...local, content: e.target.value })}
+          placeholder="Wat komt er binnen? Bericht + context."
         />
       </div>
-    </details>
-  )
-}
-
-function DynamicFillSection({
-  value,
-  onChange,
-}: {
-  value: DynamicFillConfig | undefined
-  onChange: (next: DynamicFillConfig | undefined) => void
-}) {
-  const enabled = value?.enabled ?? false
-  const fillFrom = value?.fillFrom ?? []
-  const [open, setOpen] = useState(false)
-
-  function toggleToken(t: DynamicFillToken) {
-    const next = fillFrom.includes(t) ? fillFrom.filter(x => x !== t) : [...fillFrom, t]
-    onChange({ enabled: true, fillFrom: next })
-  }
-
-  return (
-    <details className="rounded border border-border bg-background/40" open={open} onToggle={e => setOpen((e.target as HTMLDetailsElement).open)}>
-      <summary className="cursor-pointer px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground select-none list-none flex items-center justify-between">
-        <span>Dynamisch invullen{enabled ? ` (${fillFrom.length})` : ""}</span>
-        <span className="text-[8px] opacity-50">{open ? "▼" : "▶"}</span>
-      </summary>
-      <div className="px-2.5 pb-2.5 pt-1 flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-[11px]">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={e => onChange(e.target.checked ? { enabled: true, fillFrom } : undefined)}
-            className="size-3"
-          />
-          <span>Vul in op basis van gameconfig bij sessie-start</span>
-        </label>
-        {enabled && (
-          <>
-            <div className="flex flex-wrap gap-1">
-              {DYNAMIC_FILL_TOKENS.map(t => (
-                <label key={t} className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={fillFrom.includes(t)}
-                    onChange={() => toggleToken(t)}
-                    className="size-3"
-                  />
-                  <span className="font-mono">{`{{${t}}}`}</span>
-                </label>
-              ))}
-            </div>
-            <p className="font-mono text-[10px] text-muted-foreground leading-snug">
-              Gebruik tokens in title / content, bv. <code>{"{{sector}}"}</code>. Alleen tokens die je hier aanvinkt worden vervangen bij sessie-start.
-            </p>
-          </>
-        )}
+      <div>
+        <Label className="text-xs">Voor wie? (klik om te selecteren, leeg = iedereen)</Label>
+        <div className="mt-1 grid grid-cols-2 gap-1">
+          {ROLES.map(r => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => toggleRole(r)}
+              className={`rounded border px-2 py-1 text-left text-xs transition-colors ${
+                target.includes(r) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"
+              }`}
+            >
+              {ROLE_META[r].label}
+            </button>
+          ))}
+        </div>
       </div>
-    </details>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs">Belang</Label>
+          <select
+            value={local.importance ?? "info"}
+            onChange={e => commit({ ...local, importance: e.target.value as "crucial" | "info" })}
+            className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+          >
+            <option value="info">info (achtergrond)</option>
+            <option value="crucial">crucial (materieel)</option>
+          </select>
+        </div>
+        <div>
+          <Label className="text-xs">Zichtbaarheid</Label>
+          <select
+            value={local.visibility ?? "shared"}
+            onChange={e => commit({ ...local, visibility: e.target.value as "shared" | "exclusive" })}
+            className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+          >
+            <option value="shared">iedereen (default)</option>
+            <option value="exclusive">alleen doelrollen</option>
+          </select>
+        </div>
+      </div>
+    </div>
   )
 }
 
-function DecisionForm({
-  data,
-  onSave,
-  graphId,
-  nodeId,
-  onSaveGraph,
-}: {
-  data: DecisionNodeData
-  onSave: (d: DecisionNodeData) => void
-  graphId: string
-  nodeId: string
-  onSaveGraph: () => Promise<boolean>
-}) {
-  const [local, setLocal] = useState<DecisionNodeData>(data)
-  const [aiBusy, setAiBusy] = useState(false)
-  const [aiError, setAiError] = useState<string | null>(null)
-  useEffect(() => { setLocal(data) }, [data])
+// ── Decision ───────────────────────────────────────────────────────────
 
-  function commit(next: DecisionNodeData) {
-    setLocal(next)
-    onSave(next)
-  }
-
-  async function suggestOptions() {
-    setAiBusy(true)
-    setAiError(null)
-    try {
-      const ok = await onSaveGraph()
-      if (!ok) throw new Error("Save failed — cannot run AI-suggest")
-      const res = await fetch("/api/scenario-graph/ai-suggest-options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ graphId, nodeId }),
-      })
-      const payload = await res.json()
-      if (!res.ok || !payload.options) throw new Error(payload.error ?? "AI-suggest failed")
-      const suggested = (payload.options as Array<{ label: string }>).map(o => ({
-        id: makeId("opt"),
-        label: o.label,
-      }))
-      commit({ ...local, options: [...local.options, ...suggested] })
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setAiBusy(false)
-    }
-  }
+function DecisionForm({ data, onSave }: { data: DecisionNodeData; onSave: (d: DecisionNodeData) => void }) {
+  const [local, setLocal] = useState(data)
+  useEffect(() => setLocal(data), [data])
+  function commit(next: DecisionNodeData) { setLocal(next); onSave(next) }
 
   function updateOption(idx: number, patch: Partial<DecisionNodeData["options"][number]>) {
-    const options = local.options.map((o, i) => i === idx ? { ...o, ...patch } : o)
-    commit({ ...local, options })
+    commit({ ...local, options: local.options.map((o, i) => i === idx ? { ...o, ...patch } : o) })
   }
 
   function addOption() {
-    commit({ ...local, options: [...local.options, { id: makeId("opt"), label: `Optie ${local.options.length + 1}` }] })
+    const id = `opt_${Math.random().toString(36).slice(2, 8)}`
+    commit({ ...local, options: [...local.options, { id, label: `Optie ${local.options.length + 1}` }] })
   }
 
   function removeOption(idx: number) {
@@ -635,539 +241,139 @@ function DecisionForm({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <Field label="Prompt">
-        <Textarea rows={3} value={local.prompt} onChange={e => commit({ ...local, prompt: e.target.value })} />
-      </Field>
-      <Field label="Measured by">
-        <select
-          value={local.measuredBy}
-          onChange={e => commit({ ...local, measuredBy: e.target.value as DecisionNodeData["measuredBy"] })}
-          className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-        >
-          <option value="participant_choice">Participant choice</option>
-          <option value="facilitator_trigger">Facilitator trigger</option>
-        </select>
-      </Field>
-      <Field label="Trigger role (optional)">
-        <select
-          value={local.triggerRole ?? ""}
-          onChange={e => commit({ ...local, triggerRole: e.target.value ? (e.target.value as Role) : undefined })}
-          className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-        >
-          <option value="">—</option>
-          {(Object.keys(ROLE_META) as Role[]).map(r => (
-            <option key={r} value={r}>{ROLE_META[r].label}</option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Scoring §4.2a — Domein">
-        <select
-          value={local.scoringDomain ?? ""}
-          onChange={e => commit({ ...local, scoringDomain: e.target.value ? e.target.value as NonNullable<DecisionNodeData['scoringDomain']> : undefined })}
-          className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-        >
-          <option value="">— auto (uit supervisionAreas of allowedRole) —</option>
-          <option value="CONTAINMENT">Containment</option>
-          <option value="FORENSIEK">Forensiek</option>
-          <option value="HERSTEL">Herstel</option>
-          <option value="JURIDISCH">Juridisch</option>
-          <option value="EXTERNE_COMMS">Externe communicatie</option>
-          <option value="INTERNE_COMMS">Interne communicatie</option>
-          <option value="PERSONEEL">Personeel</option>
-          <option value="BEDRIJFSPROCES">Bedrijfsproces</option>
-          <option value="GELD">Geld</option>
-          <option value="EXTERNE_PARTIJEN">Externe partijen</option>
-        </select>
-      </Field>
-      <Field label="Scoring §4.2a — Ontwerp-eigenaar">
-        <select
-          value={local.scoringOwner ?? ""}
-          onChange={e => commit({ ...local, scoringOwner: e.target.value ? (e.target.value as Role) : undefined })}
-          className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-        >
-          <option value="">— auto (uit triggerRole of eerste optie) —</option>
-          {(Object.keys(ROLE_META) as Role[]).map(r => (
-            <option key={r} value={r}>{ROLE_META[r].label}</option>
-          ))}
-        </select>
-      </Field>
-      <label className="flex items-center gap-2 text-[11px] pt-1">
-        <input
-          type="checkbox"
-          checked={local.advancesGraph !== false}
-          onChange={e => commit({ ...local, advancesGraph: e.target.checked ? undefined : false })}
-          className="size-3"
-        />
-        <span>Beslissing laat graph vertakken (uit = alleen scoring, geen branch)</span>
-      </label>
-      <label className="flex items-center gap-2 text-[11px]">
-        <input
-          type="checkbox"
-          checked={local.perRole === true}
-          onChange={e => commit({ ...local, perRole: e.target.checked || undefined })}
-          className="size-3"
-        />
-        <span>Elke rol kiest eigen optie (per-rol keuzes ipv één facilitator-pick)</span>
-      </label>
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Options</span>
-          <div className="flex items-center gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={suggestOptions} disabled={aiBusy}>
-              {aiBusy ? "AI…" : "AI-suggest"}
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={addOption}>+ Add</Button>
-          </div>
-        </div>
-        {aiError && <p className="text-[11px] text-destructive">{aiError}</p>}
-        {local.options.map((opt, idx) => (
-          <DecisionOptionEditor
-            key={opt.id}
-            option={opt}
-            perRole={local.perRole === true}
-            onChange={patch => updateOption(idx, patch)}
-            onRemove={() => removeOption(idx)}
-          />
-        ))}
-      </div>
-      <Section title="Testgebieden (toezichthouder)" count={local.supervisionAreas?.length ?? 0}>
-        <SupervisionAreasSelect
-          value={local.supervisionAreas ?? []}
-          onChange={v => commit({ ...local, supervisionAreas: v.length ? v : undefined })}
-        />
-      </Section>
-    </div>
-  )
-}
-
-function SpecialForm({ data, onSave }: { data: SpecialNodeData; onSave: (d: SpecialNodeData) => void }) {
-  const [local, setLocal] = useState<SpecialNodeData>(data)
-  useEffect(() => { setLocal(data) }, [data])
-
-  function commit(next: SpecialNodeData) {
-    setLocal(next)
-    onSave(next)
-  }
-
-  function updateThreshold(idx: number, patch: Partial<SpecialNodeData["thresholds"][number]>) {
-    const thresholds = local.thresholds.map((t, i) =>
-      i === idx ? { ...t, ...patch, predicate: { ...t.predicate, ...(patch.predicate ?? {}) } } : t,
-    )
-    commit({ ...local, thresholds })
-  }
-
-  function addThreshold() {
-    commit({
-      ...local,
-      thresholds: [
-        ...local.thresholds,
-        { id: makeId("thr"), label: `Threshold ${local.thresholds.length + 1}`, predicate: { op: ">=", value: 0 } },
-      ],
-    })
-  }
-
-  function removeThreshold(idx: number) {
-    commit({ ...local, thresholds: local.thresholds.filter((_, i) => i !== idx) })
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <Field label="Type">
-        <select
-          value={local.type}
-          onChange={e => commit({ ...local, type: e.target.value as SpecialType })}
-          className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-        >
-          {SPECIAL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
-      </Field>
-      <Field label="Assigned role (optional)">
-        <select
-          value={local.assignedRole ?? ""}
-          onChange={e => commit({ ...local, assignedRole: e.target.value ? (e.target.value as Role) : undefined })}
-          className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-        >
-          <option value="">Auto</option>
-          {(Object.keys(ROLE_META) as Role[]).map(r => (
-            <option key={r} value={r}>{ROLE_META[r].label}</option>
-          ))}
-        </select>
-      </Field>
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Thresholds</span>
-          <Button type="button" size="sm" variant="outline" onClick={addThreshold}>+ Add</Button>
-        </div>
-        {local.thresholds.map((t, idx) => (
-          <div key={t.id} className="flex flex-col gap-1 rounded border border-border bg-background p-2">
-            <div className="flex items-center gap-2">
-              <Input
-                value={t.label}
-                onChange={e => updateThreshold(idx, { label: e.target.value })}
-                placeholder="Label"
-                className="h-7"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => removeThreshold(idx)}
-                className="h-7 text-destructive"
-              >
-                Remove
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={t.predicate.op}
-                onChange={e => updateThreshold(idx, { predicate: { op: e.target.value as (typeof OPS)[number], value: t.predicate.value } })}
-                className="rounded border border-border bg-background px-2 py-1 text-xs font-mono"
-              >
-                {OPS.map(op => <option key={op} value={op}>{op}</option>)}
-              </select>
-              <Input
-                type="number"
-                value={t.predicate.value}
-                onChange={e => updateThreshold(idx, { predicate: { op: t.predicate.op, value: Number(e.target.value) } })}
-                className="h-7 w-24"
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function OutcomeForm({ data, onSave }: { data: OutcomeNodeData; onSave: (d: OutcomeNodeData) => void }) {
-  const [local, setLocal] = useState<OutcomeNodeData>(data)
-  useEffect(() => { setLocal(data) }, [data])
-
-  function commit(next: OutcomeNodeData) {
-    setLocal(next)
-    onSave(next)
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <Field label="Key">
-        <Input value={local.key} onChange={e => commit({ ...local, key: e.target.value })} />
-      </Field>
-      <Field label="Label">
-        <Input value={local.label} onChange={e => commit({ ...local, label: e.target.value })} />
-      </Field>
-      <Field label="Narrative">
-        <Textarea rows={5} value={local.narrative} onChange={e => commit({ ...local, narrative: e.target.value })} />
-      </Field>
-      <Field label="Score impact">
-        <Input
-          type="number"
-          value={local.scoreImpact ?? ""}
-          onChange={e => commit({ ...local, scoreImpact: e.target.value ? Number(e.target.value) : undefined })}
-        />
-      </Field>
-      <Field label="Linked dimension (optional)">
-        <select
-          value={local.linkedDimension ?? ""}
-          onChange={e => commit({ ...local, linkedDimension: e.target.value ? (e.target.value as Dim) : undefined })}
-          className="rounded border border-border bg-background px-2 py-1.5 text-xs font-mono"
-        >
-          <option value="">—</option>
-          {DIMENSIONS.map(d => <option key={d} value={d}>{d.replace(/_/g, " ")}</option>)}
-        </select>
-      </Field>
-      <Field label="Lesson learned (voor rapport)">
+    <div className="flex flex-col gap-4">
+      <div>
+        <Label className="text-xs">Vraag</Label>
         <Textarea
           rows={2}
-          value={local.lessonLearned ?? ""}
-          onChange={e => commit({ ...local, lessonLearned: e.target.value })}
-          placeholder="Wat leert het team hiervan?"
+          value={local.prompt}
+          onChange={e => commit({ ...local, prompt: e.target.value })}
+          placeholder="Wat kies je?"
         />
-      </Field>
-      <Field label="Score-bandbreedte (automatisch kiezen op cumulatieve score)">
-        <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            placeholder="min"
-            value={local.scoreRange?.min ?? ""}
-            onChange={e => commit({
-              ...local,
-              scoreRange: {
-                ...local.scoreRange,
-                min: e.target.value === "" ? undefined : Number(e.target.value),
-              },
-            })}
-            className="h-7 w-24 font-mono text-[11px]"
-          />
-          <span className="font-mono text-[10px] text-muted-foreground">t/m</span>
-          <Input
-            type="number"
-            placeholder="max"
-            value={local.scoreRange?.max ?? ""}
-            onChange={e => commit({
-              ...local,
-              scoreRange: {
-                ...local.scoreRange,
-                max: e.target.value === "" ? undefined : Number(e.target.value),
-              },
-            })}
-            className="h-7 w-24 font-mono text-[11px]"
-          />
-        </div>
-        <p className="mt-1 font-mono text-[10px] text-muted-foreground leading-snug">
-          Beide inclusief. Laat leeg voor "geen ondergrens" / "geen bovengrens". Alleen actief als "Score" feature aan staat.
-        </p>
-      </Field>
-    </div>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</Label>
-      {children}
-    </div>
-  )
-}
-
-function StringListEditor({
-  value, onChange, placeholder,
-}: { value: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
-  function update(idx: number, next: string) { onChange(value.map((v, i) => i === idx ? next : v)) }
-  return (
-    <div className="flex flex-col gap-1">
-      {value.map((item, idx) => (
-        <div key={idx} className="flex items-center gap-1">
-          <Input value={item} onChange={e => update(idx, e.target.value)} placeholder={placeholder} className="h-7 text-xs" />
-          <Button
-            type="button" variant="ghost" size="sm"
-            onClick={() => onChange(value.filter((_, i) => i !== idx))}
-            className="h-7 text-destructive shrink-0 px-2"
-          >×</Button>
-        </div>
-      ))}
-      <Button
-        type="button" variant="outline" size="sm"
-        onClick={() => onChange([...value, ""])}
-        className="h-7 self-start"
-      >+ Voeg toe</Button>
-    </div>
-  )
-}
-
-const SPAN_TAG_STYLE: Record<InjectReliability, { underline: string; dot: string; label: string }> = {
-  fact:       { underline: "decoration-emerald-500/60", dot: "bg-emerald-500", label: "Feit" },
-  assumption: { underline: "decoration-yellow-500/60", dot: "bg-yellow-500",  label: "Aanname" },
-  misleading: { underline: "decoration-red-500/60",    dot: "bg-red-500",     label: "Misleidend" },
-}
-
-function InjectSpanEditor({
-  content,
-  annotations,
-  onChange,
-}: {
-  content: string
-  annotations: InjectSpanAnnotation[]
-  onChange: (next: InjectSpanAnnotation[]) => void
-}) {
-  const rootRef = useRef<HTMLDivElement>(null)
-  const [toolbar, setToolbar] = useState<{ x: number; y: number; start: number; end: number } | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
-
-  function handleMouseUp() {
-    const sel = getSelectionRange(rootRef.current)
-    if (!sel) { setToolbar(null); return }
-    const rect = selectionRectRelativeTo(rootRef.current)
-    if (!rect) { setToolbar(null); return }
-    setToolbar({ ...rect, ...sel })
-  }
-
-  function addAnnotation(tag: InjectReliability) {
-    if (!toolbar) return
-    const id = `sp_${Math.random().toString(36).slice(2, 8)}`
-    onChange([...annotations, { id, start: toolbar.start, end: toolbar.end, tag }])
-    setToolbar(null)
-    window.getSelection()?.removeAllRanges()
-  }
-
-  function removeAnnotation(id: string) {
-    onChange(annotations.filter(a => a.id !== id))
-    setEditingId(null)
-  }
-
-  function updateAnnotation(id: string, patch: Partial<InjectSpanAnnotation>) {
-    onChange(annotations.map(a => a.id === id ? { ...a, ...patch } : a))
-  }
-
-  const segs = splitTextByAnnotations<InjectReliability>(content, annotations)
-  const editing = editingId ? annotations.find(a => a.id === editingId) ?? null : null
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="text-[10px] text-muted-foreground">
-        Selecteer een woord of zin en klik op een label om te markeren.
       </div>
-      <div
-        ref={rootRef}
-        onMouseUp={handleMouseUp}
-        className="relative whitespace-pre-wrap rounded border border-border bg-background px-2 py-1.5 text-xs leading-relaxed select-text"
-      >
-        {segs.map((seg, i) => {
-          const slice = content.slice(seg.start, seg.end)
-          if (!seg.tag || !seg.annotationId) return <span key={i}>{slice}</span>
-          const style = SPAN_TAG_STYLE[seg.tag]
-          return (
-            <button
-              key={i}
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setEditingId(seg.annotationId!) }}
-              className={`underline decoration-2 ${style.underline} cursor-pointer bg-transparent p-0 text-inherit font-inherit`}
-              title="Klik om te bewerken"
-            >
-              {slice}
-            </button>
-          )
-        })}
-        {toolbar && (
-          <div
-            className="absolute z-20 -translate-x-1/2 -translate-y-full rounded-md border border-border bg-popover shadow-md flex items-center gap-1 px-1.5 py-1"
-            style={{ left: toolbar.x, top: toolbar.y }}
-          >
-            {(["fact", "assumption", "misleading"] as InjectReliability[]).map(tag => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => addAnnotation(tag)}
-                className="rounded px-1.5 py-0.5 text-[10px] font-mono hover:bg-accent"
-                title={SPAN_TAG_STYLE[tag].label}
-              >
-                <span className={`inline-block size-1.5 rounded-full ${SPAN_TAG_STYLE[tag].dot} mr-1 align-middle`} />
-                {SPAN_TAG_STYLE[tag].label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      {editing && (
-        <div className="flex flex-col gap-1 rounded border border-border bg-background/60 p-2 text-[11px]">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              {SPAN_TAG_STYLE[editing.tag].label} — "{content.slice(editing.start, editing.end).slice(0, 40)}"
-            </span>
-            <div className="flex gap-1">
-              <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => setEditingId(null)}>Sluit</Button>
-              <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-destructive" onClick={() => removeAnnotation(editing.id)}>Verwijder</Button>
-            </div>
-          </div>
-          <Textarea
-            rows={2}
-            value={editing.authorNote ?? ""}
-            onChange={e => updateAnnotation(editing.id, { authorNote: e.target.value || undefined })}
-            placeholder="Optionele toelichting (zichtbaar in review)"
-            className="text-[11px]"
-          />
+
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <Label className="text-xs">Opties</Label>
+          <Button size="sm" variant="outline" onClick={addOption} className="h-7 gap-1 text-xs">
+            <Plus className="size-3" /> Optie
+          </Button>
         </div>
-      )}
+        <div className="space-y-3">
+          {local.options.map((opt, idx) => (
+            <OptionEditor
+              key={opt.id}
+              option={opt}
+              onChange={patch => updateOption(idx, patch)}
+              onRemove={() => removeOption(idx)}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
 
-const DECISION_PRIMARY_DIMS: Array<{ key: 'decision_speed' | 'decision_quality' | 'compliance_awareness' | 'communication_clarity'; label: string }> = [
-  { key: 'decision_speed',        label: 'Snelheid' },
-  { key: 'decision_quality',      label: 'Kwaliteit' },
-  { key: 'compliance_awareness',  label: 'Compliance' },
-  { key: 'communication_clarity', label: 'Communicatie' },
-]
-
-const DECISION_QUALITY_RANKS: Array<{ key: ChoiceQuality; label: string; className: string }> = [
-  { key: 'best',  label: 'Best',      className: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40' },
-  { key: 'good',  label: 'Goed',      className: 'bg-sky-500/15 text-sky-600 border-sky-500/40' },
-  { key: 'poor',  label: 'Kon beter', className: 'bg-amber-500/15 text-amber-600 border-amber-500/40' },
-  { key: 'wrong', label: 'Fout',      className: 'bg-red-500/15 text-red-600 border-red-500/40' },
-]
-
-function DecisionOptionEditor({
+function OptionEditor({
   option,
-  perRole,
   onChange,
   onRemove,
 }: {
   option: DecisionNodeData["options"][number]
-  perRole: boolean
   onChange: (patch: Partial<DecisionNodeData["options"][number]>) => void
   onRemove: () => void
 }) {
+  const vec = option.outcomeVector ?? { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 }
+  function setDim(dim: keyof OutcomeVector, v: number) {
+    const clamped = Math.max(-2, Math.min(2, v))
+    onChange({ outcomeVector: { ...vec, [dim]: clamped } })
+  }
+
   return (
-    <div className="flex flex-col gap-2 rounded border border-border bg-background p-2">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-2 rounded border border-border bg-background p-3">
+      <div className="flex gap-2">
         <Input
           value={option.label}
           onChange={e => onChange({ label: e.target.value })}
-          placeholder="Label van deze keuze"
-          className="h-7"
+          placeholder="Wat zegt deze keuze?"
+          className="flex-1 h-8"
         />
-        <Button type="button" variant="ghost" size="sm" onClick={onRemove} className="h-7 text-destructive">
-          Remove
+        <Button size="sm" variant="ghost" onClick={onRemove} className="h-8 text-destructive">
+          <Trash className="size-3" />
         </Button>
       </div>
-      {perRole && (
-        <select
-          value={option.allowedRole ?? ""}
-          onChange={e => onChange({ allowedRole: e.target.value ? (e.target.value as Role) : undefined })}
-          className="rounded border border-border bg-background px-2 py-1 font-mono text-[10px]"
-        >
-          <option value="">Voor alle rollen</option>
-          {(Object.keys(ROLE_META) as Role[]).map(r => (
-            <option key={r} value={r}>{ROLE_META[r].label}</option>
+
+      <div>
+        <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+          Impact op de 6 dimensies (−2 slecht … +2 goed)
+        </div>
+        <div className="grid grid-cols-6 gap-1">
+          {DIMS.map(d => (
+            <label key={d.key} className="text-center" title={d.hint}>
+              <div className="text-[9px] font-mono text-muted-foreground">{d.key}</div>
+              <input
+                type="number" min={-2} max={2} step={1}
+                value={vec[d.key]}
+                onChange={e => setDim(d.key, Number(e.target.value) || 0)}
+                className={`w-full rounded border border-border bg-background px-1 py-1 text-center font-mono text-xs ${
+                  vec[d.key] > 0 ? "text-primary" : vec[d.key] < 0 ? "text-destructive" : ""
+                }`}
+              />
+            </label>
           ))}
-        </select>
-      )}
-      {/* Debrief-noot — één veld voor IR-perspectief én lesson learned.
-          Schrijft canonically naar lessonLearned (Deel A §2 debriefNote).
-          Legacy facilitatorCommentary blijft leesbaar; wordt niet meer bewerkt. */}
-      <Textarea
-        rows={2}
-        value={option.lessonLearned ?? option.facilitatorCommentary ?? ""}
-        onChange={e => onChange({
-          lessonLearned: e.target.value || undefined,
-          facilitatorCommentary: undefined,  // migratie: consolideer bij edit
-        })}
-        placeholder="Debrief-noot — IR-perspectief + lesson learned (1-2 zinnen)"
-        className="text-[11px]"
-      />
-      <OptionScoringFields option={option} onChange={onChange} />
+        </div>
+      </div>
+
+      <div>
+        <Label className="text-[10px] text-muted-foreground">Debrief-noot</Label>
+        <Textarea
+          rows={2}
+          value={option.lessonLearned ?? ""}
+          onChange={e => onChange({ lessonLearned: e.target.value || undefined })}
+          placeholder="Wat leren we hiervan? 1 zin."
+          className="text-xs resize-none"
+        />
+      </div>
     </div>
   )
 }
 
-function SupervisionAreasSelect({
-  value,
-  onChange,
-}: {
-  value: SupervisionArea[]
-  onChange: (next: SupervisionArea[]) => void
-}) {
-  function toggle(id: SupervisionArea) {
-    onChange(value.includes(id) ? value.filter(v => v !== id) : [...value, id])
-  }
+// ── Outcome ────────────────────────────────────────────────────────────
+
+function OutcomeForm({ data, onSave }: { data: OutcomeNodeData; onSave: (d: OutcomeNodeData) => void }) {
+  const [local, setLocal] = useState(data)
+  useEffect(() => setLocal(data), [data])
+  function commit(next: OutcomeNodeData) { setLocal(next); onSave(next) }
+
   return (
-    <div className="grid grid-cols-1 gap-1">
-      {SUPERVISION_AREAS.map(a => (
-        <label key={a.id} className="flex items-start gap-2 text-[11px]">
-          <input
-            type="checkbox"
-            checked={value.includes(a.id)}
-            onChange={() => toggle(a.id)}
-            className="size-3 mt-0.5"
-          />
-          <span>
-            <span className="font-mono text-[10px] text-muted-foreground">{a.numberLabel}.</span>{" "}
-            <span>{a.label}</span>
-          </span>
-        </label>
-      ))}
+    <div className="flex flex-col gap-4">
+      <div>
+        <Label className="text-xs">Titel</Label>
+        <Input
+          value={local.label}
+          onChange={e => commit({ ...local, label: e.target.value })}
+          placeholder="Contained met kop en staart"
+        />
+      </div>
+      <div>
+        <Label className="text-xs">Verhaal (wat gebeurt er nu?)</Label>
+        <Textarea
+          rows={6}
+          value={local.narrative}
+          onChange={e => commit({ ...local, narrative: e.target.value })}
+          placeholder="Beschrijf de afsluiting van deze route — wat is de uitkomst voor de organisatie?"
+        />
+      </div>
+      <div>
+        <Label className="text-xs">Debrief-noot</Label>
+        <Textarea
+          rows={3}
+          value={local.lessonLearned ?? ""}
+          onChange={e => commit({ ...local, lessonLearned: e.target.value || undefined })}
+          placeholder="Wat leren we van dit pad?"
+          className="text-xs resize-none"
+        />
+      </div>
     </div>
   )
 }

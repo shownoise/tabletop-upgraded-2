@@ -18,7 +18,6 @@ import type { GraphIssue } from "@/lib/graph/validate"
 import type { ScenarioType } from "@/lib/types"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { PreviewDialog } from "./preview-dialog"
-import { WizardDialog } from "./wizard-dialog"
 import { DryRunDialog } from "./dry-run-dialog"
 
 interface Props {
@@ -57,8 +56,6 @@ export function Toolbar({
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [dryRunOpen, setDryRunOpen] = useState(false)
-  const [wizardOpen, setWizardOpen] = useState(false)
-  const [playbookOpen, setPlaybookOpen] = useState(false)
   const [loadable, setLoadable] = useState<ScenarioGraph[] | null>(null)
   const [issues, setIssues] = useState<GraphIssue[] | null>(null)
   const [publishing, setPublishing] = useState(false)
@@ -109,11 +106,9 @@ export function Toolbar({
 
       {/* Content group — starting a new scenario or reusing existing content */}
       <div className="flex items-center gap-1 pl-2 border-l border-border">
-        <Button size="sm" variant="ghost" onClick={handleNew} title="Nieuw leeg canvas">New</Button>
-        <Button size="sm" variant="ghost" onClick={() => setWizardOpen(true)} title="Genereer scenario met AI">AI wizard</Button>
-        <Button size="sm" variant="ghost" onClick={() => setTemplatesOpen(true)} title="Kant-en-klare voorbeeldscenario's">Templates</Button>
-        <Button size="sm" variant="ghost" onClick={openLoad} title="Laad opgeslagen graph">Load</Button>
-        <Button size="sm" variant="ghost" onClick={() => setPlaybookOpen(true)} title="IR-playbook tekst">Playbook</Button>
+        <Button size="sm" variant="ghost" onClick={handleNew} title="Nieuw leeg canvas">Nieuw</Button>
+        <Button size="sm" variant="ghost" onClick={() => setTemplatesOpen(true)} title="Kant-en-klare voorbeeldscenario's">Voorbeelden</Button>
+        <Button size="sm" variant="ghost" onClick={openLoad} title="Laad opgeslagen scenario">Laden</Button>
       </div>
 
       {/* Actions group — validate / preview / persist */}
@@ -162,34 +157,6 @@ export function Toolbar({
 
       <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} graph={graph} />
       <DryRunDialog open={dryRunOpen} onOpenChange={setDryRunOpen} graph={graph} />
-      <WizardDialog open={wizardOpen} onOpenChange={setWizardOpen} onGraphGenerated={g => { onLoad(g); }} />
-
-      <Dialog open={playbookOpen} onOpenChange={setPlaybookOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Crisis Playbook / IR-plan</DialogTitle></DialogHeader>
-          <div className="flex flex-col gap-3">
-            <p className="font-mono text-[10px] text-muted-foreground">
-              Retainer is vast — <span className="text-foreground">Eye Security</span>. Alleen de playbook-tekst is per scenario te tunen.
-            </p>
-            <div className="flex flex-col gap-1">
-              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">IR / Crisis Playbook (Markdown)</Label>
-              <Textarea
-                rows={12}
-                value={graph.irPlaybook ?? ""}
-                onChange={e => onPlaybookChange(e.target.value || undefined)}
-                placeholder={`## Ransomware — beleid\n- Betaling: maximaal 5 BTC toegestaan (approval CFO+CEO)\n- Onderhandelingskanaal: uitsluitend via IR-partner\n\n## AVG-melding\n- 72u vanaf ontdekking...\n\n[Tip: mix bruikbare procedure met opzet-misleidende zinnen om BOB te trainen]`}
-                className="font-mono text-xs resize-none"
-              />
-              <p className="font-mono text-[10px] text-muted-foreground">
-                Zichtbaar rechts bij elke participant. Bevat bewust zowel juiste procedure als valkuilen (participants moeten leren onderscheiden).
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPlaybookOpen(false)}>Sluiten</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
         <DialogContent className="max-w-lg">

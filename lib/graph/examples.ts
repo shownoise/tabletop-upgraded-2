@@ -3,6 +3,7 @@ import { nis2ShowcaseExample } from "./examples-nis2"
 import { buildNis2Showcase } from "./examples-nis2-showcase"
 import { meldplichtPressureExample } from "./examples-meldplicht-pressure"
 import { fullShowcaseExample } from "./examples-full-showcase"
+import { simpleStoryExample } from "./examples-simple-story"
 
 function id(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}`
@@ -1150,6 +1151,12 @@ export interface Example {
 }
 
 export const EXAMPLES: Example[] = [
+  {
+    key: "simple_story",
+    label: "★ Simple story — 3 rondes ransomware",
+    description: "Klein voorbeeldscenario. 3 rondes (detectie / exfiltratie / recovery), 6 injects, 3 decisions met 6-dim scoring, en 3 outcomes. Gebruikt alleen de kern-velden uit de builder — goede start om aan te passen.",
+    build: simpleStoryExample,
+  },
   {
     key: "full_showcase",
     label: "★★ Full Showcase — alles wat de builder kan",

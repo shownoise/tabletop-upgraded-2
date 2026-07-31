@@ -23,7 +23,6 @@ import "@xyflow/react/dist/style.css"
 import { Palette } from "./palette"
 import { Inspector } from "./inspector"
 import { Toolbar } from "./toolbar"
-import { ComplianceRail } from "./compliance-rail"
 import { SettingsPanel } from "./settings-panel"
 import { StartNode } from "./nodes/start-node"
 import { RoundNode } from "./nodes/round-node"
@@ -31,12 +30,10 @@ import { InjectNode } from "./nodes/inject-node"
 import { OutcomeNode } from "./nodes/outcome-node"
 import { DecisionNode } from "./nodes/decision-node"
 import { SpecialNode } from "./nodes/special-node"
-import { WizardDialog } from "./wizard-dialog"
 import { TypedEdge } from "./edges/typed-edge"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Sparkles, FileText, Workflow, LayoutGrid } from "lucide-react"
-import { EvaluationAspectPicker } from "./evaluation-aspects"
 import { autoLayout } from "./layout"
 import type {
   EvaluationAspect,
@@ -208,9 +205,7 @@ function InnerCanvas() {
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<{ kind: "info" | "error"; text: string } | null>(null)
   const [startupOpen, setStartupOpen] = useState(true)
-  const [wizardOpen, setWizardOpen] = useState(false)
   const [templatesPickerOpen, setTemplatesPickerOpen] = useState(false)
-  const [aspectPicker, setAspectPicker] = useState<{ nodeId: string; nodeType: 'inject' | 'round' } | null>(null)
 
   const wrapperRef = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition, setCenter, fitView } = useReactFlow()
@@ -328,17 +323,7 @@ function InnerCanvas() {
     const newNode: Node = { id, type, position, data }
     setNodes(ns => [...ns, newNode])
     setSelectedId(id)
-    if (isPickable) setAspectPicker({ nodeId: id, nodeType: type as 'inject' | 'round' })
   }, [nodes, screenToFlowPosition, setNodes])
-
-  const applyAspectPick = useCallback((aspects: EvaluationAspect[]) => {
-    if (!aspectPicker) return
-    setNodes(ns => ns.map(n => {
-      if (n.id !== aspectPicker.nodeId) return n
-      return { ...n, data: { ...(n.data as Record<string, unknown>), evaluationAspects: aspects } }
-    }))
-    setAspectPicker(null)
-  }, [aspectPicker, setNodes])
 
   const handleNodeDataChange = useCallback((nodeId: string, data: GraphNodeData) => {
     setNodes(ns => ns.map(n => n.id === nodeId ? { ...n, data: data as unknown as Record<string, unknown> } : n))
@@ -373,7 +358,6 @@ function InnerCanvas() {
     setNodes(ns => [...ns, newNode])
     setEdges(es => [...es, newEdge])
     setSelectedId(id)
-    setAspectPicker({ nodeId: id, nodeType: "inject" })
   }, [nodes, setNodes, setEdges])
 
   const handleDuplicate = useCallback((nodeId: string) => {
@@ -524,11 +508,6 @@ function InnerCanvas() {
       const editable = (el as HTMLElement | null)?.isContentEditable
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || editable) return
       const meta = e.metaKey || e.ctrlKey
-      if (meta && e.key.toLowerCase() === "k") {
-        e.preventDefault()
-        setWizardOpen(true)
-        return
-      }
       if (meta && e.key.toLowerCase() === "d") {
         if (!selectedId) return
         e.preventDefault()
@@ -608,14 +587,6 @@ function InnerCanvas() {
             graph={buildGraph()}
             onGraphPatch={patch => setGraphMeta(g => ({ ...g, ...patch }))}
           />
-          {(graphMeta.features?.compliance ?? DEFAULT_FEATURES.compliance) && (
-            <ComplianceRail
-              graph={buildGraph()}
-              onGraphPatch={patch => setGraphMeta(g => ({ ...g, ...patch }))}
-              onFocusNode={handleFocusNode}
-              onAutoFixCoverage={handleAutoFixCoverage}
-            />
-          )}
         </aside>
         <div ref={wrapperRef} className="relative flex-1" onDragOver={onDragOver} onDrop={onDrop}>
           <ReactFlow
@@ -682,18 +653,6 @@ function InnerCanvas() {
         </aside>
       </div>
 
-      <WizardDialog open={wizardOpen} onOpenChange={setWizardOpen} onGraphGenerated={handleLoad} />
-
-      {aspectPicker && (
-        <EvaluationAspectPicker
-          nodeType={aspectPicker.nodeType}
-          initial={[]}
-          features={graphMeta.features}
-          onConfirm={applyAspectPick}
-          onSkip={() => applyAspectPick([])}
-        />
-      )}
-
       <Dialog open={templatesPickerOpen} onOpenChange={setTemplatesPickerOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Kies een template</DialogTitle></DialogHeader>
@@ -722,27 +681,14 @@ function InnerCanvas() {
           <div className="grid grid-cols-1 gap-2">
             <button
               type="button"
-              onClick={() => { setStartupOpen(false); setWizardOpen(true) }}
-              className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-left transition-colors hover:border-primary/60"
-            >
-              <Sparkles className="size-4 text-primary shrink-0 mt-0.5" />
-              <div className="flex flex-col">
-                <span className="font-mono text-sm font-medium">AI wizard</span>
-                <span className="text-[11px] text-muted-foreground">
-                  Beantwoord een paar vragen — Claude genereert een compleet scenario met rondes, decisions, specials en outcomes.
-                </span>
-              </div>
-            </button>
-            <button
-              type="button"
               onClick={() => { setStartupOpen(false); setTemplatesPickerOpen(true) }}
-              className="flex items-start gap-3 rounded-lg border border-border bg-background px-4 py-3 text-left transition-colors hover:border-primary/40"
+              className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-left transition-colors hover:border-primary/60"
             >
               <Workflow className="size-4 text-primary shrink-0 mt-0.5" />
               <div className="flex flex-col">
-                <span className="font-mono text-sm font-medium">Template</span>
+                <span className="font-mono text-sm font-medium">Voorbeeld</span>
                 <span className="text-[11px] text-muted-foreground">
-                  Start met een kant-en-klaar voorbeeldscenario (Ransomware, Insider Threat, BEC, Supply Chain).
+                  Start met een kant-en-klaar scenario dat je kunt aanpassen.
                 </span>
               </div>
             </button>
@@ -753,9 +699,9 @@ function InnerCanvas() {
             >
               <FileText className="size-4 text-primary shrink-0 mt-0.5" />
               <div className="flex flex-col">
-                <span className="font-mono text-sm font-medium">Leeg document</span>
+                <span className="font-mono text-sm font-medium">Leeg canvas</span>
                 <span className="text-[11px] text-muted-foreground">
-                  Start met een leeg canvas — sleep nodes uit het palette om zelf te bouwen.
+                  Sleep nodes uit het palette om zelf te bouwen.
                 </span>
               </div>
             </button>
