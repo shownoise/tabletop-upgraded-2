@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, ShieldAlert } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
+import type { AssessmentReport } from "@/lib/scoring"
 
 const PHASE_LABELS: Record<string, string> = {
-  inject: "INJECT",
-  discussion: "DISCUSSION",
-  decision: "DECISION",
-  review: "REVIEW",
+  inject: "BRIEFING",
+  discussion: "OVERLEG",
+  decision: "KEUZE",
+  lock: "VASTGEZET",
+  review: "REVEAL",
 }
 
 const ESCALATION_LABELS = ["NORMAL", "ELEVATED", "HIGH", "CRITICAL"]
@@ -153,47 +155,165 @@ export function PresentView() {
             </div>
           )}
 
-          {/* Main content area */}
-          <div className="flex-1 px-8 py-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
-            {/* Situation update */}
-            {currentRound && (
-              <div className="flex flex-col gap-4">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Situation Update</span>
-                <p className="text-2xl leading-relaxed text-foreground">{currentRound.situation_update}</p>
-              </div>
-            )}
-
-            {/* Latest inject */}
-            {latestInject && (
-              <div className={`rounded-xl border p-6 flex flex-col gap-4 ${
-                latestInject.urgency === "critical"
-                  ? "border-destructive/50 bg-destructive/10"
-                  : latestInject.urgency === "high"
-                  ? "border-orange-500/30 bg-orange-500/5"
-                  : "border-primary/30 bg-primary/5"
-              }`}>
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Latest Inject</span>
-                  <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
-                    latestInject.urgency === "critical"
-                      ? "border-destructive/50 text-destructive"
-                      : latestInject.urgency === "high"
-                      ? "border-orange-500/50 text-orange-500"
-                      : "border-primary/40 text-primary"
-                  }`}>
-                    {latestInject.urgency}
-                  </span>
+          {/* Main content area — normaal: situatie + inject; tijdens lock/review: reveal */}
+          {(phase === "lock" || phase === "review") ? (
+            <BigScreenReveal currentRoundNumber={session.currentRound + 1} />
+          ) : (
+            <div className="flex-1 px-8 py-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
+              {/* Situation update */}
+              {currentRound && (
+                <div className="flex flex-col gap-4">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Situation Update</span>
+                  <p className="text-2xl leading-relaxed text-foreground">{currentRound.situation_update}</p>
                 </div>
-                <h3 className="text-2xl font-semibold">{latestInject.title}</h3>
-                <p className="text-lg text-muted-foreground leading-relaxed">{latestInject.content}</p>
-                {latestInject.senderName && (
-                  <p className="font-mono text-sm text-muted-foreground">From: {latestInject.senderName}</p>
-                )}
+              )}
+
+              {/* Latest inject */}
+              {latestInject && (
+                <div className={`rounded-xl border p-6 flex flex-col gap-4 ${
+                  latestInject.urgency === "critical"
+                    ? "border-destructive/50 bg-destructive/10"
+                    : latestInject.urgency === "high"
+                    ? "border-orange-500/30 bg-orange-500/5"
+                    : "border-primary/30 bg-primary/5"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Latest Inject</span>
+                    <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+                      latestInject.urgency === "critical"
+                        ? "border-destructive/50 text-destructive"
+                        : latestInject.urgency === "high"
+                        ? "border-orange-500/50 text-orange-500"
+                        : "border-primary/40 text-primary"
+                    }`}>
+                      {latestInject.urgency}
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-semibold">{latestInject.title}</h3>
+                  <p className="text-lg text-muted-foreground leading-relaxed">{latestInject.content}</p>
+                  {latestInject.senderName && (
+                    <p className="font-mono text-sm text-muted-foreground">From: {latestInject.senderName}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Deel B §5.2 — reveal-scherm voor het grote scherm. Vaste volgorde:
+//   1. Weging deze ronde (nu pas onthuld)
+//   2. Vector per dimensie
+//   3. Punten deze ronde + trend
+//   4. Rolresolutie
+const DIMS = ["CONT", "FOR", "BC", "JUR", "VER", "KOS"] as const
+const DIM_LABELS: Record<string, string> = {
+  CONT: "Containment",
+  FOR:  "Forensische integriteit",
+  BC:   "Bedrijfscontinuïteit",
+  JUR:  "Juridisch",
+  VER:  "Vertrouwen",
+  KOS:  "Kosten",
+}
+
+function BigScreenReveal({ currentRoundNumber }: { currentRoundNumber: number }) {
+  const [report, setReport] = useState<AssessmentReport | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function fetchReport() {
+      try {
+        const res = await fetch("/api/session/score?format=report")
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          if (!cancelled) setError(data.error ?? `HTTP ${res.status}`)
+          return
+        }
+        const data = (await res.json()) as AssessmentReport
+        if (!cancelled) { setReport(data); setError(null) }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
+      }
+    }
+    fetchReport()
+    const id = setInterval(fetchReport, 3000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [currentRoundNumber])
+
+  if (error) return (
+    <div className="flex-1 flex items-center justify-center px-8 py-8">
+      <p className="font-mono text-lg text-destructive">Reveal niet beschikbaar: {error}</p>
+    </div>
+  )
+  if (!report) return (
+    <div className="flex-1 flex items-center justify-center px-8 py-8">
+      <p className="font-mono text-lg text-muted-foreground animate-pulse">Reveal wordt berekend…</p>
+    </div>
+  )
+
+  const roundOutcome = report.outcomes.find(o => o.round === currentRoundNumber)
+
+  return (
+    <div className="flex-1 px-8 py-8 flex flex-col gap-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-primary">Reveal §5.2</div>
+          <div className="text-4xl font-bold">Ronde {currentRoundNumber}</div>
+        </div>
+        {roundOutcome && (
+          <div className="text-right">
+            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Punten deze ronde</div>
+            <div className="text-6xl font-bold text-primary tabular-nums">{roundOutcome.points}</div>
+          </div>
+        )}
+      </div>
+
+      {/* 6-dim vector */}
+      {roundOutcome && (
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Uitkomstvector — nu onthuld</div>
+          <div className="grid grid-cols-6 gap-4">
+            {DIMS.map(d => (
+              <div key={d} className="rounded-lg border border-border p-4 text-center">
+                <div className="font-mono text-[10px] text-muted-foreground uppercase">{d}</div>
+                <div className={`text-4xl font-bold mt-1 tabular-nums ${
+                  roundOutcome.perDimension[d] > 0 ? "text-primary" :
+                  roundOutcome.perDimension[d] < 0 ? "text-destructive" : "text-muted-foreground"
+                }`}>
+                  {roundOutcome.perDimension[d] > 0 ? "+" : ""}{roundOutcome.perDimension[d].toFixed(1)}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-2 truncate">{DIM_LABELS[d]}</div>
               </div>
-            )}
+            ))}
           </div>
         </div>
       )}
+
+      {/* Trend over rondes */}
+      <div>
+        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Trend</div>
+        <div className="flex gap-3 items-end h-32">
+          {report.outcomes.map(o => (
+            <div key={o.round} className="flex-1 flex flex-col items-center gap-2">
+              <div className="w-full h-full flex items-end">
+                <div
+                  className={`w-full rounded-t transition-all ${
+                    o.round === currentRoundNumber ? "bg-primary" : "bg-muted-foreground/40"
+                  }`}
+                  style={{ height: `${Math.max(4, o.points)}%` }}
+                />
+              </div>
+              <span className="font-mono text-xs text-muted-foreground">R{o.round}</span>
+              <span className="font-mono text-lg font-bold tabular-nums">{o.points}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

@@ -1138,6 +1138,113 @@ export async function setMode(mode: 'event' | 'training'): Promise<{ ok: boolean
   return result
 }
 
+// Deel B §4 — groep-management voor EVENT-mode.
+
+export async function createGroup(input: { name: string }): Promise<{ ok: boolean; error?: string; groupId?: string }> {
+  const name = input.name.trim()
+  if (!name) return { ok: false, error: "Groepsnaam is verplicht." }
+  const groupId = genId("group")
+  const result = await mutate(s => {
+    const groups = s.groups ?? []
+    if (groups.some(g => g.name.toLowerCase() === name.toLowerCase())) {
+      return { error: "Er is al een groep met deze naam." }
+    }
+    return { ...s, groups: [...groups, { id: groupId, name, createdAt: Date.now() }] }
+  })
+  return result.ok ? { ok: true, groupId } : result
+}
+
+export async function joinGroup(input: { participantId: string; groupId: string }): Promise<{ ok: boolean; error?: string }> {
+  return mutate(s => {
+    const group = (s.groups ?? []).find(g => g.id === input.groupId)
+    if (!group) return { error: "Groep niet gevonden." }
+    const participant = s.participants.find(p => p.id === input.participantId)
+    if (!participant) return { error: "Deelnemer niet gevonden." }
+    return {
+      ...s,
+      participants: s.participants.map(p =>
+        p.id === input.participantId ? { ...p, groupId: input.groupId } : p,
+      ),
+    }
+  })
+}
+
+// Deel B §4.2 — force LOCK: bij time-out of expliciete host-actie, produceer
+// impliciete "geen besluit"-events voor beslispunten zonder inzending en
+// verplaats fase naar 'lock'.
+export async function forceLock(): Promise<{ ok: boolean; error?: string }> {
+  const result = await mutate(s => {
+    if (!s.graph) return s  // niet-graph sessies hebben geen scoring, LOCK is no-op
+    const roundIdx = s.currentRound
+    const now = Date.now()
+    // Voor elke DecisionNode in de huidige ronde, check per-groep of er is ingezonden.
+    // Ontbrekend → virtuele SubmittedDecision met actionId = eerste `implicit`-optie of fallback-id.
+    const groups = s.groups ?? []
+    // Bepaal beslispunten voor deze ronde uit de graph (decision nodes waarvan
+    // parent-round via sequence-edges de huidige round-node is).
+    const decisionNodes = s.graph.nodes.filter(n => n.type === 'decision')
+    const submissions = s.submittedDecisions ?? []
+    const missing: SubmittedDecision[] = []
+    for (const node of decisionNodes) {
+      const dd = node.data as DecisionNodeData
+      const scoringUnits = groups.length > 0
+        ? groups.map(g => ({ groupId: g.id, name: g.name }))
+        : [{ groupId: undefined as string | undefined, name: 'single' }]
+      for (const unit of scoringUnits) {
+        const already = submissions.some(d =>
+          d.roundIndex === roundIdx
+          && dd.options.some(o => o.id === d.actionId)
+          && (unit.groupId ? d.groupId === unit.groupId : !d.groupId),
+        )
+        if (already) continue
+        // Kies impliciete optie of fallback.
+        const implicit = dd.options.find(o => o.implicit)
+        const optId = implicit?.id ?? `__implicit_${node.id}`
+        const optLabel = implicit?.label ?? 'Geen besluit binnen de tijd'
+        missing.push({
+          participantId: 'IMPLICIT',
+          participantName: unit.name,
+          role: 'ceo',   // placeholder — scoring gebruikt groupId niet role voor implicit
+          roundIndex: roundIdx,
+          actionId: optId,
+          actionLabel: optLabel,
+          reasoning: 'Geen besluit binnen de tijd — impliciete keuze bij LOCK',
+          submittedAt: new Date(now).toISOString(),
+          isWrongRole: false,
+          isIrDeviation: false,
+          groupId: unit.groupId,
+        })
+      }
+    }
+    const nextSubmissions = [...submissions, ...missing]
+    // Zet fase op 'lock' via de bestaande phase-flow.
+    const nextRoundPhaseState = s.activeRoundPhaseState
+      ? { ...s.activeRoundPhaseState, currentPhase: 'lock' as const, phaseStartedAt: now }
+      : s.activeRoundPhaseState
+    return { ...s, submittedDecisions: nextSubmissions, roundPhase: 'lock' as const, activeRoundPhaseState: nextRoundPhaseState }
+  })
+  if (result.ok) emit("phase_changed", { phase: 'lock', forced: true })
+  return result
+}
+
+// Idempotency-helper: bij EVENT-mode blokkeer dubbele submits per (groupId, roundIndex, decisionPointId).
+// Wordt aangeroepen in submitDecision.
+function findExistingGroupSubmission(
+  session: SessionState,
+  participantId: string,
+  roundIndex: number,
+  actionId: string,
+): SubmittedDecision | null {
+  const participant = session.participants.find(p => p.id === participantId)
+  const groupId = participant?.groupId
+  if (!groupId || session.mode !== 'event') return null
+  return (session.submittedDecisions ?? []).find(d =>
+    d.groupId === groupId
+    && d.roundIndex === roundIndex
+    && d.actionId === actionId,
+  ) ?? null
+}
+
 // ─── Role assignment ──────────────────────────────────────────
 
 export async function assignRole(input: { participantId: string; role: Role }): Promise<{ ok: boolean; error?: string }> {
@@ -1217,6 +1324,19 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
   const isWrongRole = action.allowedRoles.length > 0 && !action.allowedRoles.includes(role)
   const isIrDeviation = !action.irPlanAligned
 
+  // Deel B §4.3 — idempotency op (groupId, roundIndex, actionId) in EVENT-mode.
+  // Zonder deze check kan dubbele klik van dezelfde iPad twee submissies produceren.
+  if (session.mode === 'event' && participant.groupId) {
+    const existing = findExistingGroupSubmission(session, input.participantId, input.roundIndex, input.actionId)
+    if (existing) {
+      // Herzien mag; overschrijf via de bestaande filter-en-append logica.
+      // Alleen loggen als de vorige inzender een ander groepslid was.
+      if (existing.participantId !== input.participantId && process.env.NODE_ENV !== "production") {
+        console.warn(`[submit] groep ${participant.groupId} herziet: was ${existing.participantName}, nu ${participant.name}`)
+      }
+    }
+  }
+
   const decision: SubmittedDecision = {
     participantId: input.participantId,
     participantName: participant.name,
@@ -1229,12 +1349,20 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     isWrongRole,
     isIrDeviation,
     confidence: input.confidence,
+    groupId: participant.groupId,
   }
 
-  // Remove any existing decision for this participant+round then add new one
-  const existingDecisions = (session.submittedDecisions ?? []).filter(
-    d => !(d.participantId === input.participantId && d.roundIndex === input.roundIndex)
-  )
+  // Remove any existing decision for this participant+round then add new one.
+  // Deel B §4.3 — in EVENT-mode is idempotency op (groupId, roundIndex, actionId):
+  // vervang ook groep-genoten die eerder deze actie kozen (dubbele-tik-preventie).
+  const existingDecisions = (session.submittedDecisions ?? []).filter(d => {
+    if (d.participantId === input.participantId && d.roundIndex === input.roundIndex) return false
+    if (session.mode === 'event' && participant.groupId
+        && d.groupId === participant.groupId
+        && d.roundIndex === input.roundIndex
+        && d.actionId === input.actionId) return false
+    return true
+  })
   const existingFlags = (session.governanceFlags ?? []).filter(
     f => !(f.participantId === input.participantId && f.roundIndex === input.roundIndex)
   )
@@ -1290,6 +1418,24 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     scenario: { ...session.scenario, rounds: updatedRounds },
     submittedDecisions: [...existingDecisions, decision],
     governanceFlags: [...existingFlags, ...newFlags],
+  }
+
+  // Deel B §4.2 — auto-LOCK: als in EVENT-mode alle groepen minstens één keuze
+  // hebben ingezonden voor deze ronde, transiteer naar 'lock'. Facilitator kan
+  // altijd forceren via forceLock() knop.
+  if (updated.mode === 'event' && updated.graph && updated.roundPhase === 'decision') {
+    const groups = updated.groups ?? []
+    if (groups.length > 0) {
+      const submitsThisRound = updated.submittedDecisions ?? []
+      const allGroupsSubmitted = groups.every(g =>
+        submitsThisRound.some(d => d.groupId === g.id && d.roundIndex === input.roundIndex),
+      )
+      if (allGroupsSubmitted) {
+        updated = { ...updated, roundPhase: 'lock', activeRoundPhaseState: updated.activeRoundPhaseState
+          ? { ...updated.activeRoundPhaseState, currentPhase: 'lock', phaseStartedAt: Date.now() }
+          : updated.activeRoundPhaseState }
+      }
+    }
   }
 
   // C3: score decision_speed once per participant per round (not once per round).

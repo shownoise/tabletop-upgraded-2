@@ -546,6 +546,19 @@ export function ControlDashboard() {
                   <Button size="sm" variant="outline" onClick={() => run("prev", () => api.prevRound())} disabled={working !== null || currentIndex <= 0} className="gap-1.5 font-mono uppercase tracking-wider">
                     <ChevronLeft className="size-3.5" />{tr(lang, "prevRound")}
                   </Button>
+                  {/* Deel B §4.3 — Force LOCK: verplaats naar 'lock'-fase, produceer impliciete "geen besluit"-events */}
+                  {session.roundPhase !== "lock" && session.roundPhase !== "review" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => run("lock", () => api.forceLock())}
+                      disabled={working !== null}
+                      className="gap-1.5 font-mono uppercase tracking-wider border-amber-500/40 text-amber-700 dark:text-amber-400"
+                      title="Sluit de KEUZE-fase af — deelnemers zonder inzending krijgen een impliciete keuze"
+                    >
+                      LOCK
+                    </Button>
+                  )}
                   <Button size="sm" onClick={() => run("next", () => api.nextRound())} disabled={working !== null} className="gap-1.5 font-mono uppercase tracking-wider">
                     {currentIndex >= totalRounds - 1 ? (
                       <><Square className="size-3.5" />{tr(lang, "endSession")}</>

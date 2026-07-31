@@ -59,6 +59,12 @@ export const api = {
     post<{ ok: true }>("/api/session/submit-decision", input),
   assignRole: (input: { participantId: string; role: Role }) =>
     post<{ ok: true }>("/api/session/assign-role", input),
+  createGroup: (input: { name: string }) =>
+    post<{ ok: true; groupId: string }>("/api/session/group/create", input),
+  joinGroup: (input: { participantId: string; groupId: string }) =>
+    post<{ ok: true }>("/api/session/group/join", input),
+  forceLock: () =>
+    post<{ ok: true }>("/api/session/force-lock"),
   getReport: () =>
     get<SessionReport>("/api/session/report"),
   triggerSpecial: (type: SpecialType) =>

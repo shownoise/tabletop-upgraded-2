@@ -11,6 +11,7 @@ import { api } from "@/lib/api-client"
 import { getGoal } from "@/lib/goals/registry"
 import type { GoalId } from "@/lib/engine/types"
 import { InjectFeed } from "./inject-feed"
+import { TeamPicker } from "./team-picker"
 import { UrgentInjectModal } from "./urgent-inject-modal"
 import { RoundTimerCompact } from "./round-timer"
 import { RoundPhaseTimeline } from "./round-phase-timeline"
@@ -885,8 +886,21 @@ export function PlayView() {
 
   const status = session.status
 
+  // Deel B §4 — team-picker verschijnt in EVENT-mode zolang deelnemer geen groupId heeft.
+  const currentParticipant = participantId ? session.participants.find(p => p.id === participantId) : undefined
+  const needsTeam = session.mode === "event" && currentParticipant && !currentParticipant.groupId
+
   return (
     <div className="min-h-screen bg-background">
+      {/* Team-picker in EVENT-mode zonder groep */}
+      {needsTeam && participantId && (
+        <TeamPicker
+          session={session}
+          participantId={participantId}
+          onJoined={() => { /* stream update refetcht session, groupId verschijnt vanzelf */ }}
+        />
+      )}
+
       {/* Intro overlay */}
       {showIntro && session.status === "lobby" && (
         <IntroOverlay

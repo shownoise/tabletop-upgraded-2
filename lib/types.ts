@@ -288,6 +288,9 @@ export interface SubmittedDecision {
   // Deel B §7.2 — zekerheidstap 1..5 bij inzending, voor KALIBRATIE-scoring.
   // Optioneel; ontbrekend → KALIBRATIE valt uit de weging.
   confidence?: 1 | 2 | 3 | 4 | 5
+  // Deel B §4 — bij EVENT-mode: welke groep heeft dit ingezonden. Idempotency
+  // is dan (groupId, roundIndex). In ASSESSMENT-mode ongebruikt.
+  groupId?: string
 }
 
 export interface GovernanceFlag {
@@ -584,10 +587,21 @@ export interface ExerciseConfig {
 export interface Participant {
   id: string
   name: string
-  team?: string
+  team?: string             // legacy free-string, blijft voor backwards compat
   role?: Role
   joinedAt: number
   readyAt?: number
+  // Deel B §4.1 — lid van een gestructureerde Group (EVENT-mode). Ontbrekend
+  // in ASSESSMENT-mode of wanneer nog geen team gekozen is.
+  groupId?: string
+}
+
+// Deel B §4 — een groep in EVENT-mode. Elke groep is één scoring-eenheid en
+// bedient één iPad (notulist submitteert namens de hele groep).
+export interface Group {
+  id: string
+  name: string
+  createdAt: number
 }
 
 export interface ActivePhaseState {
@@ -758,6 +772,8 @@ export interface SessionState {
     distinctOwners: number
     resolvedAt: number
   }
+  // Deel B §4 — groepen (EVENT-mode). Ontbrekend of leeg = single-team ASSESSMENT.
+  groups?: Group[]
 }
 
 export interface ActiveDecisionState {
