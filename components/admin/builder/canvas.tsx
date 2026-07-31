@@ -115,6 +115,8 @@ function defaultData(type: GraphNodeType, index: number): GraphNodeData {
         kind: "decision",
         prompt: "Wat besluit het team?",
         measuredBy: "participant_choice",
+        perRole: true,   // Default: deelnemers zien + kiezen zelf. Zonder dit blijven keuzes verborgen.
+        advancesGraph: false,
         options: [
           { id: newId("opt"), label: "Optie A" },
           { id: newId("opt"), label: "Optie B" },

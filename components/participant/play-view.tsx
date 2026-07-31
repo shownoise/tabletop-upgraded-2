@@ -13,6 +13,7 @@ import type { GoalId } from "@/lib/engine/types"
 import { InjectFeed } from "./inject-feed"
 import { TeamPicker } from "./team-picker"
 import { ConfidenceTally } from "./confidence-tally"
+import { AchievementsToaster } from "./achievements"
 import { UrgentInjectModal } from "./urgent-inject-modal"
 import { RoundTimerCompact } from "./round-timer"
 import { RoundPhaseTimeline } from "./round-phase-timeline"
@@ -901,6 +902,8 @@ export function PlayView() {
           onJoined={() => { /* stream update refetcht session, groupId verschijnt vanzelf */ }}
         />
       )}
+      {/* Achievement-toasts — verschijnen bij triggers */}
+      {participantId && <AchievementsToaster session={session} participantId={participantId} />}
 
       {/* Intro overlay */}
       {showIntro && session.status === "lobby" && (

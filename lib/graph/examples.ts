@@ -1153,8 +1153,8 @@ export interface Example {
 export const EXAMPLES: Example[] = [
   {
     key: "simple_story",
-    label: "★ Simple story — 3 rondes ransomware",
-    description: "Klein voorbeeldscenario. 3 rondes (detectie / exfiltratie / recovery), 6 injects, 3 decisions met 6-dim scoring, en 3 outcomes. Gebruikt alleen de kern-velden uit de builder — goede start om aan te passen.",
+    label: "★ Ransomware Crisis — 7 rondes (aanbevolen start)",
+    description: "Compleet voorbeeldscenario met 7 rondes, elke ronde meerdere parallelle keuzes voor verschillende rollen (CISO / Legal / CEO / Comms / CFO / HR / Ops). 15 injects, 39 opties met complete 6-dim scoring, 3 uitkomsten op basis van cumulatieve score.",
     build: simpleStoryExample,
   },
   {
