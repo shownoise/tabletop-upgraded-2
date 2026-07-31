@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { Suspense } from "react"
-import { ArrowLeft, ShieldAlert, Workflow } from "lucide-react"
+import { ArrowLeft, Workflow } from "lucide-react"
 import { SetupForm } from "@/components/admin/setup-form"
 import { ThemeToggle } from "@/components/theme-toggle"
 
@@ -16,7 +16,7 @@ export default function AdminSetupPage() {
             <ArrowLeft className="size-3.5" />
             Home
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <Link
               href="/admin/builder"
               className="flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground"
@@ -24,33 +24,25 @@ export default function AdminSetupPage() {
               <Workflow className="size-3.5" />
               Scenario builder
             </Link>
-            <Link
-              href="/admin/story"
-              className="flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-primary hover:opacity-80"
-            >
-              Story view
-            </Link>
             <ThemeToggle />
-            <ShieldAlert className="size-4 text-primary" />
-            <span className="font-mono text-sm tracking-wider">FACILITATOR_SETUP</span>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-5xl flex-col gap-10 px-6 py-10 md:px-10 md:py-14">
-        <section className="flex flex-col gap-4">
-          <span className="font-mono text-xs uppercase tracking-wider text-primary">01 / Configure</span>
+      <main className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10 md:px-10 md:py-14">
+        <section className="flex flex-col gap-3">
+          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Voorbereiden</span>
           <h1 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl">
-            Configure the exercise
+            Sessie voorbereiden
           </h1>
           <p className="max-w-2xl text-pretty leading-relaxed text-muted-foreground">
-            These inputs shape the AI-generated scenario. You will get a structured incident with rounds, situation
-            updates, and pre-staged injects you can push to participants live.
+            Vul de context in — sector, kroonjuwelen, kritische systemen. Kies een scenario uit de bibliotheek
+            of bouw er zelf één met de Scenario builder, en druk op Start.
           </p>
         </section>
 
         <section className="rounded-lg border border-border bg-card p-6 md:p-8">
-          <Suspense fallback={<div className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Loading setup…</div>}>
+          <Suspense fallback={<div className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Laden…</div>}>
             <SetupForm />
           </Suspense>
         </section>

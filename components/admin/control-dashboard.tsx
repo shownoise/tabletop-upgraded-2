@@ -455,16 +455,20 @@ export function ControlDashboard() {
             </div>
             <LangToggle lang={lang} setLang={setLang} />
             <ThemeToggle />
-            {/* Extra nav buttons */}
-            <Link href="/admin/story" className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors" title="Story mode (simplified)">
-              Story
-            </Link>
-            <Link href="/admin/present" className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors" title="Presentation mode">
+            <Link
+              href="/admin/present"
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+              title="Groot scherm — voor de zaal"
+            >
               <Monitor className="size-3.5" />
+              Groot scherm
             </Link>
             {isEnded && (
-              <Link href="/admin/report" className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors">
-                <FileText className="size-3.5" /> Report
+              <Link
+                href="/admin/report"
+                className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
+              >
+                <FileText className="size-3.5" /> Rapport
               </Link>
             )}
           </div>

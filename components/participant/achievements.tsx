@@ -1,31 +1,27 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { Trophy, Zap, Target, Flame, TrendingUp } from "lucide-react"
+import { CheckCircle2 } from "lucide-react"
 import type { SessionState } from "@/lib/types"
-import { playNotificationSound } from "@/lib/sounds"
 
-// Gamification-laag voor participants. Detecteert momenten in de session-state
-// die een achievement rechtvaardigen en toont een korte toast rechtsboven.
-// Alleen visueel — geen scoring-effect (spec §5 "vectoren of niets").
+// Subtiele signaal-notificaties voor deelnemers.
+// Zakelijk, niet gamified: één regel, monochroom, fade-in rechtsonder.
+// Geen "achievement"-taal, geen kleuren-explosies, geen geluid.
 
-interface Achievement {
+interface Signal {
   id: string
-  icon: typeof Trophy
-  title: string
-  subtitle: string
-  tone: "gold" | "green" | "purple" | "orange"
+  text: string
 }
 
-const ACHIEVEMENTS = {
-  first_blood: { icon: Zap, title: "First Blood", subtitle: "Eerste beslissing van de sessie", tone: "purple" as const },
-  streak_3:    { icon: Flame, title: "Op streek", subtitle: "3 rondes op rij ingezonden", tone: "orange" as const },
-  perfect_round: { icon: Target, title: "Perfect Round", subtitle: "Sterke keuze — hoge zekerheid", tone: "green" as const },
-  comeback:    { icon: TrendingUp, title: "Comeback", subtitle: "Herstel na een fout in vorige ronde", tone: "gold" as const },
-  first_share: { icon: Trophy, title: "Delen is winst", subtitle: "Eerste inject gedeeld met het team", tone: "gold" as const },
-} satisfies Record<string, Omit<Achievement, "id">>
+const SIGNALS = {
+  first_decision:  "Eerste beslissing ingediend",
+  three_rounds:    "3 rondes op rij ingediend",
+  five_rounds:     "5 rondes op rij ingediend",
+  confident:       "Zelfverzekerde keuze",
+  consistent_hi:   "Consistent hoge zekerheid",
+} as const
 
-type AchievementKey = keyof typeof ACHIEVEMENTS
+type SignalKey = keyof typeof SIGNALS
 
 export function AchievementsToaster({
   session,
@@ -34,60 +30,55 @@ export function AchievementsToaster({
   session: SessionState
   participantId: string
 }) {
-  const [visible, setVisible] = useState<Achievement | null>(null)
+  const [visible, setVisible] = useState<Signal | null>(null)
   const seenRef = useRef<Set<string>>(new Set())
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const myDecisions = (session.submittedDecisions ?? []).filter(d => d.participantId === participantId)
+    const my = (session.submittedDecisions ?? []).filter(d => d.participantId === participantId)
+    if (my.length === 0) return
 
-    // First Blood — eerste beslissing van deze participant
-    if (myDecisions.length === 1 && !seenRef.current.has("first_blood")) {
-      trigger("first_blood")
+    if (my.length === 1) trigger("first_decision")
+    const rounds = new Set(my.map(d => d.roundIndex))
+    if (rounds.size >= 3) trigger("three_rounds")
+    if (rounds.size >= 5) trigger("five_rounds")
+    const latest = my[my.length - 1]
+    if (latest && typeof latest.confidence === "number" && latest.confidence >= 4) {
+      trigger("confident", `conf_${latest.roundIndex}`)
     }
-    // Streak — 3+ rondes met inzendingen
-    const uniqueRounds = new Set(myDecisions.map(d => d.roundIndex))
-    if (uniqueRounds.size >= 3 && !seenRef.current.has("streak_3")) {
-      trigger("streak_3")
-    }
-    // Perfect round — laatste inzending had confidence ≥ 4
-    const latest = myDecisions[myDecisions.length - 1]
-    if (latest && typeof latest.confidence === "number" && latest.confidence >= 4
-        && !seenRef.current.has(`perfect_${latest.roundIndex}`)) {
-      trigger("perfect_round", `perfect_${latest.roundIndex}`)
-    }
+    const highConfidenceCount = my.filter(d => typeof d.confidence === "number" && d.confidence >= 4).length
+    if (highConfidenceCount >= 3) trigger("consistent_hi")
 
-    function trigger(key: AchievementKey, dedupe: string = key) {
+    function trigger(key: SignalKey, dedupe: string = key) {
+      if (seenRef.current.has(dedupe)) return
       seenRef.current.add(dedupe)
-      const spec = ACHIEVEMENTS[key]
-      setVisible({ id: dedupe, ...spec })
-      try { playNotificationSound("success") } catch { /* silent */ }
-      setTimeout(() => setVisible(prev => prev?.id === dedupe ? null : prev), 4500)
+      setVisible({ id: dedupe, text: SIGNALS[key] })
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => setVisible(prev => prev?.id === dedupe ? null : prev), 3500)
     }
+
+    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.submittedDecisions?.length, participantId])
 
   if (!visible) return null
 
-  const toneClass = {
-    gold: "border-yellow-500/60 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
-    green: "border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    purple: "border-purple-500/60 bg-purple-500/10 text-purple-700 dark:text-purple-300",
-    orange: "border-orange-500/60 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-  }[visible.tone]
-
-  const Icon = visible.icon
   return (
-    <div className="fixed right-4 top-20 z-50 pointer-events-none animate-in slide-in-from-right-4 fade-in duration-300">
-      <div className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 shadow-lg backdrop-blur-sm ${toneClass}`}>
-        <div className="rounded-full bg-current/10 p-2">
-          <Icon className="size-5" />
-        </div>
-        <div className="flex flex-col">
-          <span className="font-mono text-xs uppercase tracking-wider opacity-80">Achievement</span>
-          <span className="font-bold">{visible.title}</span>
-          <span className="text-[11px] opacity-70">{visible.subtitle}</span>
-        </div>
+    <div className="fixed bottom-4 right-4 z-50 pointer-events-none">
+      <div
+        key={visible.id}
+        className="flex items-center gap-2 rounded-md border border-border bg-background/95 px-3 py-2 shadow-sm backdrop-blur"
+        style={{ animation: "fadeInUp 0.4s ease-out" }}
+      >
+        <CheckCircle2 className="size-3.5 text-muted-foreground/70" />
+        <span className="text-xs text-foreground/80">{visible.text}</span>
       </div>
+      <style>{`
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   )
 }

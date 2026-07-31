@@ -192,6 +192,19 @@ function InjectForm({ data, onSave }: { data: InjectNodeData; onSave: (d: Inject
           ))}
         </div>
       </div>
+      <div>
+        <Label className="text-xs">Vertraging binnen ronde (seconden)</Label>
+        <Input
+          type="number" min={0} max={900}
+          value={local.deliverySeconds ?? ""}
+          onChange={e => commit({ ...local, deliverySeconds: e.target.value ? Number(e.target.value) : undefined })}
+          placeholder="0 = direct bij start, 180 = na 3 min"
+          className="w-full"
+        />
+        <p className="text-[10px] text-muted-foreground mt-1">
+          Leeg of 0 = inject verschijnt direct bij ronde-start. Hoger = drip-effect (bijv. 60/180/300).
+        </p>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label className="text-xs">Belang</Label>

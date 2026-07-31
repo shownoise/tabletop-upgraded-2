@@ -58,6 +58,7 @@ export function simpleStoryExample(): ScenarioGraph {
       visibility: cfg.visibility,
       targetRoles: cfg.targetRoles,
       correctRoute: cfg.correctRoute,
+      deliverySeconds: cfg.deliverySeconds,   // drip-timing binnen de ronde
     }
   }
 
@@ -92,13 +93,13 @@ export function simpleStoryExample(): ScenarioGraph {
       title: "MDR-alert — lateral movement",
       content: "3 endpoints met verdacht gedrag. Nog geen encryptie. Aanvaller lijkt nog verkennend.",
       type: "alert", channel: "siem", urgency: "high", senderName: "MDR SOC on-call",
-      importance: "crucial",
+      importance: "crucial", deliverySeconds: 0,
     })},
     { id: r1i[1].id, type: "inject", position: { x: 440, y: 440 }, data: injectData({
       title: "Servicedesk — bestandsproblemen",
       content: "Twee gebruikers melden dat ze bestanden op de fileshare niet kunnen openen.",
       type: "internal", channel: "phone", urgency: "medium", senderName: "Servicedesk avond",
-      importance: "info",
+      importance: "info", deliverySeconds: 180,
     })},
     { id: dec[0], type: "decision", position: { x: 620, y: 220 }, data: decisionData(
       "Ronde 1 — Wat zet ieder van jullie in gang?",
@@ -131,22 +132,25 @@ export function simpleStoryExample(): ScenarioGraph {
       15,
     )},
     { id: r2i[0].id, type: "inject", position: { x: 830, y: 440 }, data: injectData({
-      title: "Legal — AVG + NIS2 klok tikt",
-      content: "Persoonsgegevens exfiltratie bevestigd. AVG-melding 72u vanaf detectie. NIS2 early warning binnen 24u.",
-      type: "regulatory", channel: "email", urgency: "high", senderName: "Legal Counsel",
-      importance: "crucial", targetRoles: ["legal"], visibility: "exclusive",
-    })},
-    { id: r2i[1].id, type: "inject", position: { x: 1010, y: 440 }, data: injectData({
       title: "MDR — payload identificatie",
       content: "LockBit 3.0-variant. Cobalt Strike beacons. 60% van file-servers heeft actieve session.",
       type: "technical", channel: "siem", urgency: "critical", senderName: "Eye Security",
       importance: "crucial", targetRoles: ["ciso"], visibility: "exclusive",
+      deliverySeconds: 0,
+    })},
+    { id: r2i[1].id, type: "inject", position: { x: 1010, y: 440 }, data: injectData({
+      title: "Legal — AVG + NIS2 klok tikt",
+      content: "Persoonsgegevens exfiltratie bevestigd. AVG-melding 72u vanaf detectie. NIS2 early warning binnen 24u.",
+      type: "regulatory", channel: "email", urgency: "high", senderName: "Legal Counsel",
+      importance: "crucial", targetRoles: ["legal"], visibility: "exclusive",
+      deliverySeconds: 120,
     })},
     { id: r2i[2].id, type: "inject", position: { x: 1190, y: 440 }, data: injectData({
       title: "CFO — verzekeraar 24u-clausule",
       content: "Cyberverzekeraar heeft 24u-notificatie clausule. Nu bellen = dekking geldig. Later = argument voor niet-dekken.",
       type: "executive", channel: "phone", urgency: "high", senderName: "Verzekerings-broker",
       importance: "crucial", targetRoles: ["cfo"], visibility: "exclusive",
+      deliverySeconds: 300,
     })},
     { id: dec[1], type: "decision", position: { x: 1400, y: 220 }, data: decisionData(
       "Ronde 2 — Scope-actie",
@@ -182,7 +186,7 @@ export function simpleStoryExample(): ScenarioGraph {
       title: "Losgeld-note ontvangen",
       content: "5 BTC (≈€300k). 48u deadline. 'Wij hebben database met klantgegevens, medische data, HR-dossiers.'",
       type: "executive", channel: "raw", urgency: "critical", senderName: "Ranshub",
-      importance: "crucial",
+      importance: "crucial", deliverySeconds: 0,
     })},
     { id: r3i[1].id, type: "inject", position: { x: 1800, y: 440 }, data: injectData({
       title: "Journalist NL-Cyber belt HR",
@@ -190,6 +194,7 @@ export function simpleStoryExample(): ScenarioGraph {
       type: "media", channel: "phone", urgency: "medium", senderName: "NL-Cyber redactie",
       importance: "info", targetRoles: ["hr_lead"],
       correctRoute: "head_of_comms", visibility: "exclusive",
+      deliverySeconds: 240,
     })},
     { id: dec[2], type: "decision", position: { x: 1980, y: 220 }, data: decisionData(
       "Ronde 3 — Losgeld & Media",
@@ -229,18 +234,21 @@ export function simpleStoryExample(): ScenarioGraph {
       content: "Grootste klant (30% omzet). Contract heeft datalek-clausule met opzegrecht.",
       type: "executive", channel: "email", urgency: "high", senderName: "Klant #1 CIO",
       importance: "crucial", targetRoles: ["cfo"], visibility: "exclusive",
+      deliverySeconds: 0,
     })},
     { id: r4i[1].id, type: "inject", position: { x: 2380, y: 440 }, data: injectData({
       title: "Medewerkers-onrust op Slack",
       content: "150+ berichten in #general. 'Klopt ransomware?', 'Kunnen wij morgen wel werken?'",
       type: "internal", channel: "slack", urgency: "medium", senderName: "HR monitoring",
       importance: "crucial", targetRoles: ["hr_lead"], visibility: "exclusive",
+      deliverySeconds: 150,
     })},
     { id: r4i[2].id, type: "inject", position: { x: 2560, y: 440 }, data: injectData({
       title: "NCSC — intake gesprek",
       content: "NCSC bevestigt NIS2-melding. Wil intake vandaag: containment-status, betaling, klantmelding.",
       type: "regulatory", channel: "phone", urgency: "high", senderName: "NCSC",
       importance: "crucial", targetRoles: ["legal"], visibility: "exclusive",
+      deliverySeconds: 360,
     })},
     { id: dec[3], type: "decision", position: { x: 2740, y: 220 }, data: decisionData(
       "Ronde 4 — Stakeholders bedienen",
@@ -276,13 +284,13 @@ export function simpleStoryExample(): ScenarioGraph {
       title: "Backup-lead rapporteert",
       content: "Clean-room herbouw: 4 dagen. Data-verlies: ~7 werkdagen. Kritieke ERP: eigen shadow-copy — 24u.",
       type: "technical", channel: "teams", urgency: "high", senderName: "Backup lead",
-      importance: "crucial", targetRoles: ["ciso"],
+      importance: "crucial", targetRoles: ["ciso"], deliverySeconds: 0,
     })},
     { id: r5i[1].id, type: "inject", position: { x: 3140, y: 440 }, data: injectData({
       title: "Ops — noodplan werkinstructies",
       content: "Handmatige processen voor de 3 kritieke processen zijn klaar. Kost 40% capaciteit maar houdt operatie op de been.",
       type: "internal", channel: "email", urgency: "medium", senderName: "Ops Manager",
-      importance: "info", targetRoles: ["ops_manager"],
+      importance: "info", targetRoles: ["ops_manager"], deliverySeconds: 210,
     })},
     { id: dec[4], type: "decision", position: { x: 3320, y: 220 }, data: decisionData(
       "Ronde 5 — Recovery pad",
@@ -312,13 +320,14 @@ export function simpleStoryExample(): ScenarioGraph {
       title: "AD.nl — 'Grote NL-organisatie slachtoffer'",
       content: "Landelijke media pikt leak op. Interview-verzoeken van 4 media. Sociale media woedend + speculatief.",
       type: "media", channel: "news", urgency: "high", senderName: "Media-monitoring",
-      importance: "crucial",
+      importance: "crucial", deliverySeconds: 0,
     })},
     { id: r6i[1].id, type: "inject", position: { x: 3720, y: 440 }, data: injectData({
       title: "Board-vergadering ingelast",
       content: "Aandeelhouders vragen positie. Externe adviesraad wil vergadering vanavond.",
       type: "executive", channel: "email", urgency: "critical", senderName: "Company Secretary",
       importance: "crucial", targetRoles: ["ceo"], visibility: "exclusive",
+      deliverySeconds: 300,
     })},
     { id: dec[5], type: "decision", position: { x: 3900, y: 220 }, data: decisionData(
       "Ronde 6 — Reactie op leaksite",
