@@ -219,28 +219,41 @@ const DIM_LABELS: Record<string, string> = {
   KOS:  "Kosten",
 }
 
+interface GroupLeaderboardEntry { gid: string; name: string; points: number }
+
 function BigScreenReveal({ currentRoundNumber }: { currentRoundNumber: number }) {
   const [report, setReport] = useState<AssessmentReport | null>(null)
+  const [leaderboard, setLeaderboard] = useState<GroupLeaderboardEntry[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    async function fetchReport() {
+    async function fetchAll() {
       try {
-        const res = await fetch("/api/session/score?format=report")
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          if (!cancelled) setError(data.error ?? `HTTP ${res.status}`)
+        const [rReport, rGroups] = await Promise.all([
+          fetch("/api/session/score?format=report"),
+          fetch("/api/session/score?mode=EVENT&byGroup=true"),
+        ])
+        if (!rReport.ok) {
+          const data = await rReport.json().catch(() => ({}))
+          if (!cancelled) setError(data.error ?? `HTTP ${rReport.status}`)
           return
         }
-        const data = (await res.json()) as AssessmentReport
-        if (!cancelled) { setReport(data); setError(null) }
+        const data = (await rReport.json()) as AssessmentReport
+        let lb: GroupLeaderboardEntry[] = []
+        if (rGroups.ok) {
+          const gd = (await rGroups.json()) as { perGroup: Record<string, { totalPoints: number }>; groupNames: Record<string, string> }
+          lb = Object.entries(gd.perGroup)
+            .map(([gid, out]) => ({ gid, name: gd.groupNames[gid] ?? gid, points: out.totalPoints }))
+            .sort((a, b) => b.points - a.points)
+        }
+        if (!cancelled) { setReport(data); setLeaderboard(lb); setError(null) }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err))
       }
     }
-    fetchReport()
-    const id = setInterval(fetchReport, 3000)
+    fetchAll()
+    const id = setInterval(fetchAll, 3000)
     return () => { cancelled = true; clearInterval(id) }
   }, [currentRoundNumber])
 
@@ -314,6 +327,31 @@ function BigScreenReveal({ currentRoundNumber }: { currentRoundNumber: number })
           ))}
         </div>
       </div>
+
+      {/* Leaderboard — alleen als er meerdere groepen zijn (EVENT-mode) */}
+      {leaderboard.length > 1 && (
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Leaderboard</div>
+          <div className="space-y-2">
+            {leaderboard.map((e, i) => (
+              <div
+                key={e.gid}
+                className={`flex items-center justify-between rounded-lg border px-6 py-3 transition-all ${
+                  i === 0 ? "border-primary bg-primary/10" : "border-border bg-card"
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <span className={`text-2xl font-bold tabular-nums ${i === 0 ? "text-primary" : "text-muted-foreground"}`}>
+                    #{i + 1}
+                  </span>
+                  <span className="text-xl font-semibold">{e.name}</span>
+                </div>
+                <span className="text-3xl font-bold tabular-nums text-primary">{e.points}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

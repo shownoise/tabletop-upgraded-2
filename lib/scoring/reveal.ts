@@ -159,7 +159,10 @@ function collectFinalSubmissions(
   for (const ev of events) {
     if (ev.kind !== 'decision_submitted' && ev.kind !== 'decision_revised') continue
     if (ev.round !== round) continue
-    const gid = groups.find(g => g.participantIds.includes(ev.by))?.id ?? 'single'
+    // Deel B §4 — prefer expliciete groupId; anders val terug op participantIds-lookup.
+    const gid = ev.groupId
+      ?? groups.find(g => g.participantIds.includes(ev.by))?.id
+      ?? 'single'
     out.set(keyFor(ev.decisionPointId, gid), ev.optionId)
   }
   return out
@@ -176,6 +179,8 @@ function computeOutcomesByGroup(
   for (const g of groups) {
     const groupEvents = events.filter(ev => {
       if (ev.kind !== 'decision_submitted' && ev.kind !== 'decision_revised') return true
+      // Deel B §4 — prefer expliciete groupId, anders participantIds-fallback.
+      if (ev.groupId) return ev.groupId === g.id
       return g.participantIds.includes(ev.by)
     })
     out[g.id] = rounds.map(r => computeRoundOutcome(scenario, groupEvents, r.number))

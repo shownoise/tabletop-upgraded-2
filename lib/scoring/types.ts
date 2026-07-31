@@ -110,8 +110,8 @@ export type ExerciseEvent =
   | { kind: 'round_phase_changed'; t: number; round: number; toPhase: 'briefing' | 'overleg' | 'keuze' | 'lock' | 'review' }
   | { kind: 'inject_received'; t: number; round: number; injectId: string; recipient: RoleId }
   | { kind: 'inject_shared'; t: number; round: number; injectId: string; sharedBy: RoleId }
-  | { kind: 'decision_submitted'; t: number; round: number; decisionPointId: string; optionId: string; by: RoleId; confidence?: number; cosignedBy?: RoleId[]; assumptions?: AssumptionTag[]; premises?: PremiseTag[] }
-  | { kind: 'decision_revised'; t: number; round: number; decisionPointId: string; optionId: string; by: RoleId; triggeredByInjectId?: string }
+  | { kind: 'decision_submitted'; t: number; round: number; decisionPointId: string; optionId: string; by: RoleId; groupId?: string; confidence?: number; cosignedBy?: RoleId[]; assumptions?: AssumptionTag[]; premises?: PremiseTag[] }
+  | { kind: 'decision_revised'; t: number; round: number; decisionPointId: string; optionId: string; by: RoleId; groupId?: string; triggeredByInjectId?: string }
   | { kind: 'external_party_activated'; t: number; partyId: string; actionable: 0 | 0.5 | 1 }
   | { kind: 'escalation_fired'; t: number; decisionPointId: string; escalatedBy: RoleId }
   | { kind: 'handoff_recorded'; t: number; quality: number /* 0..1 */ }

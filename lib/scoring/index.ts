@@ -38,7 +38,7 @@ export { scoreCalibration } from './calibration'
 export { buildLeaderboard, divergenceOverGroups } from './points'
 export type { LeaderboardEntry } from './points'
 export { MODE_MATRIX, isMeasurable, maskUnmeasurable } from './mode-matrix'
-export { scoreExercise } from './score-exercise'
+export { scoreExercise, scoreExerciseByGroup } from './score-exercise'
 export { referenceExercise, REFERENCE_EXPECTED } from './reference-case'
 export {
   isValidTransition, canForceLock, computeImplicitSubmissionsAtLock,

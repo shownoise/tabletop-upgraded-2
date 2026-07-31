@@ -20,6 +20,11 @@ const DIM_LABELS: Record<string, string> = {
   DELEN:   "Informatiedeling",
 }
 
+interface PerGroupResponse {
+  perGroup: Record<string, ScoringOutput>
+  groupNames: Record<string, string>
+}
+
 export function ScoringPanel({
   visible = true,
   pollMs = 5000,
@@ -30,6 +35,7 @@ export function ScoringPanel({
   mode?: "ASSESSMENT" | "EVENT"
 }) {
   const [scoring, setScoring] = useState<ScoringOutput | null>(null)
+  const [perGroup, setPerGroup] = useState<PerGroupResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 
@@ -38,14 +44,22 @@ export function ScoringPanel({
     let cancelled = false
     async function tick() {
       try {
-        const res = await fetch(`/api/session/score?mode=${mode}`)
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          if (!cancelled) setError(data.error ?? `HTTP ${res.status}`)
+        // In EVENT-mode fetch we én de aggregate én per-groep.
+        const [aggRes, groupRes] = await Promise.all([
+          fetch(`/api/session/score?mode=${mode}`),
+          mode === "EVENT" ? fetch(`/api/session/score?mode=EVENT&byGroup=true`) : Promise.resolve(null),
+        ])
+        if (!aggRes.ok) {
+          const data = await aggRes.json().catch(() => ({}))
+          if (!cancelled) setError(data.error ?? `HTTP ${aggRes.status}`)
           return
         }
-        const data = (await res.json()) as ScoringOutput
-        if (!cancelled) { setScoring(data); setError(null) }
+        const agg = (await aggRes.json()) as ScoringOutput
+        let groups: PerGroupResponse | null = null
+        if (groupRes?.ok) {
+          groups = (await groupRes.json()) as PerGroupResponse
+        }
+        if (!cancelled) { setScoring(agg); setPerGroup(groups); setError(null) }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err))
       }
@@ -102,6 +116,36 @@ export function ScoringPanel({
               <div className="text-2xl font-bold">{scoring.calibration?.toFixed(2) ?? "—"}</div>
             </div>
           </div>
+
+          {/* Per-groep leaderboard — alleen EVENT-mode */}
+          {perGroup && Object.keys(perGroup.perGroup).length > 0 && (
+            <div className="mt-4">
+              <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground mb-1.5">Leaderboard per groep</div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-muted-foreground text-[10px] font-mono uppercase">
+                    <th className="text-left px-2 py-1">#</th>
+                    <th className="text-left px-2 py-1">Groep</th>
+                    <th className="text-right px-2 py-1">Punten</th>
+                    <th className="text-right px-2 py-1">Proces</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(perGroup.perGroup)
+                    .map(([gid, out]) => ({ gid, name: perGroup.groupNames[gid] ?? gid, out }))
+                    .sort((a, b) => b.out.totalPoints - a.out.totalPoints)
+                    .map((e, i) => (
+                      <tr key={e.gid} className={`border-t border-border ${i === 0 ? "bg-primary/5" : ""}`}>
+                        <td className="px-2 py-1 font-mono font-bold">{i + 1}</td>
+                        <td className="px-2 py-1">{e.name}</td>
+                        <td className="px-2 py-1 text-right font-mono font-bold text-primary">{e.out.totalPoints}</td>
+                        <td className="px-2 py-1 text-right font-mono">{e.out.processAggregate?.toFixed(2) ?? "—"}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {open && (
             <div className="mt-4 space-y-4">

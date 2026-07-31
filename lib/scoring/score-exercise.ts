@@ -47,6 +47,26 @@ function finalizeDimension(
   return applyFacilitatorSlider(masked, events, dim)
 }
 
+// Deel B §5.1 — per-groep scoring voor EVENT-mode leaderboard.
+// Filtert de events per group.id (via groupId of participantIds-fallback) en
+// draait scoreExercise voor elke groep. Zonder groups → één 'all'-key.
+export function scoreExerciseByGroup(input: ExerciseInput): Record<string, ScoringOutput> {
+  const groups = input.roster.groups ?? []
+  if (groups.length === 0) {
+    return { all: scoreExercise(input) }
+  }
+  const out: Record<string, ScoringOutput> = {}
+  for (const g of groups) {
+    const groupEvents = input.events.filter(ev => {
+      if (ev.kind !== 'decision_submitted' && ev.kind !== 'decision_revised') return true
+      if (ev.groupId) return ev.groupId === g.id
+      return g.participantIds.includes(ev.by)
+    })
+    out[g.id] = scoreExercise({ ...input, events: groupEvents })
+  }
+  return out
+}
+
 // Hoofd-entry: input → volledige ScoringOutput. Puur, geen I/O.
 export function scoreExercise(input: ExerciseInput): ScoringOutput {
   const { scenario, roster, events, mode } = input

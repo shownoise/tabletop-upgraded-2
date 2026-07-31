@@ -151,10 +151,18 @@ export function sessionToScoringInput(session: SessionState, opts: GraphToScorin
   const specPresent = session.participants
     .map(p => (p.role ? toSpecRole(p.role) : undefined))
     .filter((s): s is string => !!s)
+  // Deel B §4 — Roster.groups voor per-groep scoring. Elke Group wordt vertaald
+  // met zijn participantIds; reveal.ts + outcome-berekening leest 'groupId' als
+  // primaire scoring-eenheid wanneer aanwezig.
+  const groups = (session.groups ?? []).map(g => ({
+    id: g.id,
+    name: g.name,
+    participantIds: session.participants.filter(p => p.groupId === g.id).map(p => p.id),
+  }))
   return {
     mode: opts.mode ?? 'ASSESSMENT',
     scenario,
-    roster: { presentRoles: specPresent },
+    roster: { presentRoles: specPresent, groups: groups.length > 0 ? groups : undefined },
     events: sessionToEvents(session),
   }
 }
@@ -370,6 +378,7 @@ function submittedDecisionToEvent(d: SubmittedDecision, session: SessionState): 
     decisionPointId: d.actionId,   // in de app is er geen aparte decisionPointId — actionId doet dienst
     optionId: d.actionId,
     by: toSpecRole(d.role),
+    groupId: d.groupId,   // Deel B §4 — voor per-groep scoring
     confidence: d.confidence,
   }
 }
