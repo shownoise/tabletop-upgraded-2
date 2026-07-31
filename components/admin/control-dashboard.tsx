@@ -22,6 +22,7 @@ import { NotificationTracker } from "./notification-tracker"
 import { SupervisionReportView } from "./supervision-report"
 import { ScoringPanel } from "./scoring-panel"
 import { RevealPanel } from "./reveal-panel"
+import { GroupProgress } from "./group-progress"
 import { buildTeamRoles } from "@/lib/team-roster"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
@@ -990,6 +991,11 @@ export function ControlDashboard() {
 
             {/* Graph path panel — only for graph-driven sessions */}
             {session.graph && <GraphPathPanel session={session} />}
+
+            {/* Groepsdruk-inject (Deel B §7.6) — actief tijdens discussion/decision */}
+            {session.graph && isActive && session.mode === "event" && (
+              <GroupProgress session={session} />
+            )}
 
             {/* Live scoring — polt /api/session/score. Mode volgt session.mode. */}
             {session.graph && isActive && (

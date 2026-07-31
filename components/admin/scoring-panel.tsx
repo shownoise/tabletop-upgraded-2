@@ -128,6 +128,7 @@ export function ScoringPanel({
                     <th className="text-left px-2 py-1">Groep</th>
                     <th className="text-right px-2 py-1">Punten</th>
                     <th className="text-right px-2 py-1">Proces</th>
+                    <th className="text-right px-2 py-1">PDF</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -140,6 +141,16 @@ export function ScoringPanel({
                         <td className="px-2 py-1">{e.name}</td>
                         <td className="px-2 py-1 text-right font-mono font-bold text-primary">{e.out.totalPoints}</td>
                         <td className="px-2 py-1 text-right font-mono">{e.out.processAggregate?.toFixed(2) ?? "—"}</td>
+                        <td className="px-2 py-1 text-right">
+                          <a
+                            href={`/admin/report/one-pager?groupId=${e.gid}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-primary hover:underline"
+                          >
+                            PDF ↗
+                          </a>
+                        </td>
                       </tr>
                     ))}
                 </tbody>

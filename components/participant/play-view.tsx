@@ -12,6 +12,7 @@ import { getGoal } from "@/lib/goals/registry"
 import type { GoalId } from "@/lib/engine/types"
 import { InjectFeed } from "./inject-feed"
 import { TeamPicker } from "./team-picker"
+import { ConfidenceTally } from "./confidence-tally"
 import { UrgentInjectModal } from "./urgent-inject-modal"
 import { RoundTimerCompact } from "./round-timer"
 import { RoundPhaseTimeline } from "./round-phase-timeline"
@@ -1190,6 +1191,10 @@ export function PlayView() {
             {/* IR-retainer commentary op ingediende keuzes tijdens review */}
             {session.roundPhase === "review" && participantId && (
               <ReviewCommentary session={session} participantId={participantId} roundIndex={session.currentRound} />
+            )}
+            {/* Confidence-tally — persoonlijk overzicht van eigen zekerheid per ronde */}
+            {(session.roundPhase === "review" || session.roundPhase === "lock") && participantId && (
+              <ConfidenceTally session={session} participantId={participantId} />
             )}
 
             {/* Meldplicht tray — story-driven prompt cards (top of feed area) */}

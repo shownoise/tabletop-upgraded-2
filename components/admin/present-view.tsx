@@ -155,6 +155,11 @@ export function PresentView() {
             </div>
           )}
 
+          {/* Groepsdruk-indicator tijdens KEUZE — anoniem "X van Y groepen klaar" */}
+          {session.mode === "event" && (phase === "discussion" || phase === "decision") && (session.groups ?? []).length > 1 && (
+            <GroupProgressBanner session={session} />
+          )}
+
           {/* Main content area — normaal: situatie + inject; tijdens lock/review: reveal */}
           {(phase === "lock" || phase === "review") ? (
             <BigScreenReveal currentRoundNumber={session.currentRound + 1} />
@@ -204,6 +209,29 @@ export function PresentView() {
   )
 }
 
+// Deel B §7.6 — anonieme voortgang op groot scherm.
+function GroupProgressBanner({ session }: { session: import("@/lib/types").SessionState }) {
+  const groups = session.groups ?? []
+  const currentRound = session.currentRound
+  const submissions = session.submittedDecisions ?? []
+  const submittedGroupIds = new Set(
+    submissions.filter(d => d.roundIndex === currentRound && d.groupId).map(d => d.groupId as string),
+  )
+  const total = groups.length
+  const submitted = groups.filter(g => submittedGroupIds.has(g.id)).length
+  return (
+    <div className="mx-8 mt-4 rounded-xl border border-primary/30 bg-primary/5 px-8 py-4 flex items-center justify-between">
+      <span className="font-mono text-sm uppercase tracking-wider text-muted-foreground">
+        Voortgang
+      </span>
+      <div className="flex items-baseline gap-3">
+        <span className="text-5xl font-bold tabular-nums text-primary">{submitted}</span>
+        <span className="text-2xl text-muted-foreground">/ {total} groepen klaar</span>
+      </div>
+    </div>
+  )
+}
+
 // Deel B §5.2 — reveal-scherm voor het grote scherm. Vaste volgorde:
 //   1. Weging deze ronde (nu pas onthuld)
 //   2. Vector per dimensie
@@ -219,7 +247,13 @@ const DIM_LABELS: Record<string, string> = {
   KOS:  "Kosten",
 }
 
-interface GroupLeaderboardEntry { gid: string; name: string; points: number }
+interface GroupLeaderboardEntry {
+  gid: string
+  name: string
+  points: number
+  currentRoundVector?: Record<string, number>
+  currentRoundPoints?: number
+}
 
 function BigScreenReveal({ currentRoundNumber }: { currentRoundNumber: number }) {
   const [report, setReport] = useState<AssessmentReport | null>(null)
@@ -242,9 +276,21 @@ function BigScreenReveal({ currentRoundNumber }: { currentRoundNumber: number })
         const data = (await rReport.json()) as AssessmentReport
         let lb: GroupLeaderboardEntry[] = []
         if (rGroups.ok) {
-          const gd = (await rGroups.json()) as { perGroup: Record<string, { totalPoints: number }>; groupNames: Record<string, string> }
+          const gd = (await rGroups.json()) as {
+            perGroup: Record<string, { totalPoints: number; outcomes: Array<{ round: number; points: number; perDimension: Record<string, number> }> }>
+            groupNames: Record<string, string>
+          }
           lb = Object.entries(gd.perGroup)
-            .map(([gid, out]) => ({ gid, name: gd.groupNames[gid] ?? gid, points: out.totalPoints }))
+            .map(([gid, out]) => {
+              const currentRoundOutcome = out.outcomes.find(o => o.round === currentRoundNumber)
+              return {
+                gid,
+                name: gd.groupNames[gid] ?? gid,
+                points: out.totalPoints,
+                currentRoundVector: currentRoundOutcome?.perDimension,
+                currentRoundPoints: currentRoundOutcome?.points,
+              }
+            })
             .sort((a, b) => b.points - a.points)
         }
         if (!cancelled) { setReport(data); setLeaderboard(lb); setError(null) }
@@ -331,22 +377,47 @@ function BigScreenReveal({ currentRoundNumber }: { currentRoundNumber: number })
       {/* Leaderboard — alleen als er meerdere groepen zijn (EVENT-mode) */}
       {leaderboard.length > 1 && (
         <div>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Leaderboard</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Leaderboard — deze ronde</div>
           <div className="space-y-2">
             {leaderboard.map((e, i) => (
               <div
                 key={e.gid}
-                className={`flex items-center justify-between rounded-lg border px-6 py-3 transition-all ${
+                className={`rounded-lg border px-6 py-3 transition-all ${
                   i === 0 ? "border-primary bg-primary/10" : "border-border bg-card"
                 }`}
               >
-                <div className="flex items-center gap-4">
-                  <span className={`text-2xl font-bold tabular-nums ${i === 0 ? "text-primary" : "text-muted-foreground"}`}>
-                    #{i + 1}
-                  </span>
-                  <span className="text-xl font-semibold">{e.name}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-4">
+                    <span className={`text-2xl font-bold tabular-nums ${i === 0 ? "text-primary" : "text-muted-foreground"}`}>
+                      #{i + 1}
+                    </span>
+                    <span className="text-xl font-semibold">{e.name}</span>
+                    {typeof e.currentRoundPoints === "number" && (
+                      <span className="font-mono text-xs text-muted-foreground">
+                        deze ronde: <span className="font-bold">{e.currentRoundPoints}</span>
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-3xl font-bold tabular-nums text-primary">{e.points}</span>
                 </div>
-                <span className="text-3xl font-bold tabular-nums text-primary">{e.points}</span>
+                {/* Mini per-group vector deze ronde */}
+                {e.currentRoundVector && (
+                  <div className="grid grid-cols-6 gap-1.5 mt-2">
+                    {DIMS.map(d => {
+                      const v = e.currentRoundVector![d] ?? 0
+                      return (
+                        <div key={d} className="rounded border border-border/40 py-1 text-center bg-background/50">
+                          <div className="font-mono text-[9px] text-muted-foreground uppercase">{d}</div>
+                          <div className={`font-mono text-sm font-bold tabular-nums ${
+                            v > 0 ? "text-primary" : v < 0 ? "text-destructive" : "text-muted-foreground"
+                          }`}>
+                            {v > 0 ? "+" : ""}{v.toFixed(1)}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             ))}
           </div>
