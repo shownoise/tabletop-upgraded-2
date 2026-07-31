@@ -439,7 +439,7 @@ export function SetupForm() {
 
       {/* Step 1 — Exercise goal */}
       <div className="flex flex-col gap-4">
-        <SectionHeader label="What do you want to exercise?" />
+        <SectionHeader label="Doel van de oefening" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {getAllGoals().map(goal => {
             const isActive = goal.status === "active"
@@ -506,51 +506,26 @@ export function SetupForm() {
       </div>
 
       {/* Section 1 — Organization profile */}
-      <SectionHeader label="Organization profile" />
+      <SectionHeader label="Organisatie" />
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <FieldRow label="Sector" hint="Industry vertical of the simulated organization">
+        <FieldRow label="Sector" hint="Branche van de gesimuleerde organisatie">
           <Select value={config.sector} onValueChange={(v) => update("sector", v)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>{sectors.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
           </Select>
         </FieldRow>
 
-        <FieldRow label="Company size" hint="Headcount band">
+        <FieldRow label="Grootte" hint="Aantal medewerkers">
           <Select value={config.companySize} onValueChange={(v) => update("companySize", v)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>{sizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
           </Select>
         </FieldRow>
 
-        <FieldRow label="IT maturity" hint="Self-assessed IT capability level">
-          <div className="grid grid-cols-3 gap-2">
-            {IT_MATURITY_OPTIONS.map(opt => (
-              <ToggleButton
-                key={opt.id}
-                active={config.itMaturity === opt.id}
-                onClick={() => update("itMaturity", opt.id)}
-                label={opt.label}
-              />
-            ))}
-          </div>
-        </FieldRow>
-
-        <FieldRow label="Internal security capability" hint="Current security team setup">
-          <Select value={config.securityCapability ?? ""} onValueChange={(v) => update("securityCapability", v as SecurityCapability)}>
-            <SelectTrigger><SelectValue placeholder="Select capability…" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="no_soc">No internal SOC</SelectItem>
-              <SelectItem value="small_it">Small IT team</SelectItem>
-              <SelectItem value="outsourced_it">Outsourced IT</SelectItem>
-              <SelectItem value="it_mssp">IT + MSSP</SelectItem>
-              <SelectItem value="it_ir_retainer">IT + IR retainer</SelectItem>
-            </SelectContent>
-          </Select>
-        </FieldRow>
       </div>
 
       {/* Section 2 — Exercise setup */}
-      <SectionHeader label="Exercise setup" />
+      <SectionHeader label="Instellingen" />
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <FieldRow label={`Scenario type${graphId ? " (uit graph)" : ""}`} hint={graphId ? "Wordt bepaald door de scenario graph" : "The primary attack pattern to simulate"}>
         <div className={graphId ? "opacity-40 pointer-events-none select-none" : ""}>
@@ -561,42 +536,8 @@ export function SetupForm() {
         </div>
         </FieldRow>
 
-        <FieldRow label="Decision framework" hint="Conversation structure used throughout the exercise">
-          <div className="grid grid-cols-1 gap-2">
-            {DECISION_FRAMEWORKS.map(fw => (
-              <button
-                key={fw.id}
-                type="button"
-                onClick={() => setDecisionFramework(fw.id)}
-                className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
-                  decisionFramework === fw.id
-                    ? "border-primary bg-primary/10"
-                    : "border-border bg-card hover:border-primary/40"
-                }`}
-              >
-                <span className={`font-mono text-sm font-bold w-16 shrink-0 pt-0.5 ${decisionFramework === fw.id ? "text-primary" : "text-foreground"}`}>
-                  {fw.label}
-                </span>
-                <span className="text-xs text-muted-foreground leading-relaxed">{fw.desc}</span>
-              </button>
-            ))}
-          </div>
-        </FieldRow>
+        <FieldRow label="Fase-timing" hint="Hoe fases binnen een ronde vorderen">
 
-        <FieldRow label="Difficulty" hint="Scenario complexity and decision pressure">
-          <div className="grid grid-cols-3 gap-2">
-            {DIFFICULTY_OPTIONS.map(opt => (
-              <ToggleButton
-                key={opt.id}
-                active={config.difficulty === opt.id}
-                onClick={() => update("difficulty", opt.id)}
-                label={opt.label}
-              />
-            ))}
-          </div>
-        </FieldRow>
-
-        <FieldRow label="Timing" hint="How BOB/OODA sub-phases progress during a round">
           <div className="grid grid-cols-1 gap-2">
             {([
               { id: "fit_to_round", label: "Fit to round", desc: "Sub-phases automatically fit the round budget." },
@@ -625,179 +566,10 @@ export function SetupForm() {
         </FieldRow>
       </div>
 
-      {/* Section 3 — Module sequence */}
-      <SectionHeader label={`Module sequence${graphId ? " (uit graph)" : ""}`} />
-      <div className={`flex flex-col gap-3 ${graphId ? "opacity-40 pointer-events-none select-none" : ""}`}>
-        <p className="text-xs text-muted-foreground">
-          Voeg modules toe, verwijder ze, of herorden ze. Elk module is een coherent tijdvenster met één leerdoel.
-          Per module kun je duur, lens en framework overschrijven.
-        </p>
-
-        <div className="flex flex-col gap-2">
-          {moduleSlots.map((slot, index) => {
-            const def = MODULE_DEFINITIONS.find(d => d.id === slot.module_id)
-            const isExpanded = expandedModule === `${slot.module_id}-${index}`
-            const toggleExpand = () => setExpandedModule(isExpanded ? null : `${slot.module_id}-${index}`)
-
-            return (
-              <div key={`${slot.module_id}-${index}`} className="rounded-lg border border-border bg-card overflow-hidden">
-                {/* Module header row */}
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                  <span className="font-mono text-xs text-muted-foreground w-5 shrink-0 text-center">{index + 1}</span>
-                  <span className="font-mono text-sm flex-1 truncate">{MODULE_LABELS[slot.module_id]}</span>
-                  <span className="font-mono text-[10px] text-muted-foreground hidden sm:block">
-                    {slot.duration_minutes ?? def?.default_duration_minutes ?? 40}m
-                  </span>
-                  {def && (
-                    <span className="font-mono text-[10px] text-primary/60 hidden sm:block">
-                      {slot.custom_lens ?? def.default_lens}
-                    </span>
-                  )}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button type="button" onClick={() => moveModule(index, -1)} disabled={index === 0}
-                      className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-20">
-                      <ChevronUp className="size-3.5" />
-                    </button>
-                    <button type="button" onClick={() => moveModule(index, 1)} disabled={index === moduleSlots.length - 1}
-                      className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-20">
-                      <ChevronDown className="size-3.5" />
-                    </button>
-                    <button type="button" onClick={toggleExpand}
-                      className="p-1 rounded text-muted-foreground hover:text-foreground">
-                      <ChevronRight className={`size-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
-                    </button>
-                    <button type="button" onClick={() => removeModule(index)} disabled={moduleSlots.length <= 1}
-                      className="p-1 rounded text-muted-foreground hover:text-destructive disabled:opacity-20">
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Expanded overrides */}
-                {isExpanded && def && (
-                  <div className="border-t border-border px-4 py-3 grid grid-cols-1 gap-3 sm:grid-cols-3 bg-card/50">
-                    <div className="flex flex-col gap-1">
-                      <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Duur (min)</label>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {[20, 30, 40, 50].map(n => (
-                          <button key={n} type="button"
-                            onClick={() => updateModuleSlot(index, { duration_minutes: n })}
-                            className={`rounded border px-2 py-1.5 font-mono text-xs transition-all ${
-                              (slot.duration_minutes ?? def.default_duration_minutes) === n
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-border bg-background hover:border-primary/40"
-                            }`}>
-                            {n}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Observation lens</label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {(["symptoms", "impact", "external_reactions", "attacker_voice"] as const).map(lens => (
-                          <button key={lens} type="button"
-                            onClick={() => updateModuleSlot(index, { custom_lens: lens })}
-                            className={`rounded border px-2 py-1.5 font-mono text-[10px] transition-all truncate ${
-                              (slot.custom_lens ?? def.default_lens) === lens
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-border bg-background hover:border-primary/40"
-                            }`}>
-                            {lens}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Framework (override)</label>
-                      <div className="grid grid-cols-1 gap-1">
-                        <select
-                          value={slot.decision_framework ?? ""}
-                          onChange={e => updateModuleSlot(index, {
-                            decision_framework: e.target.value ? e.target.value as DecisionFramework : undefined
-                          })}
-                          className="rounded border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground"
-                        >
-                          <option value="">Gebruik oefening-standaard ({decisionFramework.toUpperCase()})</option>
-                          {DECISION_FRAMEWORKS.map(fw => (
-                            <option key={fw.id} value={fw.id}>{fw.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {def.learning_goal && (
-                      <p className="sm:col-span-3 text-[11px] text-muted-foreground italic">{def.learning_goal}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Add module */}
-        <div className="flex flex-col gap-2">
-          {showAddModule ? (
-            <div className="rounded-lg border border-border bg-card p-3 flex flex-col gap-2">
-              <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Kies module om toe te voegen</span>
-              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                {ALL_MODULE_IDS
-                  .filter(id => !moduleSlots.some(s => s.module_id === id))
-                  .map(id => (
-                    <button key={id} type="button" onClick={() => addModule(id)}
-                      className="flex items-center gap-2 rounded border border-border bg-background hover:border-primary/40 px-3 py-2 text-left text-sm transition-all">
-                      <Plus className="size-3.5 text-primary shrink-0" />
-                      <span className="font-mono text-xs">{MODULE_LABELS[id]}</span>
-                    </button>
-                  ))}
-              </div>
-              <button type="button" onClick={() => setShowAddModule(false)}
-                className="text-xs text-muted-foreground hover:text-foreground mt-1">
-                Annuleren
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setShowAddModule(true)}
-                className="flex items-center gap-2 rounded-lg border border-dashed border-border hover:border-primary/40 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground transition-all">
-                <Plus className="size-3.5" />
-                <span className="font-mono text-xs">Module toevoegen</span>
-              </button>
-              <button type="button"
-                onClick={() => {
-                  const type = SCENARIO_TYPE_MAP[config.scenarioType] ?? "ransomware_double_extortion"
-                  setModuleSlots(DEFAULT_MODULE_SETS[type] ?? [])
-                  setExpandedModule(null)
-                }}
-                className="font-mono text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
-                Reset naar standaard
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Section 4 — Structure */}
-      <SectionHeader label="Structure" />
+      {/* Section 3 — Rollen & tijd */}
+      <SectionHeader label="Rollen & tijd" />
       <div className="grid grid-cols-1 gap-5">
-        <FieldRow label="Team structure" hint="Which teams participate in this exercise">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {TEAM_STRUCTURE_OPTIONS.map(opt => (
-              <ToggleButton
-                key={opt.id}
-                active={config.teamStructure === opt.id}
-                onClick={() => !opt.disabled && handleTeamStructureChange(opt.id)}
-                label={opt.label}
-                disabled={opt.disabled}
-              />
-            ))}
-          </div>
-        </FieldRow>
-
-        <FieldRow label="Participating roles" hint="Select the specific roles that will be in this exercise — used to tailor AI injects and decisions">
+        <FieldRow label="Deelnemende rollen" hint="Welke rollen doen mee in deze oefening">
           <div className="flex flex-col gap-3">
             {(["crisis_management", "technical_it"] as const).map(team => {
               const teamRoles = ALL_ROLES.filter(r => ROLE_META[r].team === team)
@@ -842,188 +614,17 @@ export function SetupForm() {
           </div>
         </FieldRow>
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          <FieldRow label="Number of rounds" hint="Default is 4">
-            <div className="grid grid-cols-4 gap-2">
-              {[2, 3, 4, 5].map(n => (
-                <ToggleButton
-                  key={n}
-                  active={config.roundCount === n}
-                  onClick={() => update("roundCount", n)}
-                  label={String(n)}
-                />
-              ))}
-            </div>
-          </FieldRow>
-
-          <FieldRow label="Timer per round" hint="Minutes per round">
-            <div className="grid grid-cols-4 gap-2">
-              {[10, 15, 20, 30].map(n => (
-                <ToggleButton
-                  key={n}
-                  active={config.timerPerRound === n}
-                  onClick={() => update("timerPerRound", n)}
-                  label={`${n}m`}
-                />
-              ))}
-            </div>
-          </FieldRow>
-
-          <FieldRow label="Total duration" hint="Overall exercise duration target">
-            <Select value={config.duration} onValueChange={handleDurationChange}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{durations.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
-          </FieldRow>
-        </div>
-
-        {/* Duration sanity check */}
-        {(() => {
-          const rounds = config.roundCount ?? 4
-          const timer = config.timerPerRound ?? 15
-          const playMin = rounds * timer
-          const totalMin = DURATION_MINUTES[config.duration] ?? 90
-          const overheadMin = totalMin - playMin
-          const tight = overheadMin < rounds * 5   // minder dan 5 min overhead per ronde
-          const impossible = playMin > totalMin
-          return (
-            <div className={`rounded-md border px-4 py-2.5 font-mono text-xs flex items-center gap-2 ${
-              impossible ? "border-destructive/50 bg-destructive/10 text-destructive"
-              : tight    ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
-              :            "border-border bg-card text-muted-foreground"
-            }`}>
-              <span className="shrink-0 text-sm">{impossible ? "⚠" : tight ? "⚡" : "✓"}</span>
-              <span>
-                {rounds} rondes × {timer}m = <strong>{playMin}m</strong> speeltijd
-                {impossible
-                  ? ` — timer (${playMin}m) overschrijdt totale duur (${totalMin}m)`
-                  : tight
-                  ? ` — weinig ruimte voor discussie (${overheadMin}m over voor ${rounds} rondes)`
-                  : ` — ${overheadMin}m beschikbaar voor discussie en overgangen`
-                }
-              </span>
-            </div>
-          )
-        })()}
       </div>
 
-      {/* Section 4 — Existing plans */}
-      <SectionHeader label="Existing plans" />
-      <div className="flex flex-col gap-2">
-        <p className="text-xs text-muted-foreground">Select all plans the organization currently has documented.</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
-          {PLAN_OPTIONS.map(plan => {
-            const checked = (config.existingPlans ?? []).includes(plan.id)
-            return (
-              <button
-                key={plan.id}
-                type="button"
-                onClick={() => togglePlan(plan.id)}
-                className={`flex items-center gap-2.5 rounded-lg border px-4 py-2.5 text-left text-sm transition-all ${
-                  checked
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-card hover:border-primary/40 text-foreground"
-                }`}
-              >
-                <span className={`size-4 rounded border flex items-center justify-center shrink-0 ${checked ? "border-primary bg-primary" : "border-border"}`}>
-                  {checked && <span className="text-primary-foreground text-[10px] font-bold">✓</span>}
-                </span>
-                {plan.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Section 5 — Scenario context */}
-      <SectionHeader label={`Scenario context${graphId ? " (uit graph)" : ""}`} />
-      {!graphId && aiIntensity === "lean" && (
-        <div className="rounded-lg border border-border bg-card px-4 py-3">
-          <p className="font-mono text-[10px] text-muted-foreground">
-            <span className="text-primary font-bold">Smart mode</span> — Crown jewels en kritieke systemen worden niet meegestuurd naar het AI-model.
-            Schakel over naar <span className="font-bold">Full</span> om deze contextvelden te gebruiken.
-          </p>
-        </div>
-      )}
-      <div className={`grid grid-cols-1 gap-5 md:grid-cols-2 ${(!graphId && aiIntensity === "lean") || graphId ? "opacity-40 pointer-events-none select-none" : ""}`}>
-        <FieldRow label="Critical systems" hint={graphId ? "Ingebed in de graph-injects" : aiIntensity === "lean" ? "Niet gebruikt bij Smart mode" : "Systems whose disruption would materially affect operations"}>
+      {/* Section 4 — Context van de organisatie */}
+      <SectionHeader label="Context" />
+      <div className={`grid grid-cols-1 gap-5 md:grid-cols-2 ${graphId ? "opacity-40 pointer-events-none select-none" : ""}`}>
+        <FieldRow label="Kritieke systemen" hint={graphId ? "Ingebed in het scenario" : "Systemen wier uitval materiële impact heeft op de operatie"}>
           <Textarea value={config.criticalSystems} onChange={(e) => update("criticalSystems", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
         </FieldRow>
-        <FieldRow label="Crown jewels" hint={graphId ? "Ingebed in de graph-injects" : aiIntensity === "lean" ? "Niet gebruikt bij Smart mode" : "Most sensitive data or assets to protect"}>
+        <FieldRow label="Kroonjuwelen" hint={graphId ? "Ingebed in het scenario" : "Meest gevoelige data of assets om te beschermen"}>
           <Textarea value={config.crownJewels} onChange={(e) => update("crownJewels", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
         </FieldRow>
-      </div>
-
-      {/* Section 6 — AI generation */}
-      <div className={`flex flex-col gap-4 rounded-lg border border-primary/20 bg-primary/5 p-5 ${graphId ? "opacity-40 pointer-events-none select-none" : ""}`}>
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-primary" />
-          <span className="font-mono text-xs uppercase tracking-wider text-primary">AI scenario generation</span>
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          {([
-            { id: "off",  label: "Template",  cost: "Free",    model: "",       desc: "Pre-built scenario, no API call." },
-            { id: "lean", label: "Smart",     cost: "~€0.002", model: "Haiku",  desc: "AI tailors titles & narrative. Injects from template." },
-            { id: "full", label: "Full",      cost: "~€0.05",  model: "Sonnet", desc: "AI writes everything from scratch." },
-          ] as { id: AiIntensity; label: string; cost: string; model: string; desc: string }[]).map(opt => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setAiIntensity(opt.id)}
-              className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-all ${
-                aiIntensity === opt.id
-                  ? "border-primary bg-primary/10"
-                  : "border-border bg-card hover:border-primary/40"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className={`font-mono text-sm font-medium ${aiIntensity === opt.id ? "text-primary" : "text-foreground"}`}>
-                  {opt.label}
-                </span>
-                <span className="font-mono text-[10px] text-muted-foreground">{opt.cost}</span>
-              </div>
-              {opt.model && (
-                <span className="font-mono text-[10px] text-primary/70">{opt.model}</span>
-              )}
-              <span className="text-[11px] text-muted-foreground leading-tight">{opt.desc}</span>
-            </button>
-          ))}
-        </div>
-
-      </div>
-
-      {/* Section 7 — Special events */}
-      <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs uppercase tracking-wider text-primary">Special events</span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Interactive crisis injects — ransomware negotiation chat, AP breach notification form, journalist Q&A. Triggered manually by the facilitator during the session.
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          {([
-            { id: "off",    label: "Disabled",  desc: "No special events." },
-            { id: "static", label: "Scripted",  desc: "Pre-written scripts. Realistic, no API cost." },
-            { id: "ai",     label: "AI-driven", desc: "Claude plays the counterpart. ~€0.01/exchange." },
-          ] as { id: SpecialsMode; label: string; desc: string }[]).map(opt => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setSpecialsMode(opt.id)}
-              className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-all ${
-                specialsMode === opt.id
-                  ? "border-primary bg-primary/10"
-                  : "border-border bg-background hover:border-primary/40"
-              }`}
-            >
-              <span className={`font-mono text-sm font-medium ${specialsMode === opt.id ? "text-primary" : "text-foreground"}`}>
-                {opt.label}
-              </span>
-              <span className="text-[11px] text-muted-foreground leading-tight">{opt.desc}</span>
-            </button>
-          ))}
-        </div>
       </div>
 
       {error && (
@@ -1041,7 +642,7 @@ export function SetupForm() {
             {submitting ? (
               <><Loader2 className="size-4 animate-spin" />Genereren…</>
             ) : (
-              <><Sparkles className="size-4" />Generate exercise</>
+              <><Sparkles className="size-4" />Sessie starten</>
             )}
           </Button>
           {submitting && (

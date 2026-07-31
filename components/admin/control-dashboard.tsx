@@ -23,6 +23,7 @@ import { SupervisionReportView } from "./supervision-report"
 import { ScoringPanel } from "./scoring-panel"
 import { RevealPanel } from "./reveal-panel"
 import { GroupProgress } from "./group-progress"
+import { EventModeHelp } from "./event-mode-help"
 import { buildTeamRoles } from "@/lib/team-roster"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
@@ -995,6 +996,11 @@ export function ControlDashboard() {
 
             {/* Graph path panel — only for graph-driven sessions */}
             {session.graph && <GraphPathPanel session={session} />}
+
+            {/* Event mode help — verschijnt in lobby en actieve sessie */}
+            {session.mode === "event" && (isActive || isLobby) && (
+              <EventModeHelp joinCode={session.joinCode} />
+            )}
 
             {/* Groepsdruk-inject (Deel B §7.6) — actief tijdens discussion/decision */}
             {session.graph && isActive && session.mode === "event" && (

@@ -316,6 +316,21 @@ function OptionEditor({
         </Button>
       </div>
 
+      {/* Rol-toewijzing — kritiek voor per-rol keuzes. Undefined = iedereen ziet deze optie. */}
+      <div>
+        <Label className="text-[10px] text-muted-foreground">Voor welke rol?</Label>
+        <select
+          value={option.allowedRole ?? ""}
+          onChange={e => onChange({ allowedRole: e.target.value ? (e.target.value as Role) : undefined })}
+          className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+        >
+          <option value="">— voor alle rollen —</option>
+          {ROLES.map(r => (
+            <option key={r} value={r}>{ROLE_META[r].label}</option>
+          ))}
+        </select>
+      </div>
+
       <div>
         <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
           Impact op de 6 dimensies (−2 slecht … +2 goed)
