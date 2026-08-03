@@ -71,8 +71,9 @@ export default function PreparePage() {
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const hasGraph = !!session?.graph
-  const targetView = hasGraph ? "/admin/story" : "/admin/dashboard"
+  // Consolidated: /admin/story is the sole live facilitator view (handles both
+  // graph-driven and template scenarios).
+  const targetView = "/admin/story"
 
   useEffect(() => {
     if (session?.status === "active" || session?.status === "ended") {
@@ -267,36 +268,18 @@ export default function PreparePage() {
         <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 px-6 py-5">
           <p className="font-mono text-xs text-muted-foreground">
             Share the join code with your team, then start the session when everyone is in the lobby.
-            {hasGraph && " This is a graph-driven scenario — you'll be routed to the simplified Story view."}
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={startSession} disabled={starting} className="gap-2 font-mono uppercase tracking-wider">
               <Play className="size-3.5" />
               {starting ? "Starting…" : "Start session"}
             </Button>
-            {hasGraph ? (
-              <>
-                <Link
-                  href="/admin/story"
-                  className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
-                >
-                  Open Story view
-                </Link>
-                <Link
-                  href="/admin/dashboard"
-                  className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Classic dashboard <ChevronRight className="size-3" />
-                </Link>
-              </>
-            ) : (
-              <Link
-                href="/admin/dashboard"
-                className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Go to lobby <ChevronRight className="size-3" />
-              </Link>
-            )}
+            <Link
+              href="/admin/story"
+              className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Go to live view <ChevronRight className="size-3" />
+            </Link>
           </div>
         </div>
 

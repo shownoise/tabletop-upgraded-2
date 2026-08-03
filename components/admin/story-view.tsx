@@ -11,6 +11,7 @@ import type { DecisionNodeData, ScenarioGraph, SpecialNodeData } from "@/lib/gra
 import type { Inject, Participant, Role, SessionState } from "@/lib/types"
 import { analyzeGraph } from "@/lib/graph/analyze"
 import { GraphPathPanel } from "./graph-path-panel"
+import { SpecialsPanel } from "./specials-panel"
 
 export function StoryView() {
   const { state, connected } = useSessionStream()
@@ -72,13 +73,16 @@ function Header({ session }: { session: SessionState }) {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href="/admin/dashboard"
+          <a
+            href="/join"
+            target="_blank"
+            rel="noopener"
             className="flex items-center gap-1.5 rounded border border-border bg-card px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            title={`Open the participant join page in a new tab (code: ${session.joinCode})`}
           >
             <LayoutDashboard className="size-3" />
-            Classic view
-          </Link>
+            Preview participant
+          </a>
         </div>
       </div>
     </header>
@@ -195,6 +199,7 @@ function ActivePanel({ session }: { session: SessionState }) {
         <ParticipantsPanel session={session} />
         <ScoreboardPanel session={session} />
         <ControlsPanel session={session} />
+        <SpecialsPanel session={session} />
         {graph && <GraphPathPanel session={session} />}
       </div>
     </div>
