@@ -1,34 +1,41 @@
 import { NextResponse } from "next/server"
+import { z } from "zod"
+import { safeJson } from "@/lib/api-validation"
+import { getSession } from "@/lib/session-store"
+
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 const MAX_REASONING = 2000
 
+const SubmitDecisionBody = z.object({
+  participantId: z.string().min(1).max(64),
+  participantName: z.string().max(100).optional(),
+  roundIndex: z.number().int().min(0).max(50),
+  actionId: z.string().min(1).max(200),
+  reasoning: z.string().max(MAX_REASONING).optional(),
+  confidence: z.number().int().min(1).max(5).optional(),
+})
+
 export async function POST(req: Request) {
-  const body = (await req.json()) as {
-    participantId?: string
-    participantName?: string
-    roundIndex?: number
-    actionId?: string
-    reasoning?: string
-    confidence?: number
+  const parsed = await safeJson(req, SubmitDecisionBody)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
+
+  const session = await getSession()
+  if (!session) return NextResponse.json({ ok: false, error: "No active session." }, { status: 404 })
+  if (!session.participants.some(p => p.id === body.participantId)) {
+    return NextResponse.json({ ok: false, error: "Participant not in active session." }, { status: 401 })
   }
-  if (!body.participantId || typeof body.participantId !== "string" ||
-      !body.actionId    || typeof body.actionId    !== "string" ||
-      typeof body.roundIndex !== "number") {
-    return NextResponse.json({ ok: false, error: "Missing required fields." }, { status: 400 })
-  }
-  const confidence = typeof body.confidence === "number" && body.confidence >= 1 && body.confidence <= 5
-    ? Math.round(body.confidence) as 1 | 2 | 3 | 4 | 5
-    : undefined
+
   const { submitDecision } = await import("@/lib/session-store")
   const result = await submitDecision({
     participantId: body.participantId,
-    participantName: typeof body.participantName === "string" ? body.participantName.trim().slice(0, 100) : "",
+    participantName: (body.participantName ?? "").trim(),
     roundIndex: body.roundIndex,
     actionId: body.actionId,
-    reasoning: (body.reasoning ?? "").slice(0, MAX_REASONING),
-    confidence,
+    reasoning: body.reasoning ?? "",
+    confidence: body.confidence as 1 | 2 | 3 | 4 | 5 | undefined,
   })
   if (!result.ok) return NextResponse.json(result, { status: 400 })
   return NextResponse.json(result)

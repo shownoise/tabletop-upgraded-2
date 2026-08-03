@@ -1,6 +1,7 @@
 import type { SessionAssessment, AssessmentAdvice, AssessmentDimensionId } from "./types"
 import type { SessionState } from "@/lib/types"
 import { getGoal } from "@/lib/goals/registry"
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
 
 const DIMENSION_LABELS: Record<AssessmentDimensionId, string> = {
   decision_speed: 'Decision Speed',
@@ -60,7 +61,7 @@ Return valid JSON only: { "advice": [ { "dimensionId": "...", "observation": "..
 Only include dimensions that were scored. Return an empty advice array if all scores are 70 or above.`
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

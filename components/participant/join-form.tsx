@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowRight, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -19,15 +19,15 @@ export function JoinForm() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Pre-fill from localStorage on mount
-  useState(() => {
+  // Pre-fill from localStorage on mount (client only — avoids SSR hydration mismatch).
+  useEffect(() => {
     try {
       const storedName = localStorage.getItem(NAME_KEY)
       const storedCode = localStorage.getItem(CODE_KEY)
       if (storedName) setName(storedName)
       if (storedCode) setCode(storedCode)
     } catch { /* noop */ }
-  })
+  }, [])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -76,6 +76,7 @@ export function JoinForm() {
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. A. Hopper"
           autoComplete="off"
+          maxLength={80}
         />
       </div>
 

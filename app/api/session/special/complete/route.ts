@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { requireFacilitator } from "@/lib/auth-guard"
 import { completeSpecial } from "@/lib/session-store"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
 
   const body = await req.json() as { specialId?: string }
   if (!body.specialId) return NextResponse.json({ error: "Missing specialId" }, { status: 400 })

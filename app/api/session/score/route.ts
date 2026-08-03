@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@/auth'
+import { requireFacilitator } from '@/lib/auth-guard'
 import { getState } from '@/lib/session-store'
 import { scoreExercise, scoreExerciseByGroup, buildAssessmentReport } from '@/lib/scoring'
 import { sessionToScoringInput } from '@/lib/scoring/graph-adapter'
@@ -13,10 +13,8 @@ export const runtime = 'nodejs'
 //   format = 'json' | 'report'
 //   byGroup = 'true' — geeft { [groupId]: ScoringOutput } terug voor EVENT-mode leaderboard
 export async function GET(req: Request) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
 
   const state = await getState()
   if (!state.session) {

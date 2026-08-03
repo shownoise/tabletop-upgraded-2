@@ -421,9 +421,28 @@ export function SpecialModal({
 }) {
   const label = SPECIAL_LABELS[special.type] ?? special.type
   const icon = SPECIAL_ICONS[special.type]
+  const closeRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    // Move focus into the modal so screen readers announce the dialog contents;
+    // remember the previously focused element and restore it on unmount.
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    closeRef.current?.focus()
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      previouslyFocused?.focus?.()
+    }
+  }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="special-modal-title"
+    >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
       <div className="relative z-10 w-full max-w-2xl max-h-[92vh] flex flex-col rounded-2xl border border-border bg-background shadow-2xl">
@@ -435,7 +454,7 @@ export function SpecialModal({
             </div>
             <div className="flex flex-col gap-0.5">
               <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Special Event</span>
-              <span className="font-mono text-sm font-semibold">{label}</span>
+              <span id="special-modal-title" className="font-mono text-sm font-semibold">{label}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -445,7 +464,9 @@ export function SpecialModal({
               </span>
             )}
             <button
+              ref={closeRef}
               onClick={onClose}
+              aria-label="Close dialog"
               className="flex size-7 items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors"
             >
               <X className="size-3.5" />

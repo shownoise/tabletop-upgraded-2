@@ -35,12 +35,21 @@ function graphKey(id: string) { return `scenario-graph:${id}` }
 // KV client (lazy-loaded so build doesn't fail without env vars)
 // ─────────────────────────────────────────────────────────────
 
+let kvLoadWarned = false
+
 async function getKV() {
   if (!process.env.KV_REST_API_URL && !process.env.KV_URL) return null
   try {
     const { kv } = await import("@vercel/kv")
     return kv
-  } catch {
+  } catch (err) {
+    // KV envs are set but the client can't load — this is an operational incident
+    // (bad deploy, dependency mismatch, package missing). Fall back to in-memory but
+    // warn loudly so it shows up in logs instead of silently degrading.
+    if (!kvLoadWarned) {
+      console.error("[ctt] @vercel/kv failed to load — falling back to in-memory. Sessions will not persist across instances.", err)
+      kvLoadWarned = true
+    }
     return null
   }
 }
@@ -100,6 +109,54 @@ export async function dbSetSession(session: SessionState | null): Promise<void> 
 }
 
 // ─────────────────────────────────────────────────────────────
+// Session mutation lock — protects read-modify-write races between
+// concurrent facilitator + participant requests. KV mode uses a
+// SET NX PX lock; in-memory mode uses a Promise mutex.
+// ─────────────────────────────────────────────────────────────
+
+const SESSION_LOCK_KEY = "ctt:session:lock"
+const SESSION_LOCK_TTL_MS = 5_000
+
+async function acquireKvLock(kv: NonNullable<Awaited<ReturnType<typeof getKV>>>): Promise<string | null> {
+  const token = `${Date.now()}:${Math.random().toString(36).slice(2)}`
+  // @vercel/kv historically returned "OK" on success; newer versions may return the token
+  // itself (Upstash SDK convention) or null on NX collision. Treat any truthy return as
+  // acquired — the collision case is always null/undefined.
+  const res = await kv.set(SESSION_LOCK_KEY, token, { nx: true, px: SESSION_LOCK_TTL_MS })
+  return res ? token : null
+}
+
+async function releaseKvLock(kv: NonNullable<Awaited<ReturnType<typeof getKV>>>, token: string): Promise<void> {
+  const current = await kv.get<string>(SESSION_LOCK_KEY)
+  if (current === token) await kv.del(SESSION_LOCK_KEY)
+}
+
+let memLockChain: Promise<unknown> = Promise.resolve()
+
+export async function withSessionLock<T>(fn: () => Promise<T>): Promise<T> {
+  const kv = await getKV()
+  if (!kv) {
+    // Serialize through a single Promise chain — the Node.js runtime is single-threaded
+    // but concurrent `await`s can still interleave, and mutate() is read-modify-write.
+    let resolveNext!: () => void
+    const gate = new Promise<void>(resolve => { resolveNext = resolve })
+    const prev = memLockChain
+    memLockChain = gate
+    await prev
+    try { return await fn() } finally { resolveNext() }
+  }
+
+  // KV mode: try to acquire, retry once with backoff.
+  let token = await acquireKvLock(kv)
+  if (!token) {
+    await new Promise(r => setTimeout(r, 100))
+    token = await acquireKvLock(kv)
+  }
+  if (!token) throw new Error("Session busy — could not acquire lock")
+  try { return await fn() } finally { await releaseKvLock(kv, token) }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Template store
 // ─────────────────────────────────────────────────────────────
 
@@ -148,24 +205,51 @@ export async function dbGetUsers(): Promise<StoredUser[]> {
   return mem.users
 }
 
+function normalizeEmail(email: string) { return email.trim().toLowerCase() }
+function emailReservationKey(email: string) { return `ctt:user:email:${normalizeEmail(email)}` }
+
 export async function dbGetUserByEmail(email: string): Promise<StoredUser | null> {
   const users = await dbGetUsers()
-  return users.find(u => u.email.toLowerCase() === email.toLowerCase()) ?? null
+  const key = normalizeEmail(email)
+  return users.find(u => u.email.toLowerCase() === key) ?? null
 }
 
 export async function dbSaveUser(user: StoredUser): Promise<void> {
+  const normalized: StoredUser = { ...user, email: normalizeEmail(user.email) }
   const kv = await getKV()
   if (kv) {
     const existing = await dbGetUsers()
-    const idx = existing.findIndex(u => u.id === user.id)
-    if (idx >= 0) existing[idx] = user
-    else existing.push(user)
+    const idx = existing.findIndex(u => u.id === normalized.id)
+    if (idx >= 0) existing[idx] = normalized
+    else existing.push(normalized)
     await kv.set(KEYS.users, existing)
     return
   }
-  const idx = mem.users.findIndex(u => u.id === user.id)
-  if (idx >= 0) mem.users[idx] = user
-  else mem.users.push(user)
+  const idx = mem.users.findIndex(u => u.id === normalized.id)
+  if (idx >= 0) mem.users[idx] = normalized
+  else mem.users.push(normalized)
+}
+
+export type CreateUserResult =
+  | { ok: true }
+  | { ok: false; reason: "duplicate_email" }
+
+export async function dbCreateUserIfEmailFree(user: StoredUser): Promise<CreateUserResult> {
+  const normalized: StoredUser = { ...user, email: normalizeEmail(user.email) }
+  const kv = await getKV()
+  if (kv) {
+    // Reserve the email with an NX SET so two concurrent creates can't both win.
+    // Truthy return = reserved; null/undefined = collision (SDK versions vary on "OK" vs token).
+    const reserved = await kv.set(emailReservationKey(normalized.email), normalized.id, { nx: true })
+    if (!reserved) return { ok: false, reason: "duplicate_email" }
+    await dbSaveUser(normalized)
+    return { ok: true }
+  }
+  // In-memory fallback — no true atomicity; approximate with a read-modify-write.
+  const existing = mem.users.find(u => u.email === normalized.email)
+  if (existing) return { ok: false, reason: "duplicate_email" }
+  mem.users.push(normalized)
+  return { ok: true }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -214,16 +298,27 @@ export async function dbDeleteScenarioGraph(id: string): Promise<void> {
 
 /**
  * Seed a default admin user if no users exist.
- * Credentials come from env vars: ADMIN_EMAIL, ADMIN_PASSWORD
- * Defaults: admin@cyber-tabletop.local / changeme123
+ * Credentials come from env vars: ADMIN_EMAIL, ADMIN_PASSWORD.
+ * In production we refuse to seed with the historical default password —
+ * that used to boot a live tenant with 'changeme123'. Fail loud instead.
  */
+const DEFAULT_ADMIN_PASSWORD_FALLBACK = "changeme123"
+
 export async function dbEnsureAdminUser(): Promise<void> {
   const users = await dbGetUsers()
   if (users.length > 0) return
 
+  const isProd = process.env.NODE_ENV === "production"
+  const password = process.env.ADMIN_PASSWORD ?? (isProd ? "" : DEFAULT_ADMIN_PASSWORD_FALLBACK)
+
+  if (isProd && (!password || password === DEFAULT_ADMIN_PASSWORD_FALLBACK)) {
+    throw new Error(
+      "[ctt] Refusing to seed default admin: set ADMIN_PASSWORD (and ADMIN_EMAIL) in the deployment environment.",
+    )
+  }
+
   const { hash } = await import("bcryptjs")
   const email = process.env.ADMIN_EMAIL ?? "admin@cyber-tabletop.local"
-  const password = process.env.ADMIN_PASSWORD ?? "changeme123"
   const passwordHash = await hash(password, 12)
 
   await dbSaveUser({

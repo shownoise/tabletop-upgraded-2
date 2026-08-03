@@ -12,6 +12,7 @@ import { MODULE_DEFINITIONS } from "../modules/definitions"
 import { DEFAULT_MODULE_SETS, DEFAULT_VISIBLE_PHASES } from "../modules/defaults"
 import { runAllValidators, formatValidationFeedback } from "../validators/index"
 import { SCENARIO_GENERATOR_SYSTEM_PROMPT, buildTypeGuidance } from "./prompts"
+import { fetchWithTimeout } from "../fetch-with-timeout"
 
 const CODENAMES = [
   'STILVALLEN', 'ZWARTGAT', 'KORTSLUIT', 'SCHEMERLAND', 'VRIJVAL',
@@ -290,8 +291,14 @@ export async function generateScenarioInstance(
     instance = await callAI(buildPrompt(skeleton, config, feedback), apiKey, model, maxTokens)
   }
 
-  // Final validation — collect warnings only (we already retried)
+  // Final validation — a hard error after retries means the scenario is unrunnable.
+  // Refuse to persist a broken scenario; upstream converts this to a user-facing aiError.
   const finalErrors = runAllValidators(instance)
+  const finalHardErrors = finalErrors.filter(e => e.severity === 'error')
+  if (finalHardErrors.length > 0) {
+    const summary = finalHardErrors.slice(0, 3).map(e => e.message).join(' | ')
+    throw new Error(`Scenario validation failed after retries: ${summary}`)
+  }
   const warnings = finalErrors.map(e => `[${e.severity.toUpperCase()}] ${e.message}`)
 
   // Ensure meta fields are set correctly (AI may have drifted)
@@ -376,7 +383,7 @@ Genereer een ${roundCount}-ronde tabletop scenario. Zorg dat elke ronde inhoudel
 Geef ALLEEN geldige JSON terug (geen markdown):
 {"scenario_title":"...","scenario_summary":"2 zinnen","rounds":[{"round_number":1,"title":"...","situation_update":"3-4 zinnen die de situatie beschrijven vanuit het perspectief van de spelers","timerMinutes":${timerPerRound},"injects":[{"id":"r1-i1","type":"technical","channel":"siem","title":"...","content":"Realistische inject-tekst met echte tijdstempels en namen","urgency":"medium","senderName":"...","senderHandle":"...","timestamp":"HH:MM","targetTeam":"all"},{"id":"r1-i2","type":"internal","channel":"whatsapp","title":"...","content":"...","urgency":"high","senderName":"...","timestamp":"HH:MM","targetTeam":"crisis_management"}],"roleActions":[{"id":"r1-a1","label":"...","description":"Concrete actie vanuit perspectief ${exRole1}","allowedRoles":["${exRole1}"],"isRecommended":true,"irPlanAligned":true,"consequence":"..."},{"id":"r1-a2","label":"...","description":"Concrete actie vanuit perspectief ${exRole2}","allowedRoles":["${exRole2}"],"isRecommended":false,"irPlanAligned":true,"consequence":"..."},{"id":"r1-a3","label":"...","description":"Concrete actie vanuit perspectief ${exRole3}","allowedRoles":["${exRole3}"],"isRecommended":false,"irPlanAligned":false,"consequence":"..."},{"id":"r1-do-nothing","label":"Wacht af en verzamel meer informatie","description":"Geen actie ondernemen totdat het beeld completer is.","allowedRoles":[],"irPlanAligned":true,"consequence":"..."}],"facilitatorNotes":{"discussionGoal":"...","keyQuestions":["...","..."],"hints":["..."],"expectedDecisions":["..."],"redFlags":["..."]}}]}`
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -388,7 +395,7 @@ Geef ALLEEN geldige JSON terug (geen markdown):
       max_tokens: maxTokens,
       messages: [{ role: 'user', content: prompt }],
     }),
-  })
+  }, 90_000)
 
   if (!res.ok) {
     const err = await res.text()

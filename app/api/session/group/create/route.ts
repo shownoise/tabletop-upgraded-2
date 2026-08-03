@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server"
+import { z } from "zod"
+import { safeJson } from "@/lib/api-validation"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-// POST /api/session/group/create { name: string }
+const CreateGroupBody = z.object({
+  name: z.string().min(1).max(50),
+})
+
 // Iedere geauthenticeerde participant (via joinCode-flow) mag een groep aanmaken.
 // Facilitator-auth niet vereist — deelnemers formeren hun eigen teams.
 export async function POST(req: Request) {
-  const body = (await req.json()) as { name?: string }
-  if (!body.name || typeof body.name !== "string") {
-    return NextResponse.json({ ok: false, error: "name required" }, { status: 400 })
-  }
+  const parsed = await safeJson(req, CreateGroupBody)
+  if (!parsed.ok) return parsed.response
   const { createGroup } = await import("@/lib/session-store")
-  const result = await createGroup({ name: body.name.slice(0, 50) })
+  const result = await createGroup({ name: parsed.data.name })
   if (!result.ok) return NextResponse.json(result, { status: 400 })
   return NextResponse.json(result)
 }

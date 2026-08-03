@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import type { RoundPhase } from "@/lib/types"
+import { requireFacilitator } from "@/lib/auth-guard"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
@@ -7,6 +8,8 @@ const PHASES: RoundPhase[] = ["inject", "discussion", "decision", "lock", "revie
 const PHASE_ORDER: Record<RoundPhase, number> = { inject: 0, discussion: 1, decision: 2, lock: 3, review: 4 }
 
 export async function POST(req: Request) {
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
   const body = (await req.json()) as { phase?: string; force?: boolean }
   if (!body.phase || !PHASES.includes(body.phase as RoundPhase)) {
     return NextResponse.json({ ok: false, error: "Invalid phase." }, { status: 400 })

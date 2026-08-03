@@ -6,6 +6,8 @@ import type { LiveEvent, PublicState } from "./types"
 export interface SessionStream {
   state: PublicState
   connected: boolean
+  /** True once the poll endpoint has returned 401 — session is no longer valid. */
+  expired: boolean
   /** Subscribe to live (transient) events. Returns an unsubscribe fn. */
   onEvent: (cb: (e: LiveEvent) => void) => () => void
 }
@@ -20,6 +22,7 @@ export interface SessionStream {
 export function useSessionStream(): SessionStream {
   const [state, setState] = useState<PublicState>({ session: null })
   const [connected, setConnected] = useState(false)
+  const [expired, setExpired] = useState(false)
   const listenersRef = useRef<Set<(e: LiveEvent) => void>>(new Set())
   const lastSeenRef = useRef<number>(Date.now())
 
@@ -56,16 +59,29 @@ export function useSessionStream(): SessionStream {
 
     // Polling fallback — Vercel can route requests to different instances,
     // so SSE listeners on instance A miss mutations that happened on instance B.
-    // Poll every 4 s to guarantee eventual consistency.
+    // Poll every 2 s to keep participants close to server truth during active rounds.
+    // Log every ~30th failure so we notice a sustained network outage without spamming the console.
+    let pollFailureCount = 0
     const poll = setInterval(async () => {
       try {
         const res = await fetch("/api/session/state", { cache: "no-store" })
+        if (res.status === 401) {
+          setExpired(true)
+          setConnected(false)
+          return
+        }
         if (res.ok) {
           const data = await res.json() as PublicState
           setState(data)
+          pollFailureCount = 0
         }
-      } catch { /* silently ignore */ }
-    }, 4000)
+      } catch (err) {
+        pollFailureCount += 1
+        if (pollFailureCount === 1 || pollFailureCount % 30 === 0) {
+          console.warn("[ctt] session-state poll failed", pollFailureCount, err)
+        }
+      }
+    }, 2000)
 
     return () => {
       es.removeEventListener("state", handleState)
@@ -80,6 +96,7 @@ export function useSessionStream(): SessionStream {
   return {
     state,
     connected,
+    expired,
     onEvent: (cb) => {
       listenersRef.current.add(cb)
       return () => {

@@ -2,6 +2,7 @@ import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import { compare } from "bcryptjs"
 import { dbGetUserByEmail, dbEnsureAdminUser } from "@/lib/db"
+import { rateLimit } from "@/lib/rate-limit"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -13,6 +14,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
+
+        const emailKey = (credentials.email as string).toLowerCase().trim()
+        const rl = await rateLimit(`login:${emailKey}`, 5, 60)
+        if (!rl.ok) return null
 
         // Ensure default admin exists on first run
         await dbEnsureAdminUser()

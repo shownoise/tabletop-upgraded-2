@@ -343,7 +343,9 @@ function RolePickerLobby({
     setClaiming(role)
     setError(null)
     try {
-      await api.assignRole({ participantId, role })
+      let joinCode: string | undefined
+      try { joinCode = localStorage.getItem("ctt:joinCode") ?? undefined } catch { /* noop */ }
+      await api.assignRole({ participantId, role, joinCode })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Rol claimen mislukt")
     } finally {
@@ -722,7 +724,17 @@ function EscalationOverlay({ roundIndex }: { roundIndex: number }) {
 // ─── Main view ───
 export function PlayView() {
   const [lang, setLang] = useLang()
-  const { state, connected, onEvent } = useSessionStream()
+  const { state, connected, expired, onEvent } = useSessionStream()
+
+  // Bounce back to /join if the session went away or auth expired.
+  useEffect(() => {
+    if (!expired) return
+    try {
+      localStorage.removeItem("ctt:participantId")
+    } catch { /* noop */ }
+    window.location.replace("/join")
+  }, [expired])
+
   const [name, setName] = useState<string | null>(null)
   const [participantId, setParticipantId] = useState<string | null>(null)
   const [showIntro, setShowIntro] = useState(true)
@@ -985,6 +997,8 @@ export function PlayView() {
                 try { localStorage.setItem("ctt:sound_muted", next ? "true" : "false") } catch {}
               }}
               title={soundMutedState ? "Geluid inschakelen" : "Geluid uitschakelen"}
+              aria-label={soundMutedState ? "Geluid inschakelen" : "Geluid uitschakelen"}
+              aria-pressed={soundMutedState}
               className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground hover:text-foreground border border-border px-2 py-1 shrink-0"
             >
               {soundMutedState ? "🔇" : "🔔"}

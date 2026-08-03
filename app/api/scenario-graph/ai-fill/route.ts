@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { requireFacilitator } from "@/lib/auth-guard"
 import { loadScenarioGraph } from "@/lib/session-store"
 import type { InjectNodeData, RoundNodeData } from "@/lib/graph/types"
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
+import { rateLimit } from "@/lib/rate-limit"
+import { z } from "zod"
+
+const AiFillSchema = z.object({
+  title: z.string().max(300).optional(),
+  situation_update: z.string().max(4000).optional(),
+  timerMinutes: z.number().int().min(1).max(120).optional(),
+})
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -13,8 +22,17 @@ interface Body {
 }
 
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
+
+  const userId = (gate.session?.user as { id?: string } | undefined)?.id ?? "unknown"
+  const rl = await rateLimit(`ai:${userId}`, 10, 60)
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many AI requests. Please wait a minute." }, {
+      status: 429,
+      headers: { "Retry-After": String(rl.resetSeconds) },
+    })
+  }
 
   const body = await req.json() as Body
   if (!body.graphId || !body.nodeId) {
@@ -59,7 +77,7 @@ Geef ALLEEN geldige JSON terug (geen markdown, geen uitleg):
   "timerMinutes": 15
 }`
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -74,27 +92,32 @@ Geef ALLEEN geldige JSON terug (geen markdown, geen uitleg):
   })
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "")
-    return NextResponse.json({ error: `AI call failed: ${text.slice(0, 200)}` }, { status: 502 })
+    const detail = await res.text().catch(() => "")
+    console.error("[ai-fill] Anthropic error:", res.status, detail.slice(0, 500))
+    return NextResponse.json({ error: "AI request failed" }, { status: 502 })
   }
 
   const data = await res.json() as { content: Array<{ type: string; text: string }> }
   const text = data.content?.find(b => b.type === "text")?.text ?? ""
 
+  let raw: unknown
   try {
-    const parsed = JSON.parse(text.replace(/```json|```/g, "").trim()) as Partial<RoundNodeData>
-    const filled: RoundNodeData = {
-      ...(target.data as RoundNodeData),
-      kind: "round",
-      title: parsed.title ?? (target.data as RoundNodeData).title,
-      situation_update: parsed.situation_update ?? (target.data as RoundNodeData).situation_update,
-      timerMinutes: parsed.timerMinutes ?? (target.data as RoundNodeData).timerMinutes,
-    }
-    return NextResponse.json({ ok: true, data: filled })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: `Failed to parse AI response: ${msg}` }, { status: 502 })
+    raw = JSON.parse(text.replace(/```json|```/g, "").trim())
+  } catch {
+    return NextResponse.json({ error: "AI response was not valid JSON" }, { status: 502 })
   }
+  const parsed = AiFillSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "AI response did not match expected schema" }, { status: 502 })
+  }
+  const filled: RoundNodeData = {
+    ...(target.data as RoundNodeData),
+    kind: "round",
+    title: parsed.data.title ?? (target.data as RoundNodeData).title,
+    situation_update: parsed.data.situation_update ?? (target.data as RoundNodeData).situation_update,
+    timerMinutes: parsed.data.timerMinutes ?? (target.data as RoundNodeData).timerMinutes,
+  }
+  return NextResponse.json({ ok: true, data: filled })
 }
 
 function describeRoundsBefore(graph: import("@/lib/graph/types").ScenarioGraph, nodeId: string): string {

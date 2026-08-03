@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { triggerMeldplichtManual } from "@/lib/session-store"
 import type { NotificationType } from "@/lib/types"
+import { requireFacilitator } from "@/lib/auth-guard"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -8,6 +9,8 @@ export const runtime = "nodejs"
 const TYPES: NotificationType[] = ["ncsc_24h", "ncsc_72h", "ncsc_final", "ap_72h"]
 
 export async function POST(req: Request) {
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
   const body = (await req.json()) as { type?: string; summary?: string }
   if (!body.type || !TYPES.includes(body.type as NotificationType)) {
     return NextResponse.json({ ok: false, error: "Invalid type" }, { status: 400 })

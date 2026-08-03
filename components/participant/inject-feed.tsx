@@ -603,7 +603,13 @@ export function InjectFeed({
           {sorted.length}
         </span>
       </div>
-      <ol className="flex flex-col gap-4">
+      <ol
+        className="flex flex-col gap-4"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+        aria-label={tr(lang, "incomingIntel")}
+      >
         {sorted.map((p, i) => {
           const size = getSize(p.inject.urgency, i, p.roundIndex < 0)
           const isSurprise = p.roundIndex < 0

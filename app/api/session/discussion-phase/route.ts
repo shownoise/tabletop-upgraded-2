@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server"
+import { requireFacilitator } from "@/lib/auth-guard"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
   const body = await req.json() as {
     roundNumber: number
     phaseIndex: number

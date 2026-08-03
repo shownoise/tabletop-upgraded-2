@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server"
 import { startSession, getSession } from "@/lib/session-store"
+import { requireFacilitator } from "@/lib/auth-guard"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
   const body = await req.json().catch(() => ({})) as { force?: boolean }
 
   // B4: soft gate — facilitator must acknowledge unready participants via { force: true }.

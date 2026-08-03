@@ -1,17 +1,34 @@
 import { NextResponse } from "next/server"
 import { submitSpecialChoice, submitSpecialMessageWithAiResponse, getSession } from "@/lib/session-store"
 import type { ExerciseConfig } from "@/lib/types"
+import { sanitizeForPrompt, PROMPT_FIELD_CAPS } from "@/lib/scenario/sanitize"
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
+import { rateLimit } from "@/lib/rate-limit"
+import { z } from "zod"
+
+const EvaluationSchema = z.object({
+  quality: z.enum(["bad", "neutral", "good"]),
+  scoreImpact: z.number().optional(),
+  hint: z.string().min(1).max(500),
+})
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
+// All fields interpolated here are facilitator-supplied at setup — sanitize
+// as defense-in-depth against prompt-injection payloads smuggled in via config.
 function orgContext(cfg: ExerciseConfig): string {
   const parts: string[] = []
-  if (cfg.sector) parts.push(`sector: ${cfg.sector}`)
-  if (cfg.companySize) parts.push(`omvang: ${cfg.companySize}`)
-  if (cfg.crownJewels?.trim()) parts.push(`kroonjuwelen: ${cfg.crownJewels.trim()}`)
-  if (cfg.criticalSystems?.trim()) parts.push(`kritieke systemen: ${cfg.criticalSystems.trim()}`)
-  if (cfg.scenarioType) parts.push(`scenario-type: ${cfg.scenarioType}`)
+  const sector = sanitizeForPrompt(cfg.sector, PROMPT_FIELD_CAPS.sector)
+  const size = sanitizeForPrompt(cfg.companySize, PROMPT_FIELD_CAPS.companySize)
+  const crown = sanitizeForPrompt(cfg.crownJewels, PROMPT_FIELD_CAPS.crownJewels).trim()
+  const systems = sanitizeForPrompt(cfg.criticalSystems, PROMPT_FIELD_CAPS.criticalSystems).trim()
+  const type = sanitizeForPrompt(cfg.scenarioType, PROMPT_FIELD_CAPS.scenarioType)
+  if (sector) parts.push(`sector: ${sector}`)
+  if (size) parts.push(`omvang: ${size}`)
+  if (crown) parts.push(`kroonjuwelen: ${crown}`)
+  if (systems) parts.push(`kritieke systemen: ${systems}`)
+  if (type) parts.push(`scenario-type: ${type}`)
   return parts.length ? parts.join(" · ") : "onbekende organisatie"
 }
 
@@ -52,7 +69,7 @@ Respond ONLY with valid JSON (no markdown, no explanation):
 `
 
 async function callClaude(apiKey: string, system: string, messages: Array<{ role: "user" | "assistant"; content: string }>, maxTokens = 200): Promise<string> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -103,6 +120,15 @@ export async function POST(req: Request) {
   // ─── AI mode: free text + AI reply + evaluation ────────────
   if (!text?.trim()) return NextResponse.json({ error: "Missing text for AI mode" }, { status: 400 })
 
+  // Rate-limit AI calls per participant to prevent runaway cost from a single client.
+  const rl = await rateLimit(`ai:special:${participantId}`, 10, 60)
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many AI requests. Please wait a minute." }, {
+      status: 429,
+      headers: { "Retry-After": String(rl.resetSeconds) },
+    })
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ error: "AI not configured" }, { status: 500 })
 
@@ -122,13 +148,16 @@ export async function POST(req: Request) {
     `${m.sender === "counterpart" ? "Counterpart" : "Participant"}: ${m.text.slice(0, 100)}`
   ).join("\n")
 
-  // Run counterpart reply and evaluation in parallel
+  // Run counterpart reply and evaluation in parallel.
+  // Sanitize the participant text before interpolating into the evaluator prompt
+  // — it's untrusted content, and the evaluator prompt is a string template.
+  const evalUserText = sanitizeForPrompt(text.trim(), 4000)
   const [aiResponse, evalRaw] = await Promise.all([
     callClaude(apiKey, systemPrompt, history, 200),
     callClaude(
       apiKey,
       "You are a crisis management evaluator. Respond only with valid JSON, no markdown.",
-      [{ role: "user", content: EVALUATION_PROMPT(special.type, text.trim(), contextSummary) }],
+      [{ role: "user", content: EVALUATION_PROMPT(special.type, evalUserText, contextSummary) }],
       150
     ),
   ])
@@ -137,16 +166,17 @@ export async function POST(req: Request) {
   let evaluation: { quality: "bad" | "neutral" | "good"; scoreImpact: number; hint: string } | undefined
   let evaluationError: string | undefined
   try {
-    const parsed = JSON.parse(evalRaw) as { quality?: string; scoreImpact?: number; hint?: string }
-    if (parsed.quality && parsed.hint) {
-      const q = parsed.quality as "bad" | "neutral" | "good"
+    const raw: unknown = JSON.parse(evalRaw.replace(/```json|```/g, "").trim())
+    const parsed = EvaluationSchema.safeParse(raw)
+    if (parsed.success) {
+      const q = parsed.data.quality
       const impact = q === "good" ? 2 : q === "neutral" ? 0 : -2
-      evaluation = { quality: q, scoreImpact: impact, hint: parsed.hint }
+      evaluation = { quality: q, scoreImpact: impact, hint: parsed.data.hint }
     } else {
-      evaluationError = "AI evaluatie miste 'quality' of 'hint' velden."
+      evaluationError = "AI evaluatie voldeed niet aan het verwachte schema."
     }
-  } catch (err) {
-    evaluationError = err instanceof Error ? `AI evaluatie kon niet worden geparsed: ${err.message}` : "AI evaluatie parse error"
+  } catch {
+    evaluationError = "AI evaluatie kon niet worden geparsed."
   }
 
   const result = await submitSpecialMessageWithAiResponse({

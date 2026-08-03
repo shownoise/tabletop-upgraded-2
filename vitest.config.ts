@@ -8,7 +8,11 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['lib/scoring/__tests__/**/*.test.ts'],
+    include: [
+      'lib/scoring/__tests__/**/*.test.ts',
+      'lib/__tests__/**/*.test.ts',
+      'app/api/__tests__/**/*.test.ts',
+    ],
     environment: 'node',
     globals: false,
   },

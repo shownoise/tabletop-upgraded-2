@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getSession, submitNotification, upsertNotificationDraft } from "@/lib/session-store"
 import type { NotificationDraft, NotificationType } from "@/lib/types"
+import { requireFacilitator } from "@/lib/auth-guard"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -8,6 +9,8 @@ export const runtime = "nodejs"
 const TYPES: NotificationType[] = ["ncsc_24h", "ncsc_72h", "ncsc_final", "ap_72h"]
 
 export async function GET() {
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
   const session = await getSession()
   return NextResponse.json({ notifications: session?.notifications ?? [] })
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { requireFacilitator } from "@/lib/auth-guard"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -8,8 +8,8 @@ export const runtime = "nodejs"
 // produceert impliciete "geen besluit"-events voor beslispunten zonder
 // inzending. Deel B §4.3.
 export async function POST() {
-  const session = await auth()
-  if (!session?.user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 })
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
 
   const { forceLock } = await import("@/lib/session-store")
   const result = await forceLock()

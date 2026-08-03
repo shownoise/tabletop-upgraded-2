@@ -1,9 +1,70 @@
 import { ROLE_META } from "@/lib/types"
 import type { ExerciseConfig, SimulationMode, AiIntensity, Scenario, SpecialsMode, RoleAction, Role, GoalId } from "@/lib/types"
 import { getGoal } from "@/lib/goals/registry"
+import { requireFacilitator } from "@/lib/auth-guard"
+import { sanitizeForPrompt, PROMPT_FIELD_CAPS } from "@/lib/scenario/sanitize"
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
+import { rateLimit } from "@/lib/rate-limit"
+import { z } from "zod"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 export const maxDuration = 300
+
+// Shallow schema: catches "body is not an object" or type-swap attacks (arrays where strings are expected, etc.)
+// The route's downstream code still does further coercion + sanitization on individual fields.
+const CreateBodySchema = z.object({
+  mode: z.string().max(20).optional(),
+  graphId: z.string().max(200).optional(),
+  goalId: z.string().max(200).optional(),
+  aiIntensity: z.string().max(20).optional(),
+  specialsMode: z.string().max(20).optional(),
+  difficulty: z.string().max(20).optional(),
+  duration: z.union([z.string().max(50), z.number()]).optional(),
+  sector: z.union([z.string().max(500), z.number()]).optional(),
+  companySize: z.union([z.string().max(200), z.number()]).optional(),
+  scenarioType: z.union([z.string().max(500), z.number()]).optional(),
+  crownJewels: z.union([z.string().max(2000), z.number()]).optional(),
+  criticalSystems: z.union([z.string().max(2000), z.number()]).optional(),
+  irTemplateText: z.union([z.string().max(20000), z.number()]).optional(),
+  itMaturity: z.string().max(50).optional(),
+  securityCapability: z.string().max(50).optional(),
+  exerciseGoal: z.string().max(200).optional(),
+  teamStructure: z.string().max(200).optional(),
+  teamCount: z.number().int().min(1).max(50).optional(),
+  roundCount: z.number().int().min(1).max(20).optional(),
+  timerPerRound: z.number().int().min(1).max(240).optional(),
+  existingPlans: z.array(z.string().max(200)).max(50).optional(),
+  selectedRoles: z.array(z.string().max(50)).max(50).optional(),
+  decisionFramework: z.string().max(20).optional(),
+  phaseAutoAdvance: z.string().max(30).optional(),
+  moduleSlots: z.unknown().optional(),
+  graph: z.unknown().optional(),
+}).passthrough()
+
+// Shallow shape check on AI-generated scenarios — the object is passed to `Scenario`-typed
+// consumers, so we only need to prove the parts we actually read exist and match rough types.
+const AiScenarioShape = z.object({
+  rounds: z.array(z.object({
+    round_number: z.union([z.number(), z.string()]).optional(),
+    title: z.string().optional(),
+    situation_update: z.string().optional(),
+    timerMinutes: z.number().optional(),
+    injects: z.array(z.unknown()).optional(),
+    roleActions: z.array(z.unknown()).optional(),
+    facilitatorNotes: z.unknown().optional(),
+  })).min(1),
+}).passthrough()
+
+function safeParseScenario(text: string): Scenario | null {
+  let raw: unknown
+  try { raw = JSON.parse(text.replace(/```json|```/g, "").trim()) } catch { return null }
+  const parsed = AiScenarioShape.safeParse(raw)
+  if (!parsed.success) {
+    console.warn("[create] AI scenario schema mismatch:", parsed.error.flatten())
+    return null
+  }
+  return parsed.data as unknown as Scenario
+}
 
 function buildRoleContext(config: ExerciseConfig): string {
   const roles = config.selectedRoles
@@ -236,7 +297,7 @@ Variation instruction (make the scenario distinct each time): ${variant}
 Return ONLY valid JSON (no markdown):
 {"scenario_title":"...","scenario_summary":"1-2 sentence summary","rounds":[{"round_number":1,"title":"...","situation_update":"2-3 sentence situation for facilitator","timerMinutes":${timerPerRound},"roleActions":[{"id":"r1-a1","label":"...","description":"...","allowedRoles":["ciso","ceo"],"isRecommended":true,"irPlanAligned":true,"consequence":"..."},{"id":"r1-a2","label":"...","description":"...","allowedRoles":["legal"],"irPlanAligned":true,"consequence":"..."},{"id":"r1-a3","label":"...","description":"...","allowedRoles":["cfo"],"irPlanAligned":false,"consequence":"..."},{"id":"r1-do-nothing","label":"Do nothing / wait","description":"Wait for more information before acting.","allowedRoles":[],"irPlanAligned":true,"consequence":"..."}]},{"round_number":2,...}]}`
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
@@ -248,7 +309,7 @@ Return ONLY valid JSON (no markdown):
   if (!res.ok) return null
   const data = await res.json() as { content: Array<{ type: string; text: string }> }
   const text = data.content?.find(b => b.type === "text")?.text ?? ""
-  return JSON.parse(text.replace(/```json|```/g, "").trim())
+  return safeParseScenario(text)
 }
 
 async function generateFull(config: ExerciseConfig, apiKey: string, mode: string) {
@@ -358,7 +419,7 @@ Return ONLY valid JSON:
   }]
 }`
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
@@ -370,7 +431,7 @@ Return ONLY valid JSON:
   if (!res.ok) return null
   const data = await res.json() as { content: Array<{ type: string; text: string }> }
   const text = data.content?.find(b => b.type === "text")?.text ?? ""
-  return JSON.parse(text.replace(/```json|```/g, "").trim())
+  return safeParseScenario(text)
 }
 
 async function generateWithAI(
@@ -411,26 +472,53 @@ async function generateWithAI(
     return { scenario: scenarioInstanceToScenario(instance), intensity: "full" as const, warnings }
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err))
-    console.error("[generateWithAI] FULL ERROR:", error.message, "\nStack:", error.stack)
-    return { aiError: error.message }
+    const { randomBytes } = await import("crypto")
+    const requestId = randomBytes(4).toString("hex")
+    console.error(`[generateWithAI] FULL ERROR (${requestId}):`, error.message, "\nStack:", error.stack)
+    return { aiError: `AI request failed (ref: ${requestId})` }
   }
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as Partial<ExerciseConfig> & {
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
+
+  const userId = (gate.session?.user as { id?: string } | undefined)?.id ?? "unknown"
+  const rl = await rateLimit(`ai:${userId}`, 10, 60)
+  if (!rl.ok) {
+    return new Response(JSON.stringify({ error: "Too many AI requests. Please wait a minute." }), {
+      status: 429,
+      headers: { "Content-Type": "application/json", "Retry-After": String(rl.resetSeconds) },
+    })
+  }
+
+  let rawBody: unknown
+  try { rawBody = await req.json() } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    })
+  }
+  const parsed = CreateBodySchema.safeParse(rawBody)
+  if (!parsed.success) {
+    return new Response(JSON.stringify({ error: "Invalid request body", issues: parsed.error.flatten() }), {
+      status: 422, headers: { "Content-Type": "application/json" },
+    })
+  }
+  const body = parsed.data as Partial<ExerciseConfig> & {
     mode?: string
     moduleSlots?: unknown
     decisionFramework?: unknown
     graph?: import("@/lib/graph/types").ScenarioGraph
   }
+  // Sanitize user-controlled text fields before they reach any LLM prompt (prompt injection guard).
   const config: ExerciseConfig = {
-    sector: body.sector?.toString() ?? "",
-    companySize: body.companySize?.toString() ?? "",
-    criticalSystems: body.criticalSystems?.toString() ?? "",
-    crownJewels: body.crownJewels?.toString() ?? "",
-    scenarioType: body.scenarioType?.toString() ?? "",
+    sector: sanitizeForPrompt(body.sector?.toString(), PROMPT_FIELD_CAPS.sector),
+    companySize: sanitizeForPrompt(body.companySize?.toString(), PROMPT_FIELD_CAPS.companySize),
+    criticalSystems: sanitizeForPrompt(body.criticalSystems?.toString(), PROMPT_FIELD_CAPS.criticalSystems),
+    crownJewels: sanitizeForPrompt(body.crownJewels?.toString(), PROMPT_FIELD_CAPS.crownJewels),
+    scenarioType: sanitizeForPrompt(body.scenarioType?.toString(), PROMPT_FIELD_CAPS.scenarioType),
     duration: body.duration?.toString() ?? "",
-    irTemplateText: body.irTemplateText?.toString(),
+    irTemplateText: body.irTemplateText != null ? sanitizeForPrompt(body.irTemplateText.toString(), PROMPT_FIELD_CAPS.irTemplateText) : undefined,
     aiIntensity: (body.aiIntensity as AiIntensity | undefined) ?? "off",
     specialsMode: (body.specialsMode as SpecialsMode | undefined) ?? "off",
     itMaturity: body.itMaturity,
@@ -555,7 +643,10 @@ export async function POST(req: Request) {
           warnings: aiSuccess?.warnings ?? [],
         })
       } catch (err) {
-        send({ stage: "error", message: err instanceof Error ? err.message : String(err) })
+        const { randomBytes } = await import("crypto")
+        const requestId = randomBytes(4).toString("hex")
+        console.error(`[create] session-create failed (${requestId}):`, err)
+        send({ stage: "error", message: `Session creation failed (ref: ${requestId})` })
       } finally {
         controller.close()
       }

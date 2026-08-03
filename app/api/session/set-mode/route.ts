@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { requireFacilitator } from "@/lib/auth-guard"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -7,8 +7,8 @@ export const runtime = "nodejs"
 // POST /api/session/set-mode { mode: 'event' | 'training' }
 // Facilitator-only. Wisselt SimulationMode op de actieve sessie.
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session?.user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 })
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
 
   const body = (await req.json()) as { mode?: string }
   if (body.mode !== "event" && body.mode !== "training") {

@@ -1,9 +1,23 @@
 import { NextResponse } from "next/server"
+import { requireFacilitator } from "@/lib/auth-guard"
+import { rateLimit } from "@/lib/rate-limit"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 export async function POST() {
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
+
+  const userId = (gate.session?.user as { id?: string } | undefined)?.id ?? "unknown"
+  const rl = await rateLimit(`ai:${userId}`, 10, 60)
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many AI requests. Please wait a minute." }, {
+      status: 429,
+      headers: { "Retry-After": String(rl.resetSeconds) },
+    })
+  }
+
   const { getSession } = await import("@/lib/session-store")
   const session = await getSession()
 

@@ -14,6 +14,7 @@ import {
   dbLoadScenarioGraph,
   dbSaveScenarioGraph,
   dbSetSession,
+  withSessionLock,
 } from "./db"
 import type { ScenarioGraph } from "./graph/types"
 import { RETAINER_ACTIVATED_FLAG } from "./graph/types"
@@ -472,18 +473,45 @@ export async function resetSession(): Promise<void> {
   broadcastState(null)
 }
 
-async function mutate(fn: (s: SessionState) => SessionState | null | { error: string }): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
-  if (!session) return { ok: false, error: "No active session." }
-  const updated = fn(session)
-  if (updated === null) return { ok: false, error: "Mutation returned null." }
-  if (typeof updated === "object" && updated !== null && "error" in updated && !("participants" in updated)) {
-    return { ok: false, error: updated.error }
+// Hard caps to keep the session KV blob from unbounded growth in long / abusive sessions.
+const MAX_TIMELINE = 2000
+const MAX_PUSHED_INJECTS = 500
+const MAX_SUBMITTED_DECISIONS = 2000
+const MAX_ASSESSMENT_EVENTS = 2000
+
+function capCollections(s: SessionState): SessionState {
+  const capped: SessionState = { ...s }
+  if (capped.timeline && capped.timeline.length > MAX_TIMELINE) {
+    capped.timeline = capped.timeline.slice(-MAX_TIMELINE)
   }
-  const ticked = tickPhases(tickRoundPhase(updated as SessionState))
-  await dbSetSession(ticked)
-  broadcastState(ticked)
-  return { ok: true }
+  if (capped.pushedInjects && capped.pushedInjects.length > MAX_PUSHED_INJECTS) {
+    capped.pushedInjects = capped.pushedInjects.slice(-MAX_PUSHED_INJECTS)
+  }
+  if (capped.submittedDecisions && capped.submittedDecisions.length > MAX_SUBMITTED_DECISIONS) {
+    capped.submittedDecisions = capped.submittedDecisions.slice(-MAX_SUBMITTED_DECISIONS)
+  }
+  if (capped.assessmentEvents && capped.assessmentEvents.length > MAX_ASSESSMENT_EVENTS) {
+    capped.assessmentEvents = capped.assessmentEvents.slice(-MAX_ASSESSMENT_EVENTS)
+  }
+  return capped
+}
+
+async function mutate(fn: (s: SessionState) => SessionState | null | { error: string }): Promise<{ ok: boolean; error?: string }> {
+  return withSessionLock(async () => {
+    const session = await dbGetSession()
+    if (!session) return { ok: false, error: "No active session." }
+    const updated = fn(session)
+    if (updated === null) return { ok: false, error: "Mutation returned null." }
+    if (typeof updated === "object" && updated !== null && "error" in updated && !("participants" in updated)) {
+      return { ok: false, error: updated.error }
+    }
+    const next = updated as SessionState
+    const ticked = capCollections(tickPhases(tickRoundPhase(next)))
+    ticked.version = (session.version ?? 0) + 1
+    await dbSetSession(ticked)
+    broadcastState(ticked)
+    return { ok: true }
+  })
 }
 
 function pushTimeline(session: SessionState, type: TimelineEventType, data: Record<string, unknown>): SessionState {

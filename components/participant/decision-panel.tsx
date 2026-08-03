@@ -229,6 +229,7 @@ export function DecisionPanel({
                 onChange={e => setReasoning(e.target.value)}
                 placeholder={tr(lang, "reasoningPlaceholder")}
                 rows={2}
+                maxLength={2000}
                 className="resize-none font-mono text-xs bg-tt-bright/5 border-tt-border text-tt-bright placeholder:text-tt-dim focus:border-tt-accent/40"
               />
             </div>

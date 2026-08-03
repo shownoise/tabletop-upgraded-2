@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import type { GovernanceFlag, LearningObjective, SessionReport, SubmittedDecision } from "@/lib/types"
+import { requireFacilitator } from "@/lib/auth-guard"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
@@ -33,6 +34,8 @@ function generateRecommendations(flags: GovernanceFlag[], hasIrPlan: boolean): s
 }
 
 export async function GET() {
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
   const { getSession } = await import("@/lib/session-store")
   const session = await getSession()
   if (!session) {

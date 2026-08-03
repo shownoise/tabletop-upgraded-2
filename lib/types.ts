@@ -774,6 +774,8 @@ export interface SessionState {
   }
   // Deel B §4 — groepen (EVENT-mode). Ontbrekend of leeg = single-team ASSESSMENT.
   groups?: Group[]
+  // Monotonically increasing revision — bumped on every persisted mutation. Optimistic-concurrency aid.
+  version?: number
 }
 
 export interface ActiveDecisionState {

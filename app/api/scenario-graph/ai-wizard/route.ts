@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { requireFacilitator } from "@/lib/auth-guard"
 import { planToGraph, type WizardPlan } from "@/lib/graph/wizard-plan"
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
+import { rateLimit } from "@/lib/rate-limit"
+import { sanitizeForPrompt, PROMPT_FIELD_CAPS } from "@/lib/scenario/sanitize"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -18,8 +21,17 @@ interface Body {
 }
 
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const gate = await requireFacilitator()
+  if (!gate.ok) return gate.response
+
+  const userId = (gate.session?.user as { id?: string } | undefined)?.id ?? "unknown"
+  const rl = await rateLimit(`ai:${userId}`, 10, 60)
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many AI requests. Please wait a minute." }, {
+      status: 429,
+      headers: { "Retry-After": String(rl.resetSeconds) },
+    })
+  }
 
   const body = await req.json() as Body
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -29,18 +41,26 @@ export async function POST(req: Request) {
 
   const roundCount = Math.max(3, Math.min(6, body.roundCount ?? 4))
 
+  // Sanitize all facilitator-supplied text before interpolating into the prompt.
+  const sector = sanitizeForPrompt(body.sector, PROMPT_FIELD_CAPS.sector) || "onbepaald"
+  const companySize = sanitizeForPrompt(body.companySize, PROMPT_FIELD_CAPS.companySize) || "onbepaald"
+  const attackType = sanitizeForPrompt(body.attackType, PROMPT_FIELD_CAPS.scenarioType) || "onbepaald"
+  const crownJewels = sanitizeForPrompt(body.crownJewels, PROMPT_FIELD_CAPS.crownJewels) || "onbepaald"
+  const criticalSystems = sanitizeForPrompt(body.criticalSystems, PROMPT_FIELD_CAPS.criticalSystems) || "onbepaald"
+  const freeText = sanitizeForPrompt(body.freeText, 4000)
+
   const prompt = `Je bent een cyber-tabletop scenarioschrijver. Wij zijn de IR-retainer die dit als trainings-oefening bij een klant faciliteren.
 Genereer een compleet crisisscenario als JSON, opgebouwd rond het BOB-model (Beeldvorming/Oordeel/Besluit).
 
 Input van de facilitator:
-- Sector: ${body.sector ?? "onbepaald"}
-- Bedrijfsgrootte: ${body.companySize ?? "onbepaald"}
-- Aanvalstype: ${body.attackType ?? "onbepaald"}
+- Sector: ${sector}
+- Bedrijfsgrootte: ${companySize}
+- Aanvalstype: ${attackType}
 - Moeilijkheid: ${body.difficulty ?? "intermediate"}
 - Aantal rondes: ${roundCount}
-- Crown jewels: ${body.crownJewels ?? "onbepaald"}
-- Kritieke systemen: ${body.criticalSystems ?? "onbepaald"}
-${body.freeText ? `- Extra context: ${body.freeText}` : ""}
+- Crown jewels: ${crownJewels}
+- Kritieke systemen: ${criticalSystems}
+${freeText ? `- Extra context: ${freeText}` : ""}
 
 REGELS VOOR EEN GOEDE TRAINING:
 1. BOB-fasen: R1-R2 = beeldvorming (feiten verzamelen), midden = oordeel (opties wegen), einde = besluit (kiezen).
@@ -140,7 +160,7 @@ BELANGRIJK:
 - Rollen: ceo, ciso, cfo, legal, head_of_comms, hr_lead, ops_manager, it_manager, system_admin
 - Alle outcomes moeten bereikbaar zijn`
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -171,7 +191,9 @@ BELANGRIJK:
     const graph = planToGraph(plan)
     return NextResponse.json({ ok: true, graph })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: `Failed to parse AI response: ${msg}`, raw: text.slice(0, 500) }, { status: 502 })
+    const { randomBytes } = await import("crypto")
+    const requestId = randomBytes(4).toString("hex")
+    console.error(`[ai-wizard] parse failed (${requestId}):`, err)
+    return NextResponse.json({ error: `AI request failed (ref: ${requestId})` }, { status: 502 })
   }
 }

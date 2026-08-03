@@ -1,5 +1,6 @@
 import type { ExerciseConfig } from "@/lib/types"
 import type { InjectNodeData, RoundNodeData, ScenarioGraph } from "./types"
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout"
 
 // Runtime AI-fill: nodes met een aiPromptTemplate krijgen bij sessie-start
 // content gegenereerd door Claude, gestuurd door de prompt-template van de
@@ -26,7 +27,7 @@ export async function applyAiRuntimeFill(
     const d = node.data as { aiPromptTemplate?: string }
     const prompt = buildPrompt(node.type, d.aiPromptTemplate!, config, graph)
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

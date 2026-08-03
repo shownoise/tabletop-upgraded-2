@@ -240,6 +240,17 @@ Of via de `/deploy` Claude Code command (type-check + Vercel preview in één st
 
 ---
 
+## Live updates
+
+Deelnemers en facilitators krijgen state-updates via twee mechanismen tegelijk:
+
+1. **SSE (`/api/events`)** — instant push binnen dezelfde serverless instance.
+2. **Polling van `/api/session/state` elke 2s** — noodzakelijk omdat Vercel requests naar verschillende instances kan routeren; SSE-listeners op instance A missen dan mutaties die instance B verwerkt. De poll garandeert eventual consistency binnen ≤2s.
+
+De poll herkent 401 responses en stuurt participants terug naar `/join` (Fix 20). Voor exercises >~30 gelijktijdige participants kan het zinvol zijn om over te stappen op KV pub/sub in plaats van per-process listeners.
+
+---
+
 ## IR-retainer scope
 
 De AI genereert **geen** decisions over forensisch onderzoek, EDR-isolatie, malware-analyse, of log-preservering — dat is retainer-scope. Decisions gaan altijd over:
