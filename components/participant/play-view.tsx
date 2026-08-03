@@ -35,6 +35,7 @@ import { playNotificationSound } from "@/lib/sounds"
 const NAME_KEY = "ctt:name"
 const ID_KEY = "ctt:participantId"
 const ROLE_KEY = "ctt:role"
+const ACTIVE_ROLE_KEY = "ctt:activeRole"
 const FEEDBACK_KEY = "ctt:feedback_rounds"
 
 // ─── Session lead ─────────────────────────────────────────────
@@ -474,6 +475,76 @@ function RoleDocumentsPanel({ docs }: { docs: RoleDocument[] }) {
   )
 }
 
+// ─── Team role-switcher (EVENT mode only) ───
+// One device per team, the team picks which role they're answering AS before
+// submitting. Backend keys submissions on (participantId, roundIndex, role) so
+// every role of the team gets its own decision on this same device.
+function TeamRoleSwitcher({
+  session,
+  activeRole,
+  onPick,
+}: {
+  session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>
+  activeRole?: Role
+  onPick: (r: Role) => void
+}) {
+  const roles: Role[] = useMemo(() => {
+    // Use the facilitator-configured roles when present; otherwise everything the
+    // current participants have collectively claimed.
+    const configured = session.config.selectedRoles ?? []
+    if (configured.length) return configured
+    const claimed = new Set<Role>()
+    for (const p of session.participants) if (p.role) claimed.add(p.role)
+    return [...claimed]
+  }, [session.config.selectedRoles, session.participants])
+  const submitted = session.submittedDecisions ?? []
+  const round = session.currentRound
+
+  if (roles.length === 0) return null
+
+  return (
+    <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
+          Team console · Kies rol
+        </span>
+        {activeRole ? (
+          <span className="font-mono text-[10px] text-muted-foreground">
+            Nu actief: <span className="text-foreground">{ROLE_META[activeRole]?.label ?? activeRole}</span>
+          </span>
+        ) : (
+          <span className="font-mono text-[10px] text-destructive">Nog geen rol gekozen</span>
+        )}
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
+        {roles.map(r => {
+          const hasSubmission = submitted.some(d => d.roundIndex === round && d.role === r)
+          const isActive = activeRole === r
+          return (
+            <button
+              key={r}
+              type="button"
+              onClick={() => onPick(r)}
+              className={`rounded border px-2 py-2 font-mono text-[10px] uppercase tracking-wide text-left transition-colors ${
+                isActive
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : hasSubmission
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:border-primary/40"
+                  : "border-border bg-background hover:border-primary/40"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className="truncate">{ROLE_META[r]?.label ?? r}</span>
+                {hasSubmission && <span aria-label="submitted">✓</span>}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Decision ticket — één UI voor graph-DecisionNodes ───
 // perRole=true → participants submitten zelf. Leest van activeDecision
 // (peek-ahead vanuit de round tijdens decision-fase). qualityRank + commentary
@@ -496,22 +567,28 @@ function DecisionTicket({
   } }).activeDecision
   if (!ad || !ad.perRole) return null
 
-  // In EVENT-mode: iPad = team, alle opties zichtbaar (team beslist voor alle rollen).
-  // In ASSESSMENT-mode: filter op eigen rol.
+  // In EVENT-mode: iPad = team, the "active role" is picked via the team switcher
+  // (passed in as participantRole prop). In ASSESSMENT-mode: filter op eigen rol.
   const isEventMode = session.mode === "event"
-  const canSubmit = !!participantId && (isEventMode || !!participantRole)
+  // Team-device must have picked a role before submitting — otherwise the decision
+  // would be miskeyed. In assessment mode the assigned role suffices.
+  const canSubmit = !!participantId && !!participantRole
   const roundIndex = session.currentRound
 
+  // In event mode dedupe on (participantId, roundIndex, role) so the same team device
+  // can carry submissions for multiple roles.
   const already = (session.submittedDecisions ?? []).find(
-    d => d.participantId === participantId && d.roundIndex === roundIndex,
+    d => d.participantId === participantId
+      && d.roundIndex === roundIndex
+      && (!isEventMode || d.role === participantRole),
   )
 
-  // Event mode: alle opties. Assessment: filter op rol.
-  const mine = isEventMode
-    ? ad.options
-    : participantRole
-      ? ad.options.filter(o => !o.allowedRole || o.allowedRole === participantRole)
-      : ad.options
+  // Only offer the options relevant to the acting role — even in event mode. Prevents
+  // the team from accidentally submitting an option meant for a role they're not
+  // currently pretending to be.
+  const mine = participantRole
+    ? ad.options.filter(o => !o.allowedRole || o.allowedRole === participantRole)
+    : ad.options
   const visibleOptions = mine.length > 0 ? mine : ad.options
 
   async function pick(optionId: string) {
@@ -525,6 +602,7 @@ function DecisionTicket({
         roundIndex,
         actionId: optionId,
         reasoning: "",
+        activeRole: isEventMode ? participantRole : undefined,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Indienen mislukt")
@@ -758,6 +836,9 @@ export function PlayView() {
   const sessionIdRef = useRef<string | null>(null)
   // Cached role from sessionStorage — only read client-side to avoid hydration mismatch
   const [storedRole, setStoredRole] = useState<Role | undefined>(undefined)
+  // Event-mode team-console: the role the team is currently answering AS. Persisted
+  // in sessionStorage so a page reload preserves the pick.
+  const [activeRole, setActiveRoleState] = useState<Role | undefined>(undefined)
 
   useEffect(() => {
     try {
@@ -765,6 +846,8 @@ export function PlayView() {
       setParticipantId(window.localStorage.getItem(ID_KEY))
       const r = window.sessionStorage.getItem(ROLE_KEY)
       if (r) setStoredRole(r as Role)
+      const ar = window.sessionStorage.getItem(ACTIVE_ROLE_KEY)
+      if (ar) setActiveRoleState(ar as Role)
     } catch {}
   }, [])
 
@@ -779,6 +862,16 @@ export function PlayView() {
     }
     return storedRole
   }, [session, participantId, storedRole])
+
+  // In event mode the "acting role" is whichever role the team picked on the switcher;
+  // in other modes it's just the participant's assigned role.
+  const isEventMode = session?.mode === "event"
+  const effectiveRole: Role | undefined = isEventMode ? activeRole : participantRole
+
+  function setActiveRole(r: Role) {
+    setActiveRoleState(r)
+    try { window.sessionStorage.setItem(ACTIVE_ROLE_KEY, r) } catch { /* noop */ }
+  }
 
   // Session lead: chairs the meeting, advances BOB/OODA phases
   const sessionLeadRole = useMemo(
@@ -1027,6 +1120,16 @@ export function PlayView() {
               />
             )}
 
+            {/* Team role-switcher — in EVENT mode this one device answers for every role.
+                The team picks which role they're acting as before each decision. */}
+            {isEventMode && status === "active" && (
+              <TeamRoleSwitcher
+                session={session}
+                activeRole={activeRole}
+                onPick={setActiveRole}
+              />
+            )}
+
             {/* Pacing banner — appears at 40%/80%/95% of round timer */}
             {currentRound && status === "active" && (
               <PacingBanner
@@ -1036,7 +1139,7 @@ export function PlayView() {
             )}
 
             {/* Soft-decision ticket — shown when graph is on a Decision node */}
-            {status === "active" && <DecisionTicket session={session} participantId={participantId ?? undefined} participantRole={participantRole} />}
+            {status === "active" && <DecisionTicket session={session} participantId={participantId ?? undefined} participantRole={effectiveRole} />}
 
             {/* Round situation */}
             {currentRound ? (
@@ -1079,14 +1182,17 @@ export function PlayView() {
                   )}
                   <DecisionBoundary>
                     <DecisionPanel
-                      key={`decision-${session.currentRound}`}
+                      key={`decision-${session.currentRound}-${effectiveRole ?? "none"}`}
                       roundIndex={session.currentRound}
                       roundActions={currentRound.roleActions}
                       participantId={participantId}
                       participantName={name ?? ""}
-                      participantRole={participantRole}
+                      participantRole={effectiveRole}
+                      isEventMode={isEventMode}
                       existingDecision={(session.submittedDecisions ?? []).find(
-                        d => d.participantId === participantId && d.roundIndex === session.currentRound
+                        d => d.participantId === participantId
+                          && d.roundIndex === session.currentRound
+                          && (!isEventMode || d.role === effectiveRole)
                       ) as SubmittedDecision | undefined}
                       lang={lang}
                     />

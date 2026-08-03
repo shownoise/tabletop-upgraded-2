@@ -55,7 +55,7 @@ export const api = {
   resetSession: () => post<{ ok: true }>("/api/session/reset"),
   setPhase: (phase: RoundPhase) =>
     post<{ ok: true }>("/api/session/set-phase", { phase }),
-  submitDecision: (input: { participantId: string; participantName: string; roundIndex: number; actionId: string; reasoning: string; confidence?: 1 | 2 | 3 | 4 | 5 }) =>
+  submitDecision: (input: { participantId: string; participantName: string; roundIndex: number; actionId: string; reasoning: string; confidence?: 1 | 2 | 3 | 4 | 5; activeRole?: Role }) =>
     post<{ ok: true }>("/api/session/submit-decision", input),
   assignRole: (input: { participantId: string; role: Role; joinCode?: string }) =>
     post<{ ok: true }>("/api/session/assign-role", input),

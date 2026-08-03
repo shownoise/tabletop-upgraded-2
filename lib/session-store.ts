@@ -1377,6 +1377,10 @@ export interface SubmitDecisionInput {
   actionId: string
   reasoning: string
   confidence?: 1 | 2 | 3 | 4 | 5
+  // Event mode team-console: an explicit role the team is submitting AS. When set,
+  // the (participantId, roundIndex, role) tuple deduplicates instead of just
+  // (participantId, roundIndex) — one team-device can submit for every role.
+  activeRole?: Role
 }
 
 export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: boolean; error?: string }> {
@@ -1385,7 +1389,11 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
 
   const participant = session.participants.find(p => p.id === input.participantId)
   if (!participant) return { ok: false, error: "Participant not found." }
-  if (!participant.role) return { ok: false, error: "No role assigned. Please assign a role before submitting decisions." }
+  // In event mode the team-device may not have a fixed role — the active role
+  // comes from the request. In other modes the participant's assigned role is
+  // still required.
+  const activeRole: Role | undefined = input.activeRole ?? participant.role
+  if (!activeRole) return { ok: false, error: "No role assigned. Please pick a role before submitting decisions." }
 
   const round = session.scenario.rounds[input.roundIndex]
   if (!round) return { ok: false, error: "Invalid round." }
@@ -1426,7 +1434,7 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     return { ok: false, error: `Beslissingen kunnen niet worden ingediend tijdens de '${session.roundPhase}' fase.` }
   }
 
-  const role = participant.role
+  const role = activeRole
   const isWrongRole = action.allowedRoles.length > 0 && !action.allowedRoles.includes(role)
   const isIrDeviation = !action.irPlanAligned
 
@@ -1458,19 +1466,24 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     groupId: participant.groupId,
   }
 
-  // Remove any existing decision for this participant+round then add new one.
-  // Deel B §4.3 — in EVENT-mode is idempotency op (groupId, roundIndex, actionId):
-  // vervang ook groep-genoten die eerder deze actie kozen (dubbele-tik-preventie).
+  // Dedupe:
+  //   • Legacy (participantId, roundIndex, role) — one decision per role per participant per round.
+  //     Allows a team-device (one participantId) to submit for multiple roles in event mode.
+  //   • EVENT-mode also dedupes (groupId, roundIndex, actionId) so group-members double-tapping
+  //     the same action don't create phantom rows (Deel B §4.3).
   const existingDecisions = (session.submittedDecisions ?? []).filter(d => {
-    if (d.participantId === input.participantId && d.roundIndex === input.roundIndex) return false
+    if (d.participantId === input.participantId
+        && d.roundIndex === input.roundIndex
+        && d.role === role) return false
     if (session.mode === 'event' && participant.groupId
         && d.groupId === participant.groupId
         && d.roundIndex === input.roundIndex
-        && d.actionId === input.actionId) return false
+        && d.actionId === input.actionId
+        && d.role === role) return false
     return true
   })
   const existingFlags = (session.governanceFlags ?? []).filter(
-    f => !(f.participantId === input.participantId && f.roundIndex === input.roundIndex)
+    f => !(f.participantId === input.participantId && f.roundIndex === input.roundIndex && f.role === role)
   )
 
   const hasIrPlan = !!(session.config.irTemplateText) || (session.config.existingPlans?.includes("ir_plan") ?? false)

@@ -162,6 +162,9 @@ export function SetupForm() {
   const totalMin = DURATION_MINUTES[config.duration] ?? 90
   const durationInvalid = rounds * timer > totalMin
   const rolesInvalid = (config.selectedRoles?.length ?? 0) === 0
+  const graphMissing = !graphIdOverride && !graphIdFromUrl // resolved below via loadedGraph
+  // We only know if a graph is actually loaded after fetchOrCacheGraph runs. Use loadedGraph
+  // presence as the definitive check.
   const submitBlocked = durationInvalid || rolesInvalid
 
   // New: decision framework and module slots
@@ -313,6 +316,10 @@ export function SetupForm() {
     }
     if (rolesInvalid) {
       setError("Selecteer minimaal één rol voordat je de oefening genereert.")
+      return
+    }
+    if (!graphId && !loadedGraph) {
+      setError("Deze omgeving werkt alleen met scenario-graphs. Open de Scenario builder, kies of maak een graph, en start van daaruit.")
       return
     }
     setSubmitting(true)
@@ -635,10 +642,19 @@ export function SetupForm() {
 
       <div className="flex flex-col items-start justify-between gap-3 border-t border-border pt-6 sm:flex-row sm:items-center">
         <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-          {aiIntensity === "off" ? "Template mode — no AI, no API cost." : aiIntensity === "lean" ? `Smart mode (Haiku) — ~€0.002/session${config.irTemplateText ? " · IR plan loaded" : ""}` : `Full mode (Sonnet) — ~€0.05/session${config.irTemplateText ? " · IR plan loaded" : ""}`}
+          {loadedGraph
+            ? `Scenario-graph geladen · ${loadedGraph.name}`
+            : (
+              <>
+                Geen graph geladen — open eerst de{" "}
+                <a href="/admin/builder" className="underline text-primary hover:text-primary/80">Scenario builder</a>
+                {" "}om er één te maken of te kiezen.
+              </>
+            )
+          }
         </p>
         <div className="flex flex-col gap-3">
-          <Button type="submit" size="lg" disabled={submitting || submitBlocked} className="gap-2 font-mono uppercase tracking-wider">
+          <Button type="submit" size="lg" disabled={submitting || submitBlocked || !loadedGraph} className="gap-2 font-mono uppercase tracking-wider">
             {submitting ? (
               <><Loader2 className="size-4 animate-spin" />Genereren…</>
             ) : (

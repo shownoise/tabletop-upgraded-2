@@ -28,6 +28,7 @@ interface Props {
   participantRole: Role | undefined
   existingDecision?: SubmittedDecision
   lang: Lang
+  isEventMode?: boolean
 }
 
 export function DecisionPanel({
@@ -38,6 +39,7 @@ export function DecisionPanel({
   participantRole,
   existingDecision,
   lang,
+  isEventMode = false,
 }: Props) {
   const [selectedActionId, setSelectedActionId] = useState<string>(existingDecision?.actionId ?? "")
   const [reasoning, setReasoning] = useState(existingDecision?.reasoning ?? "")
@@ -58,6 +60,7 @@ export function DecisionPanel({
         actionId: selectedActionId,
         reasoning,
         confidence,
+        activeRole: isEventMode ? participantRole : undefined,
       })
       const action = roundActions.find(a => a.id === selectedActionId)
       const isWrongRole = action && participantRole

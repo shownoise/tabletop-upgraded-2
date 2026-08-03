@@ -2,11 +2,14 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { safeJson } from "@/lib/api-validation"
 import { getSession } from "@/lib/session-store"
+import type { Role } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
 const MAX_REASONING = 2000
+
+const VALID_ROLES = ["it_manager", "ciso", "head_of_comms", "legal", "ceo", "cfo", "system_admin", "hr_lead", "ops_manager"] as const
 
 const SubmitDecisionBody = z.object({
   participantId: z.string().min(1).max(64),
@@ -15,6 +18,8 @@ const SubmitDecisionBody = z.object({
   actionId: z.string().min(1).max(200),
   reasoning: z.string().max(MAX_REASONING).optional(),
   confidence: z.number().int().min(1).max(5).optional(),
+  // Event-mode team-device: explicit role the team is submitting AS.
+  activeRole: z.enum(VALID_ROLES).optional(),
 })
 
 export async function POST(req: Request) {
@@ -36,6 +41,7 @@ export async function POST(req: Request) {
     actionId: body.actionId,
     reasoning: body.reasoning ?? "",
     confidence: body.confidence as 1 | 2 | 3 | 4 | 5 | undefined,
+    activeRole: body.activeRole as Role | undefined,
   })
   if (!result.ok) return NextResponse.json(result, { status: 400 })
   return NextResponse.json(result)
