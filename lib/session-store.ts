@@ -1167,9 +1167,6 @@ export async function pushInject(input: { roundIndex: number; injectId: string }
 export async function pushSurpriseInject(input: {
   title: string; content: string; type?: InjectType; urgency?: Urgency
 }): Promise<{ ok: boolean; error?: string; inject?: Inject }> {
-  const session = await dbGetSession()
-  if (!session) return { ok: false, error: "No active session." }
-
   const inject: Inject = {
     id: genId("surp"),
     type: input.type ?? "alert",
@@ -1182,11 +1179,13 @@ export async function pushSurpriseInject(input: {
     timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
   }
 
-  const pushed = { inject, roundIndex: -1, pushedAt: Date.now() }
-  let updated = { ...session, pushedInjects: [...session.pushedInjects, pushed] }
-  updated = pushTimeline(updated, "surprise_inject", { inject })
-  await dbSetSession(updated)
-  broadcastState(updated)
+  const result = await mutate(s => {
+    const pushed = { inject, roundIndex: -1, pushedAt: Date.now() }
+    let updated: SessionState = { ...s, pushedInjects: [...s.pushedInjects, pushed] }
+    updated = pushTimeline(updated, "surprise_inject", { inject })
+    return updated
+  })
+  if (!result.ok) return { ok: false, error: result.error }
   emit("surprise_inject", { inject })
   return { ok: true, inject }
 }

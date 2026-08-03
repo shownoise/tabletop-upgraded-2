@@ -47,15 +47,14 @@ export function PresentView() {
     return session.scenario.rounds[session.currentRound] ?? null
   }, [session])
 
-  // Get the most recent pushed inject for the current round (or any round)
-  const latestInject = useMemo(() => {
-    if (!session) return null
-    const forCurrentRound = session.pushedInjects
-      .filter(p => p.roundIndex === session.currentRound)
+  // All pushed injects for the current round + any surprise injects (roundIndex < 0),
+  // newest first. Big-screen shows the FULL feed so every role can see everything;
+  // the score reveal takes over at lock/review phase.
+  const roundInjects = useMemo(() => {
+    if (!session) return []
+    return [...session.pushedInjects]
+      .filter(p => p.roundIndex === session.currentRound || p.roundIndex < 0)
       .sort((a, b) => b.pushedAt - a.pushedAt)
-    if (forCurrentRound.length > 0) return forCurrentRound[0].inject
-    const all = [...session.pushedInjects].sort((a, b) => b.pushedAt - a.pushedAt)
-    return all[0]?.inject ?? null
   }, [session])
 
   const escalationIndex = Math.min(session?.currentRound ?? 0, 3)
@@ -74,8 +73,8 @@ export function PresentView() {
         <div className="flex items-center gap-4">
           {/* Connection indicator */}
           <span className={`size-2 rounded-full ${connected ? "bg-primary" : "bg-destructive"}`} />
-          <Link href="/admin/dashboard" className="flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="size-3.5" /> Dashboard
+          <Link href="/admin/story" className="flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="size-3.5" /> Control
           </Link>
         </div>
       </header>
@@ -160,52 +159,101 @@ export function PresentView() {
             <GroupProgressBanner session={session} />
           )}
 
-          {/* Main content area — normaal: situatie + inject; tijdens lock/review: reveal */}
+          {/* Main content area — normaal: situatie + volledige inject-feed; tijdens lock/review: reveal */}
           {(phase === "lock" || phase === "review") ? (
             <BigScreenReveal currentRoundNumber={session.currentRound + 1} />
           ) : (
-            <div className="flex-1 px-8 py-8 grid grid-cols-1 gap-8 lg:grid-cols-2">
-              {/* Situation update */}
+            <div className="flex-1 px-8 py-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+              {/* Situation update — left column */}
               {currentRound && (
                 <div className="flex flex-col gap-4">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Situation Update</span>
-                  <p className="text-2xl leading-relaxed text-foreground">{currentRound.situation_update}</p>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Situation update</span>
+                  <p className="text-2xl leading-relaxed text-foreground whitespace-pre-wrap">
+                    {currentRound.situation_update}
+                  </p>
                 </div>
               )}
 
-              {/* Latest inject */}
-              {latestInject && (
-                <div className={`rounded-xl border p-6 flex flex-col gap-4 ${
-                  latestInject.urgency === "critical"
-                    ? "border-destructive/50 bg-destructive/10"
-                    : latestInject.urgency === "high"
-                    ? "border-orange-500/30 bg-orange-500/5"
-                    : "border-primary/30 bg-primary/5"
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Latest Inject</span>
-                    <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
-                      latestInject.urgency === "critical"
-                        ? "border-destructive/50 text-destructive"
-                        : latestInject.urgency === "high"
-                        ? "border-orange-500/50 text-orange-500"
-                        : "border-primary/40 text-primary"
-                    }`}>
-                      {latestInject.urgency}
-                    </span>
-                  </div>
-                  <h3 className="text-2xl font-semibold">{latestInject.title}</h3>
-                  <p className="text-lg text-muted-foreground leading-relaxed">{latestInject.content}</p>
-                  {latestInject.senderName && (
-                    <p className="font-mono text-sm text-muted-foreground">From: {latestInject.senderName}</p>
-                  )}
+              {/* All pushed injects for this round — right column, newest on top,
+                  every role's feed visible so the big screen is a single source of truth. */}
+              <div className="flex flex-col gap-3 min-h-0">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Injects this round
+                  </span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
+                    {roundInjects.length} total
+                  </span>
                 </div>
-              )}
+                {roundInjects.length === 0 ? (
+                  <p className="font-mono text-sm uppercase tracking-wider text-muted-foreground animate-pulse">
+                    Waiting for injects…
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-3 overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 340px)" }}>
+                    {roundInjects.map((p, idx) => (
+                      <BigScreenInjectCard key={`${p.inject.id}-${p.pushedAt}`} inject={p.inject} highlight={idx === 0} />
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           )}
         </div>
       )}
     </div>
+  )
+}
+
+// Big-screen inject card — compact enough to fit multiple on a projector.
+function BigScreenInjectCard({
+  inject,
+  highlight,
+}: {
+  inject: import("@/lib/types").Inject
+  highlight: boolean
+}) {
+  const border =
+    inject.urgency === "critical" ? "border-destructive/60 bg-destructive/10"
+    : inject.urgency === "high" ? "border-orange-500/40 bg-orange-500/5"
+    : inject.urgency === "medium" ? "border-primary/40 bg-primary/5"
+    : "border-border bg-card"
+  const badgeClass =
+    inject.urgency === "critical" ? "border-destructive/50 text-destructive"
+    : inject.urgency === "high" ? "border-orange-500/50 text-orange-500"
+    : "border-primary/40 text-primary"
+  return (
+    <li className={`rounded-xl border p-4 flex flex-col gap-2 ${border} ${highlight ? "ring-2 ring-primary/30" : ""}`}>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            {inject.channel ?? inject.type}
+          </span>
+          <span className={`rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${badgeClass}`}>
+            {inject.urgency}
+          </span>
+          {inject.targetRoles?.length ? (
+            <span className="font-mono text-[10px] text-muted-foreground truncate">
+              → {inject.targetRoles.join(", ")}
+            </span>
+          ) : inject.targetTeam && inject.targetTeam !== "all" ? (
+            <span className="font-mono text-[10px] text-muted-foreground">→ {inject.targetTeam}</span>
+          ) : null}
+        </div>
+        {inject.timestamp && (
+          <span className="font-mono text-[10px] text-muted-foreground shrink-0">{inject.timestamp}</span>
+        )}
+      </div>
+      <h3 className="text-xl font-semibold leading-tight">{inject.title}</h3>
+      <p className="text-base text-muted-foreground leading-relaxed whitespace-pre-wrap">
+        {inject.content}
+      </p>
+      {(inject.senderName || inject.source) && (
+        <span className="font-mono text-[11px] text-muted-foreground">
+          — {inject.senderName ?? inject.source}{inject.senderHandle ? ` (${inject.senderHandle})` : ""}
+        </span>
+      )}
+    </li>
   )
 }
 
