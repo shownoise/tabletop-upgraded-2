@@ -71,9 +71,8 @@ export default function PreparePage() {
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Consolidated: /admin/story is the sole live facilitator view (handles both
-  // graph-driven and template scenarios).
-  const targetView = "/admin/story"
+  // Consolidated: /admin/dashboard is the canonical live facilitator view.
+  const targetView = "/admin/dashboard"
 
   useEffect(() => {
     if (session?.status === "active" || session?.status === "ended") {
@@ -275,7 +274,7 @@ export default function PreparePage() {
               {starting ? "Starting…" : "Start session"}
             </Button>
             <Link
-              href="/admin/story"
+              href="/admin/dashboard"
               className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
             >
               Go to live view <ChevronRight className="size-3" />

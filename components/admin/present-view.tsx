@@ -73,8 +73,8 @@ export function PresentView() {
         <div className="flex items-center gap-4">
           {/* Connection indicator */}
           <span className={`size-2 rounded-full ${connected ? "bg-primary" : "bg-destructive"}`} />
-          <Link href="/admin/story" className="flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="size-3.5" /> Control
+          <Link href="/admin/dashboard" className="flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="size-3.5" /> Dashboard
           </Link>
         </div>
       </header>
