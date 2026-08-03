@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, LayoutDashboard, Play, RotateCcw, Sparkles, ChevronRight, AlertCircle } from "lucide-react"
+import { ArrowLeft, LayoutDashboard, Play, RotateCcw, Sparkles, ChevronRight, AlertCircle, Send, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSessionStream } from "@/lib/use-session-stream"
 import { api } from "@/lib/api-client"
 import { ROLE_META } from "@/lib/types"
 import type { DecisionNodeData, ScenarioGraph, SpecialNodeData } from "@/lib/graph/types"
-import type { Participant, Role, SessionState } from "@/lib/types"
+import type { Inject, Participant, Role, SessionState } from "@/lib/types"
 import { analyzeGraph } from "@/lib/graph/analyze"
 import { GraphPathPanel } from "./graph-path-panel"
 
@@ -252,6 +252,8 @@ function NowPanel({ session }: { session: SessionState }) {
     )
   }
   const injectsForRound = session.pushedInjects.filter(p => p.roundIndex === session.currentRound)
+  const pushedIds = new Set(session.pushedInjects.map(p => p.inject.id))
+  const unpushedThisRound = (round.injects ?? []).filter(i => !pushedIds.has(i.id))
   // Find facilitatorPerspective from graph round node (not the compiled Round)
   const graph = session.graph
   const facilitatorPerspective = graph && session.graphState
@@ -280,6 +282,14 @@ function NowPanel({ session }: { session: SessionState }) {
             <p className="mt-2 text-xs leading-relaxed whitespace-pre-wrap">{facilitatorPerspective}</p>
           </details>
         )}
+        {unpushedThisRound.length > 0 && (
+          <PushInjectsList
+            title={`Injects te pushen (${unpushedThisRound.length})`}
+            roundIndex={session.currentRound}
+            injects={unpushedThisRound}
+          />
+        )}
+        <PeekAndPushOtherRounds session={session} />
         {injectsForRound.length > 0 && (
           <div className="flex flex-col gap-2">
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -321,6 +331,148 @@ function NowPanel({ session }: { session: SessionState }) {
         <RoundTimer roundStartedAt={session.roundStartedAt} timerMinutes={round.timerMinutes} />
       </div>
     </Panel>
+  )
+}
+
+function PushInjectsList({
+  title,
+  roundIndex,
+  injects,
+}: {
+  title: string
+  roundIndex: number
+  injects: Inject[]
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [pushedLocal, setPushedLocal] = useState<Set<string>>(new Set())
+  const [error, setError] = useState<string | null>(null)
+
+  async function push(injectId: string) {
+    setBusyId(injectId)
+    setError(null)
+    try {
+      await api.pushInject({ roundIndex, injectId })
+      setPushedLocal(prev => new Set(prev).add(injectId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Push failed")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded border border-primary/30 bg-primary/5 px-3 py-2">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
+        {title}
+      </span>
+      <ul className="flex flex-col gap-2">
+        {injects.map(inject => {
+          const localPushed = pushedLocal.has(inject.id)
+          return (
+            <li
+              key={inject.id}
+              className="rounded border border-border bg-background px-3 py-2 flex flex-col gap-1.5"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono text-[9px] uppercase text-primary shrink-0">
+                    {inject.channel ?? inject.type}
+                  </span>
+                  <span className="font-mono text-[9px] uppercase text-muted-foreground shrink-0">
+                    {inject.urgency}
+                  </span>
+                  {inject.targetRoles?.length ? (
+                    <span className="font-mono text-[9px] text-muted-foreground truncate">
+                      → {inject.targetRoles.join(", ")}
+                    </span>
+                  ) : null}
+                </div>
+                <Button
+                  size="sm"
+                  variant={localPushed ? "outline" : "default"}
+                  disabled={busyId !== null || localPushed}
+                  onClick={() => push(inject.id)}
+                  className="h-7 gap-1 font-mono text-[10px] uppercase tracking-wider"
+                >
+                  {localPushed ? (
+                    <>
+                      <Check className="size-3" /> Gepusht
+                    </>
+                  ) : busyId === inject.id ? (
+                    "..."
+                  ) : (
+                    <>
+                      <Send className="size-3" /> Push
+                    </>
+                  )}
+                </Button>
+              </div>
+              <div className="text-xs font-medium">{inject.title}</div>
+              <p className="text-[11px] text-muted-foreground leading-snug whitespace-pre-wrap line-clamp-3">
+                {inject.content}
+              </p>
+            </li>
+          )
+        })}
+      </ul>
+      {error && (
+        <div className="rounded border border-destructive/50 bg-destructive/10 px-2 py-1 text-[10px] text-destructive-foreground">
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PeekAndPushOtherRounds({ session }: { session: SessionState }) {
+  const pushedIds = new Set(session.pushedInjects.map(p => p.inject.id))
+  const otherRounds = session.scenario.rounds
+    .map((r, i) => ({ round: r, index: i }))
+    .filter(({ index, round }) => {
+      if (index === session.currentRound) return false
+      const remaining = (round.injects ?? []).filter(i => !pushedIds.has(i.id))
+      return remaining.length > 0
+    })
+
+  const [openRound, setOpenRound] = useState<number | null>(null)
+  if (otherRounds.length === 0) return null
+
+  const opened = otherRounds.find(r => r.index === openRound)
+  const openedUnpushed = opened
+    ? (opened.round.injects ?? []).filter(i => !pushedIds.has(i.id))
+    : []
+
+  return (
+    <details className="rounded border border-border bg-background/50">
+      <summary className="cursor-pointer select-none px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground">
+        Andere rondes ({otherRounds.length}) — kijk vooruit of gooi injects buiten volgorde
+      </summary>
+      <div className="flex flex-col gap-2 px-3 py-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {otherRounds.map(({ round, index }) => (
+            <button
+              key={index}
+              type="button"
+              onClick={() => setOpenRound(openRound === index ? null : index)}
+              className={`rounded border px-2 py-1 font-mono text-[10px] transition-colors ${
+                openRound === index
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border hover:border-primary/40"
+              }`}
+            >
+              R{index + 1} · {round.title.slice(0, 30)}
+            </button>
+          ))}
+        </div>
+        {opened && openedUnpushed.length > 0 && (
+          <PushInjectsList
+            title={`R${opened.index + 1} — ${openedUnpushed.length} niet-gepusht`}
+            roundIndex={opened.index}
+            injects={openedUnpushed}
+          />
+        )}
+      </div>
+    </details>
   )
 }
 

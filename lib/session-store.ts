@@ -219,15 +219,24 @@ function emit(name: LiveEventName, payload: Record<string, unknown>) {
 // Strips all facilitator-only data before broadcasting to unauthenticated clients.
 // Server-side logic (flagging, scoring) always uses the real stored state.
 
-// If none of an action's allowedRoles is actually joined (also after fallback
-// via ROLE_FALLBACK), open the action up to everyone. Prevents dead options
-// when a session runs with fewer roles than the scenario expects.
+// If none of an action's allowedRoles is actually joined, redirect via ROLE_FALLBACK
+// to a joined role — or, if no fallback works, open the action to everyone.
+// Prevents dead options when a session runs with fewer roles than the scenario expects.
 function expandRolesForJoinedParticipants(action: RoleAction, joinedRoles: Set<Role>): RoleAction {
   if (action.allowedRoles.length === 0) return action
   const anyDirect = action.allowedRoles.some(r => joinedRoles.has(r))
   if (anyDirect) return action
-  const anyFallback = action.allowedRoles.some(r => (ROLE_FALLBACK[r] ?? []).some(f => joinedRoles.has(f)))
-  if (anyFallback) return action
+
+  // Try ROLE_FALLBACK: for each missing role, find the first fallback that IS joined
+  // and use it. Previously this branch returned the action unchanged, which left it
+  // invisible to everyone because allowedRoles still pointed at the absent role.
+  const rerouted = new Set<Role>()
+  for (const missing of action.allowedRoles) {
+    for (const cand of ROLE_FALLBACK[missing] ?? []) {
+      if (joinedRoles.has(cand)) { rerouted.add(cand); break }
+    }
+  }
+  if (rerouted.size > 0) return { ...action, allowedRoles: [...rerouted] }
   return { ...action, allowedRoles: [] }
 }
 
@@ -730,6 +739,7 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
       const now = Date.now()
       let updated = triggerEngine(s, { kind: "auto" })
       updated = { ...updated, status: "active" as const, startedAt: now }
+      updated = withRoleRedistribution(updated)
       updated = withInjectRoutePlan(updated)
       updated = withRoundPhaseState(updated, updated.currentRound, now)
       updated = pushTimeline(updated, "session_started", { roundIndex: updated.currentRound })
@@ -740,6 +750,7 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
     if (s.scenario.rounds.length === 0) return null
     const now = Date.now()
     let updated: SessionState = { ...s, status: "active" as const, currentRound: 0, roundStartedAt: now, startedAt: now }
+    updated = withRoleRedistribution(updated)
     updated = withInjectRoutePlan(updated)
     updated = withRoundPhaseState(updated, 0, now)
     updated = pushTimeline(updated, "session_started", { roundIndex: 0 })
@@ -749,6 +760,55 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
   })
   if (result.ok) emit("start_session", { roundIndex: 0 })
   return result
+}
+
+// Rewrite scenario roleActions.allowedRoles and injects.targetRoles at session-start
+// so that decisions and injects addressed to missing roles fall back to the joined
+// roles via ROLE_FALLBACK. Runtime UI helpers do this too, but doing it once at
+// start makes the facilitator story-view and adaptive-routing snapshot consistent.
+function withRoleRedistribution(session: SessionState): SessionState {
+  const joined = new Set<Role>(
+    session.participants.map(p => p.role).filter((r): r is Role => !!r),
+  )
+  if (joined.size === 0) return session
+
+  function redirectRoles(target: Role[]): Role[] {
+    if (target.length === 0) return target
+    const direct = target.filter(r => joined.has(r))
+    if (direct.length > 0) return direct
+    const rerouted = new Set<Role>()
+    for (const missing of target) {
+      for (const cand of ROLE_FALLBACK[missing] ?? []) {
+        if (joined.has(cand)) { rerouted.add(cand); break }
+      }
+    }
+    // If nothing matched even with fallback, drop the restriction (open to all).
+    return rerouted.size > 0 ? [...rerouted] : []
+  }
+
+  const rewrittenRounds = session.scenario.rounds.map(round => ({
+    ...round,
+    roleActions: round.roleActions?.map(action => {
+      const next = redirectRoles(action.allowedRoles)
+      // Preserve reference equality when nothing changed to keep the diff minimal.
+      const changed = next.length !== action.allowedRoles.length ||
+        next.some((r, i) => r !== action.allowedRoles[i])
+      return changed ? { ...action, allowedRoles: next } : action
+    }),
+    injects: round.injects.map(inject => {
+      if (!inject.targetRoles?.length) return inject
+      const next = redirectRoles(inject.targetRoles)
+      // Preserve targetTeam semantics: if we redirected to nothing, drop targetRoles
+      // rather than emitting [] which would render as "no roles targeted".
+      if (next.length === 0) {
+        const { targetRoles: _t, ...rest } = inject
+        return rest
+      }
+      return { ...inject, targetRoles: next }
+    }),
+  }))
+
+  return { ...session, scenario: { ...session.scenario, rounds: rewrittenRounds } }
 }
 
 // Deel B §1.2 — éénmalige rolresolutie bij session_started. Immutable snapshot;
