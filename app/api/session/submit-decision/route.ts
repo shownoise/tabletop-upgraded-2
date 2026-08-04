@@ -9,7 +9,7 @@ export const runtime = "nodejs"
 
 const MAX_REASONING = 2000
 
-const VALID_ROLES = ["it_manager", "ciso", "head_of_comms", "legal", "ceo", "cfo", "system_admin", "hr_lead", "ops_manager"] as const
+const VALID_ROLES = ["it_manager", "ciso", "head_of_comms", "legal", "ceo", "cfo", "it_manager", "hr_lead", "ops_manager"] as const
 
 const SubmitDecisionBody = z.object({
   participantId: z.string().min(1).max(64),

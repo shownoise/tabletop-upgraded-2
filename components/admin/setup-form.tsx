@@ -17,7 +17,7 @@ import { ROLE_META } from "@/lib/types"
 import type {
   ExerciseConfig, IrRetainerProfile, SimulationMode, AiIntensity, SpecialsMode,
   ITMaturity, SecurityCapability, TeamStructure,
-  DifficultyLevel, Role, ScenarioType, DecisionFramework, ModuleId, GoalId,
+  DifficultyLevel, Role, ScenarioType, ModuleId, GoalId,
 } from "@/lib/types"
 import { Input } from "@/components/ui/input"
 import type { ScenarioGraph } from "@/lib/graph/types"
@@ -37,14 +37,6 @@ const SCENARIO_TYPE_MAP: Record<string, ScenarioType> = {
   "DDoS / Extortion":             "ransomware_double_extortion",
   "Cloud Account Takeover":       "ransomware_double_extortion",
 }
-
-const DECISION_FRAMEWORKS: { id: DecisionFramework; label: string; desc: string }[] = [
-  { id: "bob",     label: "BOB",     desc: "Beeldvorming–Oordeelsvorming–Besluitvorming. NL standaard, goed voor onervaren CMT's." },
-  { id: "ooda",    label: "OODA",    desc: "Observe–Orient–Decide–Act. Snel, iteratief. Goed bij hoge tijdsdruk." },
-  { id: "dair",    label: "DAIR",    desc: "Detect–Assess–Inform–Respond. IR-community standaard." },
-  { id: "nist_ir", label: "NIST-IR", desc: "NIST SP 800-61 cyclus. Goed voor volwassen IR-programma's." },
-  { id: "free",    label: "Vrij",    desc: "Geen vast framework. Open vragen. Goed voor beginners of korte oefeningen." },
-]
 
 const MODULE_LABELS: Record<ModuleId, string> = {
   detection_sensemaking: "Detection & Sensemaking",
@@ -167,8 +159,6 @@ export function SetupForm() {
   // presence as the definitive check.
   const submitBlocked = durationInvalid || rolesInvalid
 
-  // New: decision framework and module slots
-  const [decisionFramework, setDecisionFramework] = useState<DecisionFramework>("bob")
   const [moduleSlots, setModuleSlots] = useState<TemplateModuleSlot[]>(() => {
     const type = SCENARIO_TYPE_MAP[defaults.scenarioType] ?? "ransomware_double_extortion"
     return DEFAULT_MODULE_SETS[type] ?? []
@@ -334,7 +324,6 @@ export function SetupForm() {
           mode,
           aiIntensity: graphId ? "off" : aiIntensity,
           specialsMode,
-          decisionFramework,
           moduleSlots,
           graphId,
           // Send full graph inline as fallback — avoids cross-instance lookup issues
@@ -543,34 +532,6 @@ export function SetupForm() {
         </div>
         </FieldRow>
 
-        <FieldRow label="Fase-timing" hint="Hoe fases binnen een ronde vorderen">
-
-          <div className="grid grid-cols-1 gap-2">
-            {([
-              { id: "fit_to_round", label: "Fit to round", desc: "Sub-phases automatically fit the round budget." },
-              { id: "fixed_durations", label: "Fixed", desc: "Use each phase's hardcoded duration." },
-              { id: "off", label: "Manual", desc: "No auto-advance — facilitator clicks to move on." },
-            ] as const).map(opt => {
-              const cur = config.phaseAutoAdvance ?? "fit_to_round"
-              const active = cur === opt.id
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => update("phaseAutoAdvance", opt.id)}
-                  className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-all ${
-                    active ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40"
-                  }`}
-                >
-                  <span className={`font-mono text-xs font-bold w-24 shrink-0 pt-0.5 ${active ? "text-primary" : "text-foreground"}`}>
-                    {opt.label}
-                  </span>
-                  <span className="text-xs text-muted-foreground leading-relaxed">{opt.desc}</span>
-                </button>
-              )
-            })}
-          </div>
-        </FieldRow>
       </div>
 
       {/* Section 3 — Rollen & tijd */}

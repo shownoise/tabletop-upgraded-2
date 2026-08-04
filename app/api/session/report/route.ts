@@ -48,7 +48,6 @@ export async function GET() {
   const decisions: SubmittedDecision[] = session.submittedDecisions ?? []
   const flags: GovernanceFlag[] = session.governanceFlags ?? []
   const rounds = session.scenario.rounds
-  const facilitatorRoundScores = session.facilitatorRoundScores ?? []
   const specialScores = session.specialScores ?? []
 
   const totalDecisions = decisions.length
@@ -63,7 +62,6 @@ export async function GET() {
   const decisionQuality = totalDecisions > 0 ? Math.round((recommendedCount / totalDecisions) * 100) : 0
   const processAdherence = totalDecisions > 0 ? Math.round((irAlignedCount / totalDecisions) * 100) : 0
   const roleCompliance = totalDecisions > 0 ? Math.round((roleCompliantCount / totalDecisions) * 100) : 0
-  const facilitatorScore = facilitatorRoundScores.reduce((sum, s) => sum + s.score, 0)
 
   // Learning objectives across all rounds
   const allObjectives: Array<{ roundIndex: number; objective: LearningObjective }> = []
@@ -86,7 +84,6 @@ export async function GET() {
     roundTitle: round.title,
     decisions: decisions.filter(d => d.roundIndex === roundIndex),
     flags: flags.filter(f => f.roundIndex === roundIndex),
-    facilitatorScore: facilitatorRoundScores.find(s => s.roundIndex === roundIndex)?.score,
   }))
 
   const hasIrPlan = !!(session.config.irTemplateText) || (session.config.existingPlans?.includes("ir_plan") ?? false)
@@ -99,12 +96,11 @@ export async function GET() {
     mode: session.mode ?? "training",
     totalRounds: rounds.length,
     totalDecisions,
-    scores: { decisionQuality, processAdherence, roleCompliance, facilitatorScore, objectivesAchieved, objectivesTotal },
+    scores: { decisionQuality, processAdherence, roleCompliance, objectivesAchieved, objectivesTotal },
     perRound,
     perObjective,
     topFlags,
     recommendations,
-    facilitatorRoundScores,
     specialScores,
   }
 

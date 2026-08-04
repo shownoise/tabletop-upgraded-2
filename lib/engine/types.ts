@@ -1,3 +1,5 @@
+// Author-side taxonomy: goals a facilitator picks in the setup form. These drive
+// AI prompt directives and preset content selection — they are NOT scoring axes.
 export type GoalId =
   | 'decision_making'
   | 'crisis_management'
@@ -7,6 +9,8 @@ export type GoalId =
   | 'supply_chain_crisis'
   | 'partner_mix'
 
+// Author-side capability tags — combined with GoalId to build AI prompts. Also
+// used to filter which supervision rules apply.
 export type CapabilityId =
   | 'governance_decisions'
   | 'crisis_communication'
@@ -15,24 +19,6 @@ export type CapabilityId =
   | 'ransom_negotiation'
   | 'reputation_management'
   | 'supply_chain_response'
-  | 'gamification'
-
-export type AssessmentDimensionId =
-  | 'decision_speed'
-  | 'decision_quality'
-  | 'escalation_timing'
-  | 'communication_clarity'
-  | 'compliance_awareness'
-  | 'mandate_clarity'
-  | 'dilemma_participation'
-  | 'framework_adherence'
-
-export type RoundActionType =
-  | 'open_discussion'
-  | 'structured_framework'
-  | 'dilemma_card'
-  | 'facilitator_halt'
-  | 'decision_log'
 
 export type DocTemplateId =
   | 'role_card'
@@ -42,98 +28,13 @@ export type DocTemplateId =
   | 'legal_checklist'
   | 'escalation_matrix'
 
-export type GamificationMode = 'subtle' | 'active' | 'competitive'
-
-export interface GamificationConfig {
-  mode: GamificationMode
-  pointsTracked: boolean
-  pointsVisible: boolean
-  leaderboardEnabled: boolean
-  speedBonusEnabled: boolean
-  dilemmaCardsEnabled: boolean
-  twistsEnabled: boolean
-}
-
-export const POINT_EVENTS = {
-  dilemma_voted_fast: 5,
-  decision_logged: 10,
-  escalation_correct: 15,
-  compliance_identified: 20,
-  twist_handled: 25,
-  communication_approved: 15,
-} as const
-
-export type PointEventKey = keyof typeof POINT_EVENTS
-
-export interface AssessmentEvent {
-  timestamp: number
-  dimensionId: AssessmentDimensionId
-  roundNumber: number
-  value: number
-  source: 'facilitator' | 'system' | 'participant_vote'
-  note?: string
-  participantId?: string
-  lesson?: string
-  scoreImpact?: number
-}
-
-export interface SessionAssessment {
-  sessionId: string
-  goalId: GoalId
-  events: AssessmentEvent[]
-  dimensionScores: Partial<Record<AssessmentDimensionId, number>>
-  overallScore: number
-  advice: AssessmentAdvice[]
-}
-
-export interface AssessmentAdvice {
-  dimensionId: AssessmentDimensionId
-  observation: string
-  recommendation: string
-  priority: 'high' | 'medium' | 'low'
-}
-
-export interface AssessmentControl {
-  dimensionId: AssessmentDimensionId
-  label: string
-  value: number
-}
-
-export interface DiscussionPhase {
-  id: string
-  name: string
-  durationSeconds: number
-  participantPrompt: string
-  facilitatorHint: string
-  assessmentTrigger?: {
-    dimensionId: AssessmentDimensionId
-    autoScore?: number
-  }
-}
-
-export interface DilemmaOption {
-  label: string
-  consequence: string
-}
-
-export interface DilemmaCard {
-  id: string
-  capability: CapabilityId
-  question: string
-  optionA: DilemmaOption
-  optionB: DilemmaOption
-  postRevealContext: string
-  assessmentDimension: AssessmentDimensionId
-  availableInGoals: GoalId[]
-}
-
+// Legacy holder — still referenced by facilitator-support builders. Values are
+// facilitator-only Dutch hints displayed during the run view.
 export interface FacilitatorRoundContext {
   roundNumber: number
   activeCapabilities: CapabilityId[]
-  currentPhase?: DiscussionPhase
   observationPrompts: string[]
   complianceTriggers: string[]
   mandateChecks: string[]
-  assessmentControls: AssessmentControl[]
   notes: string
 }

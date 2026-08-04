@@ -24,6 +24,7 @@ import { Palette } from "./palette"
 import { Inspector } from "./inspector"
 import { Toolbar } from "./toolbar"
 import { SettingsPanel } from "./settings-panel"
+import { AiWizardDialog } from "./ai-wizard-dialog"
 import { StartNode } from "./nodes/start-node"
 import { RoundNode } from "./nodes/round-node"
 import { InjectNode } from "./nodes/inject-node"
@@ -137,7 +138,6 @@ function defaultData(type: GraphNodeType, index: number): GraphNodeData {
         key: `outcome_${index}`,
         label: "Outcome",
         narrative: "",
-        scoreImpact: 0,
       } satisfies OutcomeNodeData
     default:
       return { kind: "start" } satisfies StartNodeData
@@ -208,6 +208,7 @@ function InnerCanvas() {
   const [status, setStatus] = useState<{ kind: "info" | "error"; text: string } | null>(null)
   const [startupOpen, setStartupOpen] = useState(true)
   const [templatesPickerOpen, setTemplatesPickerOpen] = useState(false)
+  const [aiWizardOpen, setAiWizardOpen] = useState(false)
 
   const wrapperRef = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition, setCenter, fitView } = useReactFlow()
@@ -244,20 +245,17 @@ function InnerCanvas() {
             id: `opt_${Math.random().toString(36).slice(2, 6)}`,
             label: `CISO — pro-actieve stap voor ${areaLabel}`,
             allowedRole: "ciso",
-            scoreImpacts: { compliance_awareness: 2, decision_quality: 1 },
             qualityRank: "best",
           },
           {
             id: `opt_${Math.random().toString(36).slice(2, 6)}`,
             label: `Legal — vastlegging + juridisch afdekken`,
             allowedRole: "legal",
-            scoreImpacts: { compliance_awareness: 2, communication_clarity: 1 },
             qualityRank: "best",
           },
           {
             id: `opt_${Math.random().toString(36).slice(2, 6)}`,
             label: "Uitstellen tot volgende ronde",
-            scoreImpacts: { compliance_awareness: -2, decision_speed: -1 },
             qualityRank: "poor",
           },
         ],
@@ -683,6 +681,19 @@ function InnerCanvas() {
           <div className="grid grid-cols-1 gap-2">
             <button
               type="button"
+              onClick={() => { setStartupOpen(false); setAiWizardOpen(true) }}
+              className="flex items-start gap-3 rounded-lg border-2 border-primary bg-primary/10 px-4 py-3 text-left transition-colors hover:bg-primary/20"
+            >
+              <Sparkles className="size-4 text-primary shrink-0 mt-0.5" />
+              <div className="flex flex-col">
+                <span className="font-mono text-sm font-medium">AI-wizard (aanbevolen)</span>
+                <span className="text-[11px] text-muted-foreground">
+                  Vul klantcontext in — AI produceert een compleet startscenario met injects, beslissingen en outcomes. Daarna kun je alles tweaken.
+                </span>
+              </div>
+            </button>
+            <button
+              type="button"
               onClick={() => { setStartupOpen(false); setTemplatesPickerOpen(true) }}
               className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-left transition-colors hover:border-primary/60"
             >
@@ -710,6 +721,12 @@ function InnerCanvas() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AiWizardDialog
+        open={aiWizardOpen}
+        onOpenChange={setAiWizardOpen}
+        onGenerated={handleLoad}
+      />
     </div>
   )
 }

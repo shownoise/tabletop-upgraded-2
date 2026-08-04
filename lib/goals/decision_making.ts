@@ -9,21 +9,12 @@ export const decisionMakingGoal: GoalPlugin = {
     'governance_decisions',
     'crisis_communication',
     'legal_compliance',
-    'gamification',
   ],
   defaultScenarioTypes: [
     'ransomware_double_extortion',
     'insider_threat',
     'bec_cfo_fraud',
     'supply_chain_compromise',
-  ],
-  assessmentDimensions: [
-    'decision_speed',
-    'decision_quality',
-    'escalation_timing',
-    'mandate_clarity',
-    'framework_adherence',
-    'dilemma_participation',
   ],
   facilitatorGuide: `## Facilitator Guide — Decision-Making Under Pressure
 

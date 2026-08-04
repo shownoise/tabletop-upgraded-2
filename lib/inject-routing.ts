@@ -1,15 +1,22 @@
-import type { Inject, InjectRoutePlan, Role, Scenario, SessionState } from "@/lib/types"
-import { ROLE_FALLBACK } from "@/lib/types"
+import type { Inject, InjectRoutePlan, Role, Scenario, SessionState, RoleDistributionSnapshot } from "@/lib/types"
 import type { TeamId } from "@/lib/team-roster"
+import { effectiveRolesForParticipant } from "@/lib/engine/distribute-roles"
 
 export interface RoutingInput {
   inject: Inject
   presentRoles: Role[]
   teamRoles: Record<TeamId, Role[]>
+  distribution?: RoleDistributionSnapshot
+  overrides?: Record<string, Role[]>
 }
 
+// Route an inject to the effective set of roles that should see it. If the
+// authored `targetRoles` list is present, resolve each role through the
+// distribution: if a role is absent-primary but assigned as inherited, the
+// participant carrying it gets the inject. Falls back to team-targeting, then
+// to a deterministic single-participant hash.
 export function resolveInjectRecipients(input: RoutingInput): Role[] {
-  const { inject, presentRoles, teamRoles } = input
+  const { inject, presentRoles, teamRoles, distribution, overrides } = input
   if (presentRoles.length === 0) return []
   const present = new Set(presentRoles)
 
@@ -17,13 +24,18 @@ export function resolveInjectRecipients(input: RoutingInput): Role[] {
     const direct = inject.targetRoles.filter(r => present.has(r))
     if (direct.length > 0) return direct
 
-    const viaFallback = new Set<Role>()
-    for (const r of inject.targetRoles) {
-      for (const cand of ROLE_FALLBACK[r] ?? []) {
-        if (present.has(cand)) { viaFallback.add(cand); break }
+    if (distribution) {
+      // Find every participant who inherits any of the missing target roles,
+      // then return their primary roles (which participants actually play).
+      const inherited = new Set<Role>()
+      for (const target of inject.targetRoles) {
+        for (const entry of distribution.entries) {
+          const roles = effectiveRolesForParticipant(entry, overrides?.[entry.participantId])
+          if (roles.includes(target)) inherited.add(entry.primaryRole)
+        }
       }
+      if (inherited.size > 0) return [...inherited]
     }
-    if (viaFallback.size > 0) return [...viaFallback]
   }
 
   const team = inject.targetTeam
@@ -47,6 +59,8 @@ export function plotInjectRoutes(input: {
   presentRoles: Role[]
   teamRoles: Record<TeamId, Role[]>
   previousVersion?: number
+  distribution?: RoleDistributionSnapshot
+  overrides?: Record<string, Role[]>
 }): InjectRoutePlan {
   const routes: Record<string, Role[]> = {}
   const load: Partial<Record<Role, number>> = {}
@@ -58,6 +72,8 @@ export function plotInjectRoutes(input: {
         inject,
         presentRoles: input.presentRoles,
         teamRoles: input.teamRoles,
+        distribution: input.distribution,
+        overrides: input.overrides,
       })
 
       // WHY: stableHash % N tends to pile injects onto the same participant when the scenario
@@ -93,22 +109,11 @@ export function getInjectRecipients(
   const planned = session.injectRoutePlan?.routes[inject.id]
   if (planned && planned.length > 0) return planned
   const presentRoles = session.participants.map(p => p.role).filter((r): r is Role => !!r)
-  // Deel B §1.3 — als er een roleResolution snapshot is, gebruik adaptieve
-  // routing (domein-fallback in plaats van rol-fallback). Zonder snapshot
-  // vallen we terug op het legacy gedrag.
-  if (session.roleResolution) {
-    // Lazy require om circular imports te vermijden (lib/graph → lib/scoring → lib/graph).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { resolveInjectRecipientsAdaptive } = require('@/lib/graph/adaptive-routing') as typeof import('@/lib/graph/adaptive-routing')
-    return resolveInjectRecipientsAdaptive({
-      inject, presentRoles, teamRoles,
-      roleResolution: {
-        effectiveOwners: session.roleResolution.effectiveOwners as Record<import('@/lib/scoring').Domain, import('@/lib/scoring').RoleId | 'NPC'>,
-        rolCoverage: session.roleResolution.rolCoverage,
-        distinctOwners: session.roleResolution.distinctOwners,
-        resolvedAt: session.roleResolution.resolvedAt,
-      },
-    })
-  }
-  return resolveInjectRecipients({ inject, presentRoles, teamRoles })
+  return resolveInjectRecipients({
+    inject,
+    presentRoles,
+    teamRoles,
+    distribution: session.roleDistribution,
+    overrides: session.roleAssignmentOverrides,
+  })
 }

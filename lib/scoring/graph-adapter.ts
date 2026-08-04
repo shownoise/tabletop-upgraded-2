@@ -7,7 +7,6 @@ import type {
   RoleAction, Role, SessionState, SubmittedDecision,
   Inject as AppInject, TimelineEvent,
 } from '@/lib/types'
-import { resolveScoreImpacts } from '@/lib/types'
 import { NO_DECISION_FALLBACK_VECTOR, OUTCOME_DIMENSIONS, type Domain, type OutcomeDimension } from './constants'
 import type {
   DecisionPointSpec, ExerciseEvent, ExerciseInput, InjectSpec,
@@ -259,13 +258,14 @@ function inferOwnerFromOptions(dd: DecisionNodeData): string {
   return 'CRISIS_LEAD'
 }
 
-// Gap 2 workaround — bouw outcomeVector uit ScoreImpacts + qualityRank, tenzij
-// de author expliciet een outcomeVector heeft gezet (dan die gebruiken).
+// Options must carry an explicit outcomeVector on the 6 axes. If missing, the
+// scoring engine treats the option as a no-op — falling back to qualityRank
+// via qualityRankToVector below.
 function optionFromDecision(o: DecisionNodeData['options'][number]): OptionSpec {
   return {
     id: o.id,
     label: o.label,
-    outcomeVector: o.outcomeVector ?? outcomeVectorFromImpacts(resolveScoreImpacts(o), o.qualityRank),
+    outcomeVector: o.outcomeVector ?? qualityRankToVector(o.qualityRank),
     debriefNote: o.lessonLearned ?? o.facilitatorCommentary,
     implicit: o.implicit,
   }
@@ -282,10 +282,21 @@ function decisionPointFromRoleAction(a: RoleAction, round: number): DecisionPoin
     options: [{
       id: a.id,
       label: a.label,
-      outcomeVector: outcomeVectorFromImpacts(resolveScoreImpacts(a), a.qualityRank),
+      outcomeVector: qualityRankToVector(a.qualityRank),
       debriefNote: a.lessonLearned ?? a.facilitatorCommentary,
     }],
   }
+}
+
+// If an author didn't provide an explicit outcomeVector, derive a flat sign
+// across all 6 axes from qualityRank as a last resort. Authors should prefer
+// setting outcomeVector directly — this is a shim, not a design.
+function qualityRankToVector(qualityRank?: string): Record<OutcomeDimension, number> {
+  const out: Record<OutcomeDimension, number> = { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 }
+  const sign = qualityRank === 'best' ? 2 : qualityRank === 'good' ? 1
+           : qualityRank === 'poor' ? -1 : qualityRank === 'wrong' ? -2 : 0
+  for (const d of OUTCOME_DIMENSIONS) out[d] = sign
+  return out
 }
 
 function inferDomainFromRoleAction(a: RoleAction): Domain {
@@ -306,42 +317,6 @@ function inferDomainFromRoleAction(a: RoleAction): Domain {
   return 'EXTERNE_PARTIJEN'
 }
 
-// Map de 8 procesdimensies (`AssessmentDimensionKey`) op de 6 uitkomstdimensies.
-// Deze mapping is een interim-oplossing tot gap 2 er is. Elke procesdim krijgt
-// een "primary" uitkomstdim; qualityRank forceert de sign wanneer geen impacts.
-function outcomeVectorFromImpacts(
-  impacts: Partial<Record<string, number>>,
-  qualityRank?: string,
-): Record<OutcomeDimension, number> {
-  const out: Record<OutcomeDimension, number> = { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 }
-  const mapping: Record<string, OutcomeDimension> = {
-    decision_speed:         'BC',    // snel handelen ↔ continuïteit
-    decision_quality:       'CONT',  // kwaliteit vaak = containment
-    escalation_timing:      'JUR',   // escalatietiming ↔ meldplicht
-    communication_clarity:  'VER',   // heldere communicatie ↔ vertrouwen
-    compliance_awareness:   'JUR',   // compliance = juridisch
-    mandate_clarity:        'CONT',  // mandaat helder = containment werkt
-    dilemma_participation:  'VER',   // teamdynamiek ↔ vertrouwen
-    framework_adherence:    'FOR',   // BOB-framework ↔ forensische discipline
-  }
-  for (const [k, v] of Object.entries(impacts)) {
-    if (typeof v !== 'number') continue
-    const dim = mapping[k]
-    if (!dim) continue
-    out[dim] += Math.max(-2, Math.min(2, v))
-  }
-  // Fallback bij lege impacts: gebruik qualityRank om richting te bepalen.
-  const anyValue = Object.values(out).some(v => v !== 0)
-  if (!anyValue && qualityRank) {
-    const sign = qualityRank === 'best' ? 2 : qualityRank === 'good' ? 1
-             : qualityRank === 'poor' ? -1 : qualityRank === 'wrong' ? -2 : 0
-    for (const d of OUTCOME_DIMENSIONS) out[d] = sign
-  }
-  // Fallback bij geen data + geen quality → fallback-vector.
-  const stillNoData = Object.values(out).every(v => v === 0)
-  if (stillNoData && !qualityRank) return { ...NO_DECISION_FALLBACK_VECTOR, CONT: 0, BC: 0, JUR: 0 }
-  return out
-}
 
 function mapTimelineToEvent(te: TimelineEvent): ExerciseEvent | null {
   const t = te.timestamp
@@ -350,17 +325,11 @@ function mapTimelineToEvent(te: TimelineEvent): ExerciseEvent | null {
       const roundIndex = (te.data.roundIndex as number | undefined) ?? 0
       return { kind: 'round_phase_changed', t, round: roundIndex + 1, toPhase: 'briefing' }
     }
-    case 'discussion_phase_changed': {
-      const roundIndex = (te.data.roundNumber as number | undefined) ?? 0
-      return { kind: 'round_phase_changed', t, round: roundIndex + 1, toPhase: 'overleg' }
-    }
-    case 'inject_pushed':
-    case 'inject_advanced':
-    case 'surprise_inject': {
-      const inject = te.data.inject as { id?: string } | undefined
-      const roundIndex = (te.data.roundIndex as number | undefined) ?? 0
-      if (!inject?.id) return null
-      return { kind: 'inject_received', t, round: roundIndex + 1, injectId: inject.id, recipient: 'ALL' }
+    case 'phase_changed': {
+      const to = te.data.to as string | undefined
+      if (to === 'decision') return { kind: 'round_phase_changed', t, round: 0, toPhase: 'keuze' }
+      if (to === 'review') return { kind: 'round_phase_changed', t, round: 0, toPhase: 'review' }
+      return null
     }
     default:
       return null
@@ -368,21 +337,20 @@ function mapTimelineToEvent(te: TimelineEvent): ExerciseEvent | null {
 }
 
 function submittedDecisionToEvent(d: SubmittedDecision, session: SessionState): ExerciseEvent {
-  // Zoek de round-node om roundIndex → round-number te mappen. In de huidige app is
-  // round.round_number 1-based, roundIndex 0-based.
-  const round = (d.roundIndex ?? 0) + 1
+  const specRole = d.role ? APP_ROLE_TO_SPEC[d.role] : 'CRISIS_LEAD'
   return {
     kind: 'decision_submitted',
-    t: new Date(d.submittedAt).getTime(),
-    round,
-    decisionPointId: d.actionId,   // in de app is er geen aparte decisionPointId — actionId doet dienst
+    t: Date.parse(d.submittedAt) || session.startedAt || session.createdAt,
+    round: d.roundIndex + 1,
+    decisionPointId: d.actionId,
     optionId: d.actionId,
-    by: toSpecRole(d.role),
-    groupId: d.groupId,   // Deel B §4 — voor per-groep scoring
+    by: specRole,
+    groupId: d.groupId,
     confidence: d.confidence,
   }
 }
 
-// Onderaan: interne consistency check — helpt bij regressietests.
-// Voorkom unused-import waarschuwing.
-export const _APP_ROLE_TO_SPEC_KEYS = Object.keys(APP_ROLE_TO_SPEC) as Role[]
+// Silence unused-symbol warnings while the AppInject and NO_DECISION_FALLBACK_VECTOR
+// types remain in scope for future reintroduction. Removing them from imports would
+// require broader signature changes.
+export const __unused = { AppInject: null as unknown as AppInject | null, NO_DECISION_FALLBACK_VECTOR }

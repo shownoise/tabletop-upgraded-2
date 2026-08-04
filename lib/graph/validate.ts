@@ -1,4 +1,6 @@
 import type { DecisionNodeData, GraphNode, InjectNodeData, RoundNodeData, ScenarioGraph } from "./types"
+import type { Role } from "@/lib/types"
+import { ROLE_META } from "@/lib/types"
 import { computeCoverage } from "@/lib/engine/supervision"
 
 export interface GraphIssue {
@@ -187,6 +189,102 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
     const incoming = graph.edges.filter(e => e.target === o.id)
     if (incoming.length === 0) {
       issues.push({ severity: "warning", nodeId: o.id, message: "Outcome heeft geen inkomende decision-paden — onbereikbaar bij spel." })
+    }
+    const od = o.data as { scoreRange?: { min?: number; max?: number } }
+    if (!od.scoreRange || (od.scoreRange.min === undefined && od.scoreRange.max === undefined)) {
+      issues.push({ severity: "warning", nodeId: o.id, message: "Outcome heeft geen scoreRange — de engine kan niet automatisch tussen outcomes kiezen op basis van cumulatieve score." })
+    }
+  }
+
+  // ── Role × round coverage (Phase C) ──────────────────────────
+  // For every authored role appearing anywhere in the graph, every round must
+  // offer at least one option that role can choose. Missing cells are a hard
+  // publish blocker — they cause silent "nothing to decide" for that seat.
+  const authoredRoles = new Set<Role>()
+  for (const round of roundNodes) {
+    const rd = round.data as RoundNodeData
+    for (const a of rd.roleActions ?? []) for (const r of a.allowedRoles) authoredRoles.add(r)
+  }
+  for (const n of graph.nodes) {
+    if (n.type !== "decision") continue
+    const dd = n.data as DecisionNodeData
+    for (const o of dd.options) if (o.allowedRole) authoredRoles.add(o.allowedRole)
+  }
+  // For each authored role, check every round has at least one option for them.
+  const decisionsByRoundNode = new Map<string, DecisionNodeData[]>()
+  for (const edge of graph.edges) {
+    if (edge.type !== "sequence") continue
+    const target = nodesById.get(edge.target)
+    if (target?.type === "decision") {
+      const list = decisionsByRoundNode.get(edge.source) ?? []
+      list.push(target.data as DecisionNodeData)
+      decisionsByRoundNode.set(edge.source, list)
+    }
+  }
+  for (const round of roundNodes) {
+    const rd = round.data as RoundNodeData
+    const roundHasOptionFor = new Set<Role>()
+    for (const a of rd.roleActions ?? []) for (const r of a.allowedRoles) roundHasOptionFor.add(r)
+    for (const dd of decisionsByRoundNode.get(round.id) ?? []) {
+      for (const o of dd.options) if (o.allowedRole) roundHasOptionFor.add(o.allowedRole)
+    }
+    for (const role of authoredRoles) {
+      if (!roundHasOptionFor.has(role)) {
+        issues.push({
+          severity: "error",
+          nodeId: round.id,
+          message: `Rol "${ROLE_META[role]?.label ?? role}" heeft geen beslisoptie in ronde "${rd.title || round.id.slice(0, 8)}". Elke rol die ergens in het scenario voorkomt moet in elke ronde iets te beslissen hebben.`,
+        })
+      }
+    }
+  }
+
+  // ── Decision options must carry outcomeVector (Phase E scoring) ──
+  for (const n of graph.nodes) {
+    if (n.type !== "decision") continue
+    const dd = n.data as DecisionNodeData
+    for (const o of dd.options) {
+      if (o.implicit) continue  // "geen besluit" — implicit vector handled by engine
+      if (!o.outcomeVector) {
+        issues.push({
+          severity: "warning",
+          nodeId: n.id,
+          message: `Optie "${o.label}" heeft geen outcomeVector — zonder trade-off op de 6 dimensies vervalt de scoring naar de qualityRank-fallback.`,
+        })
+      } else {
+        // Sanity check on values.
+        const dims: Array<'CONT' | 'FOR' | 'BC' | 'JUR' | 'VER' | 'KOS'> = ['CONT', 'FOR', 'BC', 'JUR', 'VER', 'KOS']
+        for (const d of dims) {
+          const v = o.outcomeVector[d]
+          if (typeof v !== "number") {
+            issues.push({ severity: "error", nodeId: n.id, message: `Optie "${o.label}" mist een numerieke waarde op dimensie ${d}.` })
+          } else if (v < -3 || v > 3) {
+            issues.push({ severity: "warning", nodeId: n.id, message: `Optie "${o.label}" — waarde ${v} op ${d} valt buiten de aanbevolen −2..+2 range.` })
+          }
+        }
+      }
+    }
+  }
+
+  // ── Melding-moment integrity (Phase D) ──────────────────────
+  for (const round of roundNodes) {
+    const rd = round.data as RoundNodeData
+    for (const moment of rd.meldingMoments ?? []) {
+      if (moment.types.length === 0) {
+        issues.push({ severity: "error", nodeId: round.id, message: `Melding-moment "${moment.id}" heeft geen types.` })
+      }
+      for (const t of moment.types) {
+        if (t.triggersInjectId) {
+          const injectExists = graph.nodes.some(n => n.id === t.triggersInjectId && n.type === "inject")
+          if (!injectExists) {
+            issues.push({
+              severity: "error",
+              nodeId: round.id,
+              message: `Melding-type "${t.label}" verwijst naar inject "${t.triggersInjectId}" die niet bestaat.`,
+            })
+          }
+        }
+      }
     }
   }
 

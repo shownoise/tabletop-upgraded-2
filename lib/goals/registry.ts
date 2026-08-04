@@ -10,7 +10,6 @@ function comingSoon(id: GoalId, name: string, description: string): GoalPlugin {
     status: 'coming_soon',
     capabilities: [],
     defaultScenarioTypes: [],
-    assessmentDimensions: [],
     facilitatorGuide: '',
     participantBriefing: '',
   }

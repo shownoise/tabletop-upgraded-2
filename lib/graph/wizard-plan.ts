@@ -4,23 +4,24 @@ import type {
   OutcomeNodeData,
   RoundNodeData,
   ScenarioGraph,
-  SpecialNodeData,
+  OutcomeVector,
 } from "./types"
+import { EYE_SECURITY_RETAINER, DEFAULT_MELDPLICHT, DEFAULT_FEATURES } from "./types"
 import type {
-  AssessmentDimensionKey,
-  BobPhase,
+  ChoiceQuality,
   InjectChannel,
   InjectReliability,
   InjectType,
+  MeldingMoment,
+  MeldingRecipient,
   Role,
   RoleAction,
   ScenarioType,
-  SpecialType,
   Urgency,
 } from "@/lib/types"
 
-// The AI returns a "plan" (a compact, LLM-friendly shape).
-// We convert it into a full ScenarioGraph with correct edges and coordinates.
+// The AI returns a "plan" — a compact, LLM-friendly shape. planToGraph converts
+// it to a full ScenarioGraph with correct edges, coordinates, and defaults.
 
 export interface WizardPlanRoleAction {
   id: string
@@ -30,13 +31,14 @@ export interface WizardPlanRoleAction {
   isRecommended?: boolean
   irPlanAligned: boolean
   consequence?: string
-  scoreImpact?: number
-  linkedDimension?: AssessmentDimensionKey
+  qualityRank?: ChoiceQuality
+  facilitatorCommentary?: string
   lessonLearned?: string
   respondsToMisleading?: boolean
 }
 
 export interface WizardPlanInject {
+  id?: string      // author may reference this from meldingMoment.types[].triggersInjectId
   type: InjectType
   channel?: InjectChannel
   title: string
@@ -52,49 +54,61 @@ export interface WizardPlanInject {
   deliverySeconds?: number
 }
 
+export interface WizardPlanMeldingType {
+  id: string
+  label: string
+  triggersInjectId?: string  // matches an inject id anywhere in the plan
+}
+
+export interface WizardPlanMeldingMoment {
+  id: string
+  allowedRoles: Role[]
+  recipient: MeldingRecipient
+  helper?: string
+  types: WizardPlanMeldingType[]
+}
+
 export interface WizardPlanRound {
   title: string
   situation: string
   timerMinutes?: number
   roleActions?: WizardPlanRoleAction[]
   injects?: WizardPlanInject[]
+  meldingMoment?: WizardPlanMeldingMoment
   discussionGoal?: string
   keyQuestions?: string[]
   hints?: string[]
   expectedDecisions?: string[]
   redFlags?: string[]
-  bobPhase?: BobPhase
   openingPrompts?: string[]
   facilitatorPerspective?: string
 }
 
+// Per-round decision — participants pick one option that carries an explicit
+// outcomeVector on the 6 axes. This is the primary scoring signal.
 export interface WizardPlanDecision {
   afterRoundIndex: number
   prompt: string
-  measuredBy?: "participant_choice" | "facilitator_trigger"
+  perRole?: boolean
   options: Array<{
     label: string
     linksToRoleActionId?: string
-    leadsTo: string // "round:<index>" | "outcome:<key>" | "special:<key>"
+    leadsTo: string  // "round:<index>" | "outcome:<key>"
+    allowedRole?: Role
+    outcomeVector?: OutcomeVector
+    qualityRank?: ChoiceQuality
+    facilitatorCommentary?: string
+    lessonLearned?: string
+    implicit?: boolean
   }>
-}
-
-export interface WizardPlanSpecial {
-  key: string
-  afterRoundIndex: number
-  type: SpecialType
-  assignedRole?: Role
-  goodLeadsTo: string
-  badLeadsTo: string
 }
 
 export interface WizardPlanOutcome {
   key: string
   label: string
   narrative: string
-  scoreImpact?: number
-  linkedDimension?: AssessmentDimensionKey
   lessonLearned?: string
+  scoreRange?: { min?: number; max?: number }
 }
 
 export interface WizardPlan {
@@ -102,9 +116,7 @@ export interface WizardPlan {
   scenarioType: ScenarioType
   rounds: WizardPlanRound[]
   decisions?: WizardPlanDecision[]
-  specials?: WizardPlanSpecial[]
   outcomes: WizardPlanOutcome[]
-  irRetainerName?: string
   irPlaybook?: string
 }
 
@@ -116,14 +128,12 @@ function resolveTarget(
   ref: string,
   roundNodeIds: string[],
   outcomeIdByKey: Map<string, string>,
-  specialIdByKey: Map<string, string>,
 ): string | null {
   if (ref.startsWith("round:")) {
     const idx = parseInt(ref.slice(6), 10)
     return roundNodeIds[idx] ?? null
   }
   if (ref.startsWith("outcome:")) return outcomeIdByKey.get(ref.slice(8)) ?? null
-  if (ref.startsWith("special:")) return specialIdByKey.get(ref.slice(8)) ?? null
   return null
 }
 
@@ -133,18 +143,23 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
 
   const roundNodeIds = plan.rounds.map(() => nid("round"))
   const outcomeIdByKey = new Map<string, string>()
-  const specialIdByKey = new Map<string, string>()
-
   for (const o of plan.outcomes) outcomeIdByKey.set(o.key, nid("out"))
-  for (const s of (plan.specials ?? [])) specialIdByKey.set(s.key, nid("spec"))
+
+  // Second pass: assign inject ids up-front so meldingMoment.triggersInjectId
+  // (author-supplied string ids) can be mapped to real node ids.
+  const injectIdMap = new Map<string, string>()  // author-id → real-node-id
+  plan.rounds.forEach(round => {
+    for (const inj of round.injects ?? []) {
+      if (inj.id) injectIdMap.set(inj.id, nid("inj"))
+    }
+  })
 
   const nodes: ScenarioGraph["nodes"] = []
   const edges: ScenarioGraph["edges"] = []
 
-  // Layout constants
-  const startX = 40, roundX0 = 260, roundStep = 300
+  const startX = 40, roundX0 = 260, roundStep = 320
   const rowY = 200
-  const injectY = 430
+  const injectY = 440
 
   nodes.push({ id: startId, type: "start", position: { x: startX, y: rowY + 40 }, data: { kind: "start" } })
 
@@ -158,20 +173,37 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
       isRecommended: a.isRecommended ?? false,
       irPlanAligned: a.irPlanAligned ?? true,
       consequence: a.consequence,
-      scoreImpact: a.scoreImpact,
-      linkedDimension: a.linkedDimension,
+      qualityRank: a.qualityRank,
+      facilitatorCommentary: a.facilitatorCommentary,
       lessonLearned: a.lessonLearned,
       respondsToMisleading: a.respondsToMisleading,
     }))
+
+    // Resolve triggersInjectId author-id → node-id
+    const meldingMoment: MeldingMoment | undefined = round.meldingMoment
+      ? {
+          id: round.meldingMoment.id,
+          allowedRoles: round.meldingMoment.allowedRoles,
+          recipient: round.meldingMoment.recipient,
+          helper: round.meldingMoment.helper,
+          roundIndex: idx,
+          types: round.meldingMoment.types.map(t => ({
+            id: t.id,
+            label: t.label,
+            triggersInjectId: t.triggersInjectId ? injectIdMap.get(t.triggersInjectId) : undefined,
+          })),
+        }
+      : undefined
+
     const roundData: RoundNodeData = {
       kind: "round",
       title: round.title,
       situation_update: round.situation,
       timerMinutes: round.timerMinutes ?? 15,
       roleActions,
-      bobPhase: round.bobPhase,
       openingPrompts: round.openingPrompts,
       facilitatorPerspective: round.facilitatorPerspective,
+      meldingMoments: meldingMoment ? [meldingMoment] : undefined,
       facilitatorNotes: {
         discussionGoal: round.discussionGoal ?? "",
         keyQuestions: round.keyQuestions ?? [],
@@ -187,9 +219,8 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
       data: roundData,
     })
 
-    // Injects hang below
     ;(round.injects ?? []).forEach((inj, ii) => {
-      const injectId = nid("inj")
+      const injectId = (inj.id && injectIdMap.get(inj.id)) || nid("inj")
       const data: InjectNodeData = {
         kind: "inject",
         type: inj.type,
@@ -216,7 +247,7 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
     })
   })
 
-  // Outcomes — place them in a stack on the right
+  // Outcomes stacked on the right of the last round.
   const outcomeXBase = roundX0 + plan.rounds.length * roundStep + 100
   plan.outcomes.forEach((o, i) => {
     const oid = outcomeIdByKey.get(o.key)!
@@ -225,78 +256,46 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
       key: o.key,
       label: o.label,
       narrative: o.narrative,
-      scoreImpact: o.scoreImpact,
-      linkedDimension: o.linkedDimension,
       lessonLearned: o.lessonLearned,
+      scoreRange: o.scoreRange,
     }
     nodes.push({
       id: oid,
       type: "outcome",
-      position: { x: outcomeXBase, y: 60 + i * 140 },
+      position: { x: outcomeXBase, y: 60 + i * 160 },
       data,
     })
   })
 
-  // Specials
-  ;(plan.specials ?? []).forEach((sp, i) => {
-    const sid = specialIdByKey.get(sp.key)!
-    const data: SpecialNodeData = {
-      kind: "special",
-      type: sp.type,
-      assignedRole: sp.assignedRole,
-      thresholds: [
-        { id: "bad", label: "Slecht (< 0)", predicate: { op: "<", value: 0 } },
-        { id: "good", label: "Goed (>= 0)", predicate: { op: ">=", value: 0 } },
-      ],
-    }
-    const anchorRound = sp.afterRoundIndex
-    const x = roundX0 + (anchorRound + 1) * roundStep - 50
-    nodes.push({
-      id: sid,
-      type: "special",
-      position: { x, y: rowY - 40 + i * 220 },
-      data,
-    })
-    // Connect the anchor round to the special
-    if (roundNodeIds[anchorRound]) {
-      edges.push({ id: nid("e"), source: roundNodeIds[anchorRound], target: sid, type: "sequence" })
-    }
-    // Threshold edges
-    const goodTarget = resolveTarget(sp.goodLeadsTo, roundNodeIds, outcomeIdByKey, specialIdByKey)
-    const badTarget = resolveTarget(sp.badLeadsTo, roundNodeIds, outcomeIdByKey, specialIdByKey)
-    if (goodTarget) edges.push({ id: nid("e"), source: sid, target: goodTarget, sourceHandle: "good", type: "branch", label: "Goed" })
-    if (badTarget) edges.push({ id: nid("e"), source: sid, target: badTarget, sourceHandle: "bad", type: "branch", label: "Slecht" })
-  })
-
-  // Sequence: connect Start → Round[0]
+  // Start → Round 0
   if (roundNodeIds.length > 0) {
     edges.push({ id: nid("e"), source: startId, target: roundNodeIds[0], type: "sequence" })
   }
 
-  // Handle decisions BETWEEN rounds and sequential Round→Round connections
+  // Decisions between rounds (or sequential Round → Round when no decision).
   const decisionsByAfter = new Map<number, WizardPlanDecision>()
   for (const d of (plan.decisions ?? [])) decisionsByAfter.set(d.afterRoundIndex, d)
 
-  // A special is attached to a round via a sequence edge; the next round should come from the special's targets.
-  // But we've already wired specials. For rounds without a special or decision after them, sequential linking.
-  const specialByAfter = new Map<number, WizardPlanSpecial>()
-  for (const s of (plan.specials ?? [])) specialByAfter.set(s.afterRoundIndex, s)
-
   for (let i = 0; i < plan.rounds.length; i++) {
     const decision = decisionsByAfter.get(i)
-    const special = specialByAfter.get(i)
     if (decision) {
-      // Create a decision node between round i and next round(s)
       const did = nid("dec")
       const options = decision.options.map(opt => ({
         id: nid("opt"),
         label: opt.label,
         roleActionId: opt.linksToRoleActionId,
+        allowedRole: opt.allowedRole,
+        outcomeVector: opt.outcomeVector,
+        qualityRank: opt.qualityRank,
+        facilitatorCommentary: opt.facilitatorCommentary,
+        lessonLearned: opt.lessonLearned,
+        implicit: opt.implicit,
       }))
       const data: DecisionNodeData = {
         kind: "decision",
         prompt: decision.prompt,
-        measuredBy: decision.measuredBy ?? "participant_choice",
+        measuredBy: "participant_choice",
+        perRole: decision.perRole ?? true,
         options,
       }
       nodes.push({
@@ -307,7 +306,7 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
       })
       edges.push({ id: nid("e"), source: roundNodeIds[i], target: did, type: "sequence" })
       decision.options.forEach((opt, oi) => {
-        const target = resolveTarget(opt.leadsTo, roundNodeIds, outcomeIdByKey, specialIdByKey)
+        const target = resolveTarget(opt.leadsTo, roundNodeIds, outcomeIdByKey)
         if (target) {
           edges.push({
             id: nid("e"),
@@ -319,7 +318,7 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
           })
         }
       })
-    } else if (!special && roundNodeIds[i + 1]) {
+    } else if (roundNodeIds[i + 1]) {
       edges.push({ id: nid("e"), source: roundNodeIds[i], target: roundNodeIds[i + 1], type: "sequence" })
     }
   }
@@ -333,7 +332,10 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
     updatedAt: now,
     nodes,
     edges,
-    irRetainerName: plan.irRetainerName,
+    irRetainerName: EYE_SECURITY_RETAINER.name,
+    irRetainerProfile: EYE_SECURITY_RETAINER,
     irPlaybook: plan.irPlaybook,
+    meldplicht: DEFAULT_MELDPLICHT,
+    features: DEFAULT_FEATURES,
   }
 }

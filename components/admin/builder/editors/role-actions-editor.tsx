@@ -6,20 +6,10 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { ROLE_META } from "@/lib/types"
-import type { AssessmentDimensionKey, ChoiceQuality, Role, RoleAction, ScoreImpacts } from "@/lib/types"
+import type { ChoiceQuality, Role, RoleAction } from "@/lib/types"
 import { SUPERVISION_AREAS, type SupervisionArea } from "@/lib/engine/supervision"
 
 const ALL_ROLES = Object.keys(ROLE_META) as Role[]
-
-// We tonen alleen 4 primaire dimensies in de builder — houdt de UI + scoring
-// uitlegbaar. Legacy scoreImpact/linkedDimension blijft in de data mocht een
-// scenario nog de oude vorm gebruiken.
-const PRIMARY_DIMS: Array<{ key: AssessmentDimensionKey; label: string; hint: string }> = [
-  { key: 'decision_speed',       label: 'Snelheid',      hint: 'Reageert het team op tijd?' },
-  { key: 'decision_quality',     label: 'Kwaliteit',     hint: 'Is de keuze inhoudelijk goed onderbouwd?' },
-  { key: 'compliance_awareness', label: 'Compliance',    hint: 'Meldplicht / NIS2 / AVG in acht genomen?' },
-  { key: 'communication_clarity',label: 'Communicatie',  hint: 'Duidelijk richting stakeholders?' },
-]
 
 const QUALITY_RANKS: Array<{ key: ChoiceQuality; label: string; className: string }> = [
   { key: 'best',  label: 'Best',      className: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40' },
@@ -149,25 +139,9 @@ export function RoleActionsEditor({ value, onChange, suggestedIdPrefix = "act" }
             placeholder="Consequence (optional)"
             className="text-xs"
           />
-          {/* Scoring block — multi-dim + qualityRank + commentary */}
+          {/* Scoring block — qualityRank + commentary. Outcome vectors live on
+              DecisionNode options, not on RoleActions. */}
           <div className="flex flex-col gap-2 mt-1 pt-2 border-t border-border">
-            <Label className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Score-impact per dimensie</Label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {PRIMARY_DIMS.map(d => (
-                <DimInput
-                  key={d.key}
-                  label={d.label}
-                  hint={d.hint}
-                  value={action.scoreImpacts?.[d.key]}
-                  onChange={v => {
-                    const nextMap: ScoreImpacts = { ...(action.scoreImpacts ?? {}) }
-                    if (v === undefined || v === 0) delete nextMap[d.key]
-                    else nextMap[d.key] = v
-                    update(idx, { scoreImpacts: Object.keys(nextMap).length ? nextMap : undefined })
-                  }}
-                />
-              ))}
-            </div>
             <div className="flex items-center gap-1.5">
               <Label className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground shrink-0">Kwaliteit</Label>
               <div className="flex gap-1 flex-1">
@@ -209,7 +183,7 @@ export function RoleActionsEditor({ value, onChange, suggestedIdPrefix = "act" }
                 onChange={e => update(idx, { respondsToMisleading: e.target.checked || undefined })}
                 className="size-3"
               />
-              <span>Reactie op misleidend signaal (auto -6 framework_adherence)</span>
+              <span>Reactie op misleidend signaal</span>
             </label>
             <details className="text-[11px]">
               <summary className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground cursor-pointer">
@@ -296,27 +270,3 @@ export function RoleActionsEditor({ value, onChange, suggestedIdPrefix = "act" }
   )
 }
 
-function DimInput({ label, hint, value, onChange }: {
-  label: string
-  hint: string
-  value: number | undefined
-  onChange: (v: number | undefined) => void
-}) {
-  return (
-    <label className="flex items-center gap-1.5 rounded border border-border bg-background px-1.5 py-1" title={hint}>
-      <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground flex-1 min-w-0 truncate">{label}</span>
-      <Input
-        type="number"
-        min={-5}
-        max={5}
-        value={value ?? ""}
-        onChange={e => {
-          const raw = e.target.value
-          onChange(raw === "" ? undefined : Number(raw))
-        }}
-        placeholder="0"
-        className="h-6 w-14 font-mono text-[11px] text-right"
-      />
-    </label>
-  )
-}

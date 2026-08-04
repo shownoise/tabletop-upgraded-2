@@ -168,45 +168,20 @@ export default function ObservePage() {
             </div>
           )}
 
-          {/* BOB/OODA phase panel — shown during discussion */}
-          {session.roundPhase === "discussion" && session.currentDiscussionPrompt && (() => {
-            const framework = session.config?.decisionFramework
-            const phaseIndex = session.currentDiscussionPhaseIndex ?? 0
-            const BOB_NAMES = ["Beeldvorming", "Oordeelvorming", "Besluitvorming"]
-            const OODA_NAMES = ["Observe", "Orient", "Decide", "Act"]
-            const phaseNames = framework === 'ooda' ? OODA_NAMES : BOB_NAMES
-            const totalPhases = phaseNames.length
-            const phaseName = phaseNames[phaseIndex] ?? phaseNames[0]
-            return (
-              <div
-                className="border border-tt-border bg-tt-surface overflow-hidden"
-                style={{ borderLeft: "3px solid var(--tt-accent)" }}
-              >
-                <div className="flex items-center justify-between px-4 py-2.5 bg-tt-bright/5 border-b border-tt-border">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">
-                      {framework === 'ooda' ? "OODA" : "BOB"} — Fase {phaseIndex + 1}/{totalPhases}
-                    </span>
-                    <span className="font-mono text-[9px] text-tt-bright font-bold">{phaseName}</span>
-                  </div>
-                </div>
-                <div className="px-4 py-3 flex flex-col gap-3">
-                  <p className="font-mono text-xs text-tt-bright leading-relaxed">{session.currentDiscussionPrompt}</p>
-                  <div className="flex gap-1.5">
-                    {Array.from({ length: totalPhases }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="h-1 flex-1"
-                        style={{
-                          backgroundColor: i <= phaseIndex ? "var(--tt-accent)" : "var(--tt-border)",
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
+          {/* Discussion phase hint — BOB as suggested working method, no engine state */}
+          {session.roundPhase === "discussion" && (
+            <div
+              className="border border-tt-border bg-tt-surface overflow-hidden"
+              style={{ borderLeft: "3px solid var(--tt-accent)" }}
+            >
+              <div className="px-4 py-3 flex flex-col gap-1">
+                <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">Discussie</span>
+                <p className="font-mono text-xs text-tt-bright leading-relaxed">
+                  Overweeg BOB (Beeldvorming — Oordeelsvorming — Besluitvorming) om deze fase te structureren.
+                </p>
               </div>
-            )
-          })()}
+            </div>
+          )}
 
           {/* Decision phase indicator */}
           {session.roundPhase === "decision" && (

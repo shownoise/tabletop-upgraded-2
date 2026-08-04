@@ -284,10 +284,9 @@ function timestampFromIso(iso: string | undefined, fallback: number): number {
   return isNaN(t) ? fallback : t
 }
 
-function decisionOptimalityFromScoreImpact(scoreImpact: number | undefined): 'optimal' | 'neutral' | 'bad' {
-  if (typeof scoreImpact !== 'number') return 'neutral'
-  if (scoreImpact >= 1) return 'optimal'
-  if (scoreImpact <= -1) return 'bad'
+function decisionOptimalityFromQuality(qualityRank: string | undefined): 'optimal' | 'neutral' | 'bad' {
+  if (qualityRank === 'best' || qualityRank === 'good') return 'optimal'
+  if (qualityRank === 'poor' || qualityRank === 'wrong') return 'bad'
   return 'neutral'
 }
 
@@ -295,7 +294,6 @@ interface DecisionEvidenceItem {
   area: SupervisionArea
   optimality: 'optimal' | 'neutral' | 'bad'
   evidence: SupervisionEvidence
-  scoreImpact?: number
 }
 
 export function collectDecisionEvidence(session: PseudoSessionState): DecisionEvidenceItem[] {
@@ -310,16 +308,14 @@ export function collectDecisionEvidence(session: PseudoSessionState): DecisionEv
     const scenarioRound = session.scenario?.rounds?.[roundIndex]
     const action = scenarioRound?.roleActions?.find(a => a.id === d.actionId)
     const areasFromAction = action?.supervisionAreas ?? []
-    const scoreImpact = action?.scoreImpact
     const ts = timestampFromIso(d.submittedAt, startedAt)
     const summary = `Besluit R${roundIndex + 1}: ${d.actionLabel} — door ${d.participantName}`
-    const optimality = decisionOptimalityFromScoreImpact(scoreImpact)
+    const optimality = decisionOptimalityFromQuality(action?.qualityRank)
     const areas = areasFromAction.length > 0 ? areasFromAction : []
     for (const area of areas) {
       out.push({
         area,
         optimality,
-        scoreImpact,
         evidence: {
           kind: 'decision',
           timestamp: ts,
@@ -697,8 +693,7 @@ export function previewSupervisionReport(graph: ScenarioGraph, outcomeId: string
       const dd = node.data as DecisionNodeData
       const chosenOptionId = graph.edges.find(e => e.source === node.id && visited.has(e.target))?.sourceHandle
       const chosen = dd.options.find(o => o.id === chosenOptionId)
-      const scoreImpact = chosen?.scoreImpact
-      const optimality = decisionOptimalityFromScoreImpact(scoreImpact)
+      const optimality = decisionOptimalityFromQuality(chosen?.qualityRank)
       for (const area of dd.supervisionAreas ?? []) {
         const ev: SupervisionEvidence = {
           kind: 'decision',
@@ -707,7 +702,7 @@ export function previewSupervisionReport(graph: ScenarioGraph, outcomeId: string
           relatedIds: chosen ? [chosen.id] : [],
           supervisionArea: area,
         }
-        decisionItems.push({ area, optimality, scoreImpact, evidence: ev })
+        decisionItems.push({ area, optimality, evidence: ev })
         timeline.push(ev)
       }
     }

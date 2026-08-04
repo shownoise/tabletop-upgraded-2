@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2, Sparkles } from "lucide-react"
+import { AiWizardDialog } from "./ai-wizard-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -54,6 +55,7 @@ export function Toolbar({
 }: Props) {
   const [loadOpen, setLoadOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [aiWizardOpen, setAiWizardOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [dryRunOpen, setDryRunOpen] = useState(false)
   const [loadable, setLoadable] = useState<ScenarioGraph[] | null>(null)
@@ -106,6 +108,15 @@ export function Toolbar({
 
       {/* Content group — starting a new scenario or reusing existing content */}
       <div className="flex items-center gap-1 pl-2 border-l border-border">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setAiWizardOpen(true)}
+          title="AI-wizard — genereer een startpunt op basis van klantcontext"
+          className="gap-1 text-primary hover:text-primary"
+        >
+          <Sparkles className="size-3.5" /> AI-wizard
+        </Button>
         <Button size="sm" variant="ghost" onClick={handleNew} title="Nieuw leeg canvas">Nieuw</Button>
         <Button size="sm" variant="ghost" onClick={() => setTemplatesOpen(true)} title="Kant-en-klare voorbeeldscenario's">Voorbeelden</Button>
         <Button size="sm" variant="ghost" onClick={openLoad} title="Laad opgeslagen scenario">Laden</Button>
@@ -157,6 +168,7 @@ export function Toolbar({
 
       <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} graph={graph} />
       <DryRunDialog open={dryRunOpen} onOpenChange={setDryRunOpen} graph={graph} />
+      <AiWizardDialog open={aiWizardOpen} onOpenChange={setAiWizardOpen} onGenerated={onLoad} />
 
       <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
         <DialogContent className="max-w-lg">

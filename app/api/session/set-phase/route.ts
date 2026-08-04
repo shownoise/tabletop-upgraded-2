@@ -4,8 +4,8 @@ import { requireFacilitator } from "@/lib/auth-guard"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-const PHASES: RoundPhase[] = ["inject", "discussion", "decision", "lock", "review"]
-const PHASE_ORDER: Record<RoundPhase, number> = { inject: 0, discussion: 1, decision: 2, lock: 3, review: 4 }
+const PHASES: RoundPhase[] = ["inject", "discussion", "decision", "review"]
+const PHASE_ORDER: Record<RoundPhase, number> = { inject: 0, discussion: 1, decision: 2, review: 3 }
 
 export async function POST(req: Request) {
   const gate = await requireFacilitator()

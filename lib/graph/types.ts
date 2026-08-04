@@ -6,12 +6,10 @@ import type {
   SpecialType,
   Role,
   ScenarioType,
-  AssessmentDimensionKey,
-  BobPhase,
   ChoiceQuality,
   IrRetainerProfile,
   NotificationType,
-  ScoreImpacts,
+  MeldingMoment,
 } from "@/lib/types"
 import type { SupervisionArea } from "@/lib/engine/supervision"
 
@@ -57,21 +55,18 @@ export interface RoundNodeData {
   roleActions?: RoleAction[]
   learningObjectives?: LearningObjective[]
   facilitatorNotes?: FacilitatorNotes
-  // BOB-fase — verschijnt als subtiel badge bij participants
-  bobPhase?: BobPhase
-  // 2-3 vragen die het team direct kan bespreken bij ronde-start
+  // 2-3 questions the team can discuss at round start.
   openingPrompts?: string[]
-  // "Vanuit IR-perspectief" — alleen zichtbaar voor facilitator (jij als IR-consultant)
+  // IR-consultant's perspective — facilitator-only.
   facilitatorPerspective?: string
   evaluationAspects?: EvaluationAspect[]
   dynamic?: DynamicFillConfig
-  // Optionele prompt-template die bij sessie-start naar Claude wordt gestuurd.
-  // Ondergaat éérst dynamic-fill van tokens ({{sector}} etc.), daarna wordt
-  // de gerichte prompt naar Claude gestuurd; de response vervangt title +
-  // situation_update. Bij fout blijft de originele tekst staan.
   aiPromptTemplate?: string
-  // Deel A §5/§7.1 — scoring-annotatie voor deze ronde. Opt-in.
+  // Deel A §5/§7.1 — scoring annotation for this round. Opt-in.
   scoring?: RoundScoringConfig
+  // Phase D — melding-moments open during this round. A participant can file one
+  // per moment; the engine spawns the corresponding follow-up inject.
+  meldingMoments?: MeldingMoment[]
 }
 
 export interface InjectNodeData extends Omit<Inject, "id"> {
@@ -123,21 +118,17 @@ export interface DecisionNodeData {
     id: string
     label: string
     roleActionId?: string
-    // allowedRole: alleen deze rol ziet deze optie als kiesbaar. Als er
-    // niemand met deze rol is geïnnjoined + geen fallback → optie wordt
-    // voor iedereen kiesbaar (in de participant view).
-    // Undefined = beschikbaar voor alle rollen.
+    // Only participants with this role see this option as selectable. Undefined =
+    // any role. If the role is not present, distributeRoles() reassigns; the option
+    // then becomes selectable for the inheriting participant.
     allowedRole?: Role
-    scoreImpact?: number                       // legacy single-dim
-    linkedDimension?: AssessmentDimensionKey   // legacy single-dim
-    scoreImpacts?: ScoreImpacts                // new: multi-dim trade-off
     qualityRank?: ChoiceQuality
     facilitatorCommentary?: string
     lessonLearned?: string
-    // Deel A §5 — expliciete outcomeVector −2..+2 per dimensie. Als undefined
-    // valt de scoring-adapter terug op scoreImpacts+qualityRank inferentie.
+    // Deel A §5 — explicit outcome vector on the 6 dimensions (−2..+2). Required
+    // in the new schema; delta-scoring reads this directly.
     outcomeVector?: OutcomeVector
-    // Deel B §7.1 — impliciete "geen besluit" optie.
+    // Deel B §7.1 — implicit "no decision" option.
     implicit?: boolean
   }>
   // Soft-decision: als false, blokkeert deze decision de graph-flow niet.
@@ -185,14 +176,11 @@ export interface OutcomeNodeData {
   key: string
   label: string
   narrative: string
-  scoreImpact?: number
-  linkedDimension?: AssessmentDimensionKey
   lessonLearned?: string
-  // Cumulatieve-score bandbreedte die deze outcome triggert. Als features.scoring
-  // aan staat en de graph meerdere outcomes met scoreRange heeft, kiest de engine
-  // automatisch de outcome waar de totaalscore in valt.
-  // min inclusief, max inclusief. Beide optioneel — laat max weg voor "≥ min",
-  // laat min weg voor "≤ max".
+  // Cumulative-score range that triggers this outcome. If features.scoring is on
+  // and the graph has multiple outcomes with scoreRange, the engine automatically
+  // picks the outcome whose range contains the total score.
+  // min inclusive, max inclusive. Both optional — omit max for "≥ min", omit min for "≤ max".
   scoreRange?: { min?: number; max?: number }
 }
 

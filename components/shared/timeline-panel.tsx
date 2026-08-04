@@ -66,52 +66,17 @@ function labelFor(ev: TimelineEvent): string {
       return "Special completed"
     case "inject_advanced":
       return "Inject pushed earlier"
-    case "discussion_phase_changed":
-      return "Discussion phase"
-    case "inject_routes_plotted":
-      return "Verdeling geplot"
-    case "inject_routes_replotted":
-      return "Verdeling herzien"
-    case "inject_tagged":
-      return "Fact-check tag"
+    default:
+      return ev.type
   }
 }
 
 function descFor(ev: TimelineEvent): string {
-  switch (ev.type) {
-    case "session_created":
-      return (ev.data.title as string) ?? "Scenario generated"
-    case "session_started":
-      return "Round 1 is live"
-    case "session_ended":
-      return "Exercise complete"
-    case "round_changed":
-      return `Moved to round ${(ev.data.roundIndex as number) + 1}`
-    case "participant_joined":
-      return `${ev.data.name as string} joined the exercise`
-    case "inject_pushed":
-    case "surprise_inject": {
-      const inj = ev.data.inject as { title?: string } | undefined
-      return inj?.title ?? "Inject delivered"
-    }
-    case "special_triggered":
-      return `${ev.data.specialType ?? "Special"} triggered`
-    case "special_completed":
-      return `${ev.data.specialType ?? "Special"} completed`
-    case "inject_advanced": {
-      const inj = ev.data.inject as { title?: string } | undefined
-      return inj?.title ? `${inj.title} — pushed earlier` : "Inject advanced"
-    }
-    case "discussion_phase_changed":
-      return typeof ev.data.phaseName === "string" ? `Next: ${ev.data.phaseName}` : "Phase advanced"
-    case "inject_routes_plotted":
-      return `v${ev.data.version ?? "?"} — ${ev.data.count ?? 0} injects verdeeld`
-    case "inject_routes_replotted":
-      return `v${ev.data.version ?? "?"} — herverdeeld (${ev.data.count ?? 0})`
-    case "inject_tagged": {
-      const tag = ev.data.tag as string | undefined
-      const title = ev.data.injectTitle as string | undefined
-      return title ? `${tag ?? "tag"} — ${title}` : `Tag: ${tag ?? "?"}`
-    }
-  }
+  const d = ev.data as Record<string, unknown>
+  if (typeof d.title === "string") return d.title
+  if (typeof d.reason === "string") return d.reason
+  if (typeof d.from === "string" && typeof d.to === "string") return `${d.from} → ${d.to}`
+  const inj = d.inject as { title?: string } | undefined
+  if (inj?.title) return inj.title
+  return ""
 }

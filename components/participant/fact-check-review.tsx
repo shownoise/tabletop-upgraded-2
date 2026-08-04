@@ -3,8 +3,29 @@
 import { useMemo } from "react"
 import { Check, X, Minus } from "lucide-react"
 import type { FactCheckTag, InjectAnnotation, InjectSpanAnnotation, SessionState } from "@/lib/types"
-import { computeFactCheckScore } from "@/lib/engine/fact-check-score"
 import { splitTextByAnnotations } from "@/components/shared/span-annotator"
+
+// Fact-check review — compares each participant's own tags to authored ground truth.
+// Scoring was removed; this component is a plain visual comparison.
+function computeMyMatches(session: SessionState, participantId: string): { correct: number; total: number; matchedSpans: number; totalSpans: number } {
+  const checks = session.factChecks ?? []
+  const anns = session.injectAnnotations ?? []
+  let correct = 0, total = 0, matchedSpans = 0, totalSpans = 0
+  for (const round of session.scenario.rounds) {
+    for (const inj of round.injects) {
+      if (inj.reliability) {
+        const my = checks.find(c => c.injectId === inj.id && c.participantId === participantId)
+        if (my) { total++; if (my.tag === inj.reliability) correct++ }
+      }
+      for (const gt of inj.groundTruthAnnotations ?? []) {
+        totalSpans++
+        const mine = anns.filter(a => a.injectId === inj.id && a.participantId === participantId)
+        if (mine.some(m => m.start <= gt.end && m.end >= gt.start && m.tag === gt.tag)) matchedSpans++
+      }
+    }
+  }
+  return { correct, total, matchedSpans, totalSpans }
+}
 
 interface Props {
   session: SessionState
@@ -24,7 +45,7 @@ function normalizeReliability(rel: string | undefined): FactCheckTag | undefined
 }
 
 export function FactCheckReview({ session, participantId, roundIndex }: Props) {
-  const score = useMemo(() => computeFactCheckScore(session), [session])
+  const myScore = useMemo(() => computeMyMatches(session, participantId), [session, participantId])
 
   const targets = useMemo(() => {
     const out: Array<{
@@ -55,17 +76,14 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
 
   if (targets.length === 0) return null
 
-  const me = score.perParticipant[participantId] ?? { correct: 0, total: 0, score: 0 }
-  const myAnn = score.perParticipantAnnotations[participantId] ?? { matched: 0, total: 0, score: 0 }
-  const teamAvgPct = Math.round(score.teamAverage * 100)
-  const myPct = me.total > 0 ? Math.round(me.score * 100) : 0
+  const myPct = myScore.total > 0 ? Math.round((myScore.correct / myScore.total) * 100) : 0
 
   return (
     <div className="rounded-lg border border-tt-border bg-tt-surface p-4 flex flex-col gap-3">
       <header className="flex items-center justify-between">
         <span className="font-mono text-xs uppercase tracking-widest text-tt-accent">Fact-check review</span>
         <span className="font-mono text-[10px] text-tt-dim">
-          Jij: {me.correct}/{me.total} markeringen{myAnn.total > 0 ? ` · ${myAnn.matched}/${myAnn.total} spans correct` : ""} ({myPct}%) · Team gem.: {teamAvgPct}%
+          Jij: {myScore.correct}/{myScore.total} markeringen{myScore.totalSpans > 0 ? ` · ${myScore.matchedSpans}/${myScore.totalSpans} spans correct` : ""} ({myPct}%)
         </span>
       </header>
       <ul className="flex flex-col divide-y divide-tt-border/50">

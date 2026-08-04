@@ -5,7 +5,7 @@ import { getSession, assignRole } from "@/lib/session-store"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-const VALID_ROLES: Role[] = ["it_manager", "ciso", "head_of_comms", "legal", "ceo", "cfo", "system_admin", "hr_lead", "ops_manager"]
+const VALID_ROLES: Role[] = ["it_manager", "ciso", "head_of_comms", "legal", "ceo", "cfo", "it_manager", "hr_lead", "ops_manager"]
 
 export async function POST(req: Request) {
   const body = (await req.json()) as { participantId?: string; role?: string; joinCode?: string }

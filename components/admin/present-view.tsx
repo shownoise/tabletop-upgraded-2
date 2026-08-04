@@ -160,7 +160,7 @@ export function PresentView() {
           )}
 
           {/* Main content area — normaal: situatie + volledige inject-feed; tijdens lock/review: reveal */}
-          {(phase === "lock" || phase === "review") ? (
+          {(phase === "review") ? (
             <BigScreenReveal currentRoundNumber={session.currentRound + 1} />
           ) : (
             <div className="flex-1 px-8 py-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">

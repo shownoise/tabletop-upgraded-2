@@ -2,19 +2,18 @@ import type { RoundPhase } from "@/lib/types"
 
 export interface RoundPhaseTiming {
   id: RoundPhase
-  label: string
+  label: string  // Dutch
   weight: number
   minSeconds: number
 }
 
-// Fase-tijden: korte minima zodat facilitator sneller kan itereren.
-// De facilitator kan altijd handmatig "Volgende fase" klikken om te versnellen.
-// Voor een normale sessie van 15min per ronde: 45s briefing + 8m discussie + 4m beslissing + 20s lock + 2m review.
+// Canonical 4-phase timing. Facilitator can always click "Volgende fase" to
+// short-circuit any minSeconds. Auto-advance only applies once minSeconds elapsed.
+// Weights sum to 1.0 — used to distribute the round budget after the minima.
 export const ROUND_PHASE_TIMINGS: RoundPhaseTiming[] = [
-  { id: "inject",     label: "Briefing",   weight: 0.10, minSeconds: 30  },
-  { id: "discussion", label: "Discussie",  weight: 0.55, minSeconds: 120 },
-  { id: "decision",   label: "Beslissing", weight: 0.22, minSeconds: 60  },
-  { id: "lock",       label: "Vastgezet",  weight: 0.03, minSeconds: 15  },
+  { id: "inject",     label: "Inject",     weight: 0.10, minSeconds: 30  },
+  { id: "discussion", label: "Discussie",  weight: 0.60, minSeconds: 120 },
+  { id: "decision",   label: "Beslissing", weight: 0.20, minSeconds: 60  },
   { id: "review",     label: "Review",     weight: 0.10, minSeconds: 30  },
 ]
 
@@ -29,4 +28,14 @@ export function computeRoundPhaseDurations(roundBudgetSeconds: number): Record<R
     out[t.id] = t.minSeconds + extra * t.weight
   }
   return out
+}
+
+// The canonical phase order. Single source of truth for both auto-advance and
+// facilitator-driven manual advance. Never mutated.
+export const PHASE_ORDER: readonly RoundPhase[] = ['inject', 'discussion', 'decision', 'review'] as const
+
+export function nextPhase(current: RoundPhase): RoundPhase | 'next_round' {
+  const idx = PHASE_ORDER.indexOf(current)
+  if (idx < 0 || idx === PHASE_ORDER.length - 1) return 'next_round'
+  return PHASE_ORDER[idx + 1]
 }

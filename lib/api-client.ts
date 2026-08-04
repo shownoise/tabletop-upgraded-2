@@ -1,5 +1,4 @@
-import type { ExerciseConfig, FactCheckTag, InjectType, NotificationDraft, NotificationType, RetainerActivationState, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, SupervisionReportEdits, Urgency } from "./types"
-import type { AssessmentDimensionId, SessionAssessment } from "./engine/types"
+import type { ExerciseConfig, FactCheckTag, FiledMelding, InjectType, MeldingType, NotificationDraft, NotificationType, RetainerActivationState, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, SupervisionReportEdits, Urgency } from "./types"
 import type { SupervisionReport } from "./engine/supervision"
 
 async function post<T = unknown>(url: string, body?: unknown): Promise<T> {
@@ -53,8 +52,10 @@ export const api = {
   surpriseInject: (input: { title: string; content: string; type?: InjectType; urgency?: Urgency }) =>
     post<{ ok: true }>("/api/session/surprise-inject", input),
   resetSession: () => post<{ ok: true }>("/api/session/reset"),
-  setPhase: (phase: RoundPhase) =>
-    post<{ ok: true }>("/api/session/set-phase", { phase }),
+  setPhase: (phase: RoundPhase, opts?: { force?: boolean; reason?: string }) =>
+    post<{ ok: true }>("/api/session/set-phase", { phase, ...(opts ?? {}) }),
+  endSessionForced: (input?: { reason?: string }) =>
+    post<{ ok: true }>("/api/session/end", input ?? {}),
   submitDecision: (input: { participantId: string; participantName: string; roundIndex: number; actionId: string; reasoning: string; confidence?: 1 | 2 | 3 | 4 | 5; activeRole?: Role }) =>
     post<{ ok: true }>("/api/session/submit-decision", input),
   assignRole: (input: { participantId: string; role: Role; joinCode?: string }) =>
@@ -77,18 +78,10 @@ export const api = {
     post<{ ok: true }>("/api/session/special/form", input),
   completeSpecial: (specialId: string) =>
     post<{ ok: true }>("/api/session/special/complete", { specialId }),
-  scoreRound: (roundIndex: number, score: -1 | 0 | 1) =>
-    post<{ ok: true }>("/api/session/score-round", { roundIndex, score }),
-  logAssessmentEvent: (input: { dimensionId: AssessmentDimensionId; roundNumber: number; value: number; note?: string }) =>
-    post<{ ok: boolean }>("/api/session/assessment", { ...input, source: "facilitator" }),
-  getDebrief: () =>
-    post<{ assessment: SessionAssessment }>("/api/session/debrief"),
-  setDiscussionPhase: (input: { roundNumber: number; phaseIndex: number; action?: 'set' | 'extend' }) =>
-    post<{ ok: true }>("/api/session/discussion-phase", input),
-  setPhaseAutoAdvancePaused: (paused: boolean) =>
-    post<{ ok: true }>("/api/session/phase-pause", { paused }),
   markReady: (participantId: string) =>
     post<{ ok: true }>("/api/session/ready", { participantId }),
+  fileMelding: (input: { participantId: string; momentId: string; typeId: string; freeText?: string }) =>
+    post<{ ok: true; melding: FiledMelding }>("/api/session/melding", input),
   replotInjects: () =>
     post<{ ok: true; version?: number }>("/api/session/replot-injects", {}),
   tagInject: (input: { participantId: string; injectId: string; tag: FactCheckTag }) =>

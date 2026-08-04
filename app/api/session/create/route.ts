@@ -35,8 +35,6 @@ const CreateBodySchema = z.object({
   timerPerRound: z.number().int().min(1).max(240).optional(),
   existingPlans: z.array(z.string().max(200)).max(50).optional(),
   selectedRoles: z.array(z.string().max(50)).max(50).optional(),
-  decisionFramework: z.string().max(20).optional(),
-  phaseAutoAdvance: z.string().max(30).optional(),
   moduleSlots: z.unknown().optional(),
   graph: z.unknown().optional(),
 }).passthrough()
@@ -142,7 +140,7 @@ function buildScenarioDirectives(c: ExerciseConfig, mode?: string): string {
     board_decisions: "EXERCISE GOAL — BOARD DECISION-MAKING: Every round must have at least one decision that requires CEO or CFO authority (financial threshold, public disclosure, legal exposure). Include board-level pressure in at least 2 rounds — either a direct board member inquiry inject, or a decision that explicitly requires board sign-off. The scenario climax should be a structured board recommendation.",
     crisis_comms: "EXERCISE GOAL — CRISIS COMMUNICATIONS: Every round must have a communication-facing pressure point (media, social media, customer, internal staff). Include a journalist inquiry in round 2 at the latest. Head of Communications must have specific decisions in every round. Round 3 or 4 should include a social media or press scenario that forces a real-time response decision.",
     ransomware_tabletop: "EXERCISE GOAL — RANSOMWARE TABLETOP: Round 1 = detection and initial scoping. Round 2 = active encryption / containment decision. Round 3 = ransom demand received, communication crisis, regulatory clock. Round 4 = pay vs recover decision with known backup status. Each round must test a distinct phase of the ransomware playbook.",
-    technical_containment: "EXERCISE GOAL — TECHNICAL CONTAINMENT: Technical roles (it_manager, system_admin, ciso) must have the most critical decisions in every round. Include explicit choices about: network isolation, access revocation, forensic preservation vs business continuity, and logging chain of custody. Non-technical roles should be in a supporting/decision-approval role rather than leading.",
+    technical_containment: "EXERCISE GOAL — TECHNICAL CONTAINMENT: Technical roles (it_manager, ciso) must have the most critical decisions in every round. Include explicit choices about: network isolation, access revocation, forensic preservation vs business continuity, and logging chain of custody. Non-technical roles should be in a supporting/decision-approval role rather than leading.",
     supplier_incident: "EXERCISE GOAL — SUPPLIER INCIDENT: The scenario must involve a third-party supplier as the primary attack vector or critical dependency. Include supplier notification, SLA/contract review, and alternative supplier assessment as decision points. At least one inject should come from the affected supplier. Legal liability towards the supplier and downstream customers should both be tested.",
     data_breach: "EXERCISE GOAL — DATA BREACH: Every round must reference the personal data at risk (categories, number of individuals). Include GDPR Art.33 (72h AP notification clock), Art.34 (individual notification assessment), and at least one decision about whether the breach meets the 'high risk to individuals' threshold. Data subject rights requests should appear in at least one inject.",
   }
@@ -154,7 +152,7 @@ function buildScenarioDirectives(c: ExerciseConfig, mode?: string): string {
       const goal = getGoal(c.goalId as GoalId)
       if (goal.status === 'active') {
         d.push(
-          `PLATFORM GOAL — ${goal.name.toUpperCase()}: ${goal.description} Assessment dimensions to surface in facilitator notes: ${goal.assessmentDimensions.join(', ')}. Every round must include at least one moment that tests mandate clarity (who has authority to decide?) and one that tests escalation timing (when is the right moment to involve the next level?).`
+          `PLATFORM GOAL — ${goal.name.toUpperCase()}: ${goal.description} Every round must include at least one moment that tests mandate clarity (who has authority to decide?) and one that tests escalation timing (when is the right moment to involve the next level?).`
         )
       }
     } catch { /* unknown goalId — skip */ }
@@ -246,20 +244,13 @@ function buildScenarioDirectives(c: ExerciseConfig, mode?: string): string {
 
   // Role-specific inject targeting
   d.push(
-    `INJECT ROLE TARGETING: For injects that are only relevant to specific roles, set "targetRoles": ["ciso"] or ["it_manager", "system_admin"] etc. Use this for: IR/SOC technical briefings → targetRoles: ["ciso", "it_manager"]; Financial impact updates → targetRoles: ["cfo"]; Legal/regulatory alerts → targetRoles: ["legal"]; Internal HR communications → targetRoles: ["hr_lead"]; General crisis updates, ransom notes, media coverage → targetTeam: "all" (no targetRoles). The targetRoles field overrides targetTeam when both are present. Only set targetRoles when the inject content is genuinely role-specific — most injects should use targetTeam only.`
+    `INJECT ROLE TARGETING: For injects that are only relevant to specific roles, set "targetRoles": ["ciso"] or ["it_manager", "it_manager"] etc. Use this for: IR/SOC technical briefings → targetRoles: ["ciso", "it_manager"]; Financial impact updates → targetRoles: ["cfo"]; Legal/regulatory alerts → targetRoles: ["legal"]; Internal HR communications → targetRoles: ["hr_lead"]; General crisis updates, ransom notes, media coverage → targetTeam: "all" (no targetRoles). The targetRoles field overrides targetTeam when both are present. Only set targetRoles when the inject content is genuinely role-specific — most injects should use targetTeam only.`
   )
 
   // Inject ↔ roleAction coupling — critical for realism
   d.push(
     `INJECT-ACTIE KOPPELING: Elke roleAction in een ronde moet een directe reactie zijn op één of meer injects in diezelfde ronde. De inject triggert de situatie — de roleAction is de teamreactie. Regels: (1) Noem in de roleAction description expliciet waar de inject over gaat (bijv. "Naar aanleiding van de melding van de IR-retainer: autoriseer isolatie van het productiesysteem"). (2) De verantwoordelijke rol voor een roleAction moet aansluiten op de inhoud van de inject: een juridische inject → allowedRoles bevat 'legal' of 'ciso'; een communicatiedruk → 'head_of_comms'; een financieel besluit → 'cfo' of 'ceo'. (3) Elke inject van het type 'executive', 'regulatory' of 'media' moet minstens één bijbehorende roleAction hebben voor de verantwoordelijke crisismanagementrol.`
   )
-
-  // BOB framework directive (Task 7)
-  if (c.decisionFramework === 'bob') {
-    d.push(
-      `DECISION FRAMEWORK — BOB: Structure every round's facilitatorNotes along BOB phases. discussionGoal must name the BOB phase (Rounds 1–2: Beeldvorming; Round 3: Oordeelvorming; Round 4: Besluitvorming). keyQuestions must include at least one question per applicable BOB phase. hints must include a BOB failure pattern (e.g. "springt naar besluit vóór volledig beeld is gevormd"). Do NOT add any BOB phase prefix to roleAction labels or descriptions — keep action text clean and action-oriented.`
-    )
-  }
 
   return d.length ? "\n\nScenario generation directives (apply ALL of the following):\n" + d.map((x, i) => `${i + 1}. ${x}`).join("\n\n") : ""
 }
@@ -434,49 +425,14 @@ Return ONLY valid JSON:
   return safeParseScenario(text)
 }
 
+// AI-fallback scenario generation was retired in the de-Frankenstein refactor.
+// Sessions must be created from a scenario graph — build one in /admin/builder.
 async function generateWithAI(
-  config: ExerciseConfig,
-  mode: string,
-  opts: { moduleSlots?: unknown; decisionFramework?: unknown },
-): Promise<{ scenario: Scenario; intensity: AiIntensity; warnings?: string[] } | { aiError: string } | null> {
-  const intensity = config.aiIntensity ?? "full"
-  if (intensity === "off") return null
-
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    console.error("[generateWithAI] ANTHROPIC_API_KEY is not set")
-    return { aiError: "ANTHROPIC_API_KEY is not set — contact the administrator" }
-  }
-
-  try {
-    const { generateScenarioInstance } = await import("@/lib/scenario/generator")
-    const { scenarioInstanceToScenario } = await import("@/lib/scenario/bridge")
-
-    const moduleSlots = Array.isArray(opts.moduleSlots) ? opts.moduleSlots : undefined
-    const framework = (typeof opts.decisionFramework === "string" ? opts.decisionFramework : "bob") as import("@/lib/types").DecisionFramework
-
-    if (intensity === "lean") {
-      const { generateLeanScenario } = await import("@/lib/scenario/generator")
-      const scenario = await generateLeanScenario(config, apiKey, "claude-haiku-4-5-20251001", 8000)
-      return { scenario, intensity: "lean" as const, warnings: [] }
-    }
-
-    const { instance, warnings } = await generateScenarioInstance(config, apiKey, {
-      model: "claude-sonnet-4-6",
-      maxTokens: 12000,
-      moduleSlots,
-      framework,
-      maxRetries: 2,
-      maxModules: 4,
-    })
-    return { scenario: scenarioInstanceToScenario(instance), intensity: "full" as const, warnings }
-  } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err))
-    const { randomBytes } = await import("crypto")
-    const requestId = randomBytes(4).toString("hex")
-    console.error(`[generateWithAI] FULL ERROR (${requestId}):`, error.message, "\nStack:", error.stack)
-    return { aiError: `AI request failed (ref: ${requestId})` }
-  }
+  _config: ExerciseConfig,
+  _mode: string,
+  _opts: { moduleSlots?: unknown },
+): Promise<{ aiError: string }> {
+  return { aiError: "AI-generatie is uitgeschakeld — bouw een scenario in de builder en lever een graphId aan." }
 }
 
 export async function POST(req: Request) {
@@ -507,7 +463,6 @@ export async function POST(req: Request) {
   const body = parsed.data as Partial<ExerciseConfig> & {
     mode?: string
     moduleSlots?: unknown
-    decisionFramework?: unknown
     graph?: import("@/lib/graph/types").ScenarioGraph
   }
   // Sanitize user-controlled text fields before they reach any LLM prompt (prompt injection guard).
@@ -533,8 +488,6 @@ export async function POST(req: Request) {
     selectedRoles: Array.isArray(body.selectedRoles) ? body.selectedRoles as Role[] : undefined,
     goalId: typeof body.goalId === "string" ? body.goalId as GoalId : undefined,
     graphId: typeof body.graphId === "string" ? body.graphId : undefined,
-    decisionFramework: (body.decisionFramework === "ooda" || body.decisionFramework === "bob") ? body.decisionFramework : undefined,
-    phaseAutoAdvance: (body.phaseAutoAdvance === "off" || body.phaseAutoAdvance === "fixed_durations" || body.phaseAutoAdvance === "fit_to_round") ? body.phaseAutoAdvance : undefined,
   }
   const mode: SimulationMode = body.mode === "event" ? "event" : "training"
 
@@ -600,11 +553,10 @@ export async function POST(req: Request) {
 
           const aiResult = await generateWithAI(config, mode, {
             moduleSlots: body.moduleSlots,
-            decisionFramework: body.decisionFramework,
           })
 
           const aiError = aiResult && 'aiError' in aiResult ? aiResult.aiError : undefined
-          aiSuccess = aiResult && 'scenario' in aiResult ? aiResult : null
+          aiSuccess = null
 
           if (aiError) {
             send({ stage: "error", message: aiError })
@@ -613,11 +565,9 @@ export async function POST(req: Request) {
 
           send({ stage: "parsing", pct: 75, label: "Resultaat verwerken..." })
 
-          scenario = aiSuccess?.scenario ?? null
-          if (!scenario) {
-            send({ stage: "error", message: "Scenario-generatie is mislukt. Kies een graph-scenario via de builder." })
-            return
-          }
+          scenario = null
+          send({ stage: "error", message: "AI-generatie is uitgeschakeld — bouw een scenario in de builder en lever een graphId aan." })
+          return
         }
 
         send({ stage: "saving", pct: 90, label: "Sessie opslaan..." })
@@ -638,9 +588,9 @@ export async function POST(req: Request) {
           pct: 100,
           sessionId: session.id,
           joinCode: session.joinCode,
-          aiGenerated: !!aiSuccess,
-          aiIntensity: aiSuccess?.intensity ?? "off",
-          warnings: aiSuccess?.warnings ?? [],
+          aiGenerated: false,
+          aiIntensity: "off",
+          warnings: [],
         })
       } catch (err) {
         const { randomBytes } = await import("crypto")

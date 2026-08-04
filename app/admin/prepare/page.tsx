@@ -9,7 +9,6 @@ import { useSessionStream } from "@/lib/use-session-stream"
 import { api } from "@/lib/api-client"
 import { getAllGoals, getGoal } from "@/lib/goals/registry"
 import { buildExerciseConfig } from "@/lib/engine/exercise-config"
-import { buildFacilitatorContext } from "@/lib/engine/facilitator-support"
 import type { GoalId } from "@/lib/engine/types"
 
 // ─── Minimal markdown renderer (## headers, - bullets, **bold**) ──
@@ -150,22 +149,6 @@ export default function PreparePage() {
           </section>
         )}
 
-        {/* What you are testing */}
-        {goal && goal.assessmentDimensions.length > 0 && (
-          <section className="flex flex-col gap-3">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">What you are measuring</span>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {goal.assessmentDimensions.map(dim => (
-                <div key={dim} className="rounded-lg border border-border bg-card px-4 py-3 flex flex-col gap-1">
-                  <span className="font-mono text-[9px] uppercase tracking-wider text-primary">{dim.replace(/_/g, ' ')}</span>
-                  <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
-                    {DIM_DESCRIPTIONS[dim] ?? dim.replace(/_/g, ' ')}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
 
         {/* Facilitator guide */}
         {goal?.facilitatorGuide && (
@@ -183,8 +166,7 @@ export default function PreparePage() {
             <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Round preview</span>
             <div className="flex flex-col gap-3">
               {session.scenario.rounds.map((round, i) => {
-                const ctx = resolvedConfig ? buildFacilitatorContext(resolvedConfig, i) : null
-                const prompts = ctx?.observationPrompts.slice(0, 2) ?? []
+                const prompts: string[] = []
                 const redFlags = round.facilitatorNotes?.redFlags?.slice(0, 2) ?? []
                 return (
                   <div key={i} className="rounded-xl border border-border bg-card overflow-hidden">

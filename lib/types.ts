@@ -1,8 +1,12 @@
-import type { GoalId, AssessmentEvent } from "@/lib/engine/types"
+import type { GoalId } from "@/lib/engine/types"
 import type { ScenarioGraph } from "@/lib/graph/types"
 import type { SupervisionArea } from "@/lib/engine/supervision"
 export type { GoalId }
 
+// 8 playable roles — the client organisation's crisis-management + IT seats.
+// External actors (IR retainer, MSP partner, insurer, AP, NCSC, police, media)
+// are NEVER roles here — they appear only as inject sources or notification recipients.
+// `system_admin` was merged into `it_manager` (they collapsed to the same spec role IT_LEAD).
 export type Role =
   | 'it_manager'
   | 'ciso'
@@ -10,21 +14,30 @@ export type Role =
   | 'legal'
   | 'ceo'
   | 'cfo'
-  | 'system_admin'
   | 'hr_lead'
   | 'ops_manager'
 
-export const ROLE_META: Record<Role, {
-  label: string
+// Domain grouping — used by distributeRoles() as a tie-breaker so related work
+// lands together before falling back to pure workload balancing. UI labels are Dutch.
+export type RoleDomain = 'leadership' | 'technical' | 'legal' | 'financial' | 'communication' | 'people' | 'operations'
+
+export interface RoleMeta {
+  label: string       // Dutch label — shown in UI
   team: 'crisis_management' | 'technical_it'
+  domain: RoleDomain  // primary work-area, used by distributeRoles tie-breaking
   description: string
   authorities: string[]
   notResponsibleFor: string
-}> = {
+  isTopDecisionMaker?: boolean  // never handed off by distributeRoles
+}
+
+export const ROLE_META: Record<Role, RoleMeta> = {
   ceo: {
     label: 'CEO',
     team: 'crisis_management',
-    description: 'Executive decisions, board communication',
+    domain: 'leadership',
+    isTopDecisionMaker: true,
+    description: 'Directiebesluiten, communicatie naar board',
     authorities: [
       'Beslissen over betaling losgeld (of weigering)',
       'Openbare communicatie autoriseren',
@@ -37,7 +50,8 @@ export const ROLE_META: Record<Role, {
   ciso: {
     label: 'CISO',
     team: 'crisis_management',
-    description: 'Security strategy, incident coordination',
+    domain: 'technical',
+    description: 'Beveiligingsstrategie, coördinatie incidentrespons',
     authorities: [
       'Coördineren van de incidentrespons',
       'Aanbevelen van isolatie en containment-maatregelen',
@@ -50,7 +64,8 @@ export const ROLE_META: Record<Role, {
   cfo: {
     label: 'CFO',
     team: 'crisis_management',
-    description: 'Financial decisions, insurance, ransom',
+    domain: 'financial',
+    description: 'Financiële besluiten, verzekering, losgeld',
     authorities: [
       'Goedkeuren van financiële noodbesluiten',
       'Contact met verzekeraar opnemen',
@@ -62,9 +77,10 @@ export const ROLE_META: Record<Role, {
   legal: {
     label: 'Legal',
     team: 'crisis_management',
-    description: 'Compliance, regulatory notifications',
+    domain: 'legal',
+    description: 'Compliance, meldplichten aan toezichthouders',
     authorities: [
-      'AP-melding coördineren (GDPR: binnen 72 uur)',
+      'AP-melding coördineren (AVG: binnen 72 uur)',
       'NIS2-meldplicht bewaken richting NCSC',
       'Juridisch advies over aansprakelijkheid geven',
       'Contractuele verplichtingen richting klanten beoordelen',
@@ -72,9 +88,10 @@ export const ROLE_META: Record<Role, {
     notResponsibleFor: 'Technische en financiële beslissingen',
   },
   head_of_comms: {
-    label: 'Head of Communications',
+    label: 'Hoofd Communicatie',
     team: 'crisis_management',
-    description: 'Internal and external communications',
+    domain: 'communication',
+    description: 'Interne en externe communicatie',
     authorities: [
       'Interne communicatie naar medewerkers verzorgen',
       'Perscommunicatie afstemmen met CEO',
@@ -84,9 +101,10 @@ export const ROLE_META: Record<Role, {
     notResponsibleFor: 'Technische en financiële beslissingen',
   },
   hr_lead: {
-    label: 'HR Lead',
+    label: 'HR-manager',
     team: 'crisis_management',
-    description: 'Employee communication and insider threat cases',
+    domain: 'people',
+    description: 'Medewerkerscommunicatie en insider-threat casussen',
     authorities: [
       'Medewerkerscommunicatie coördineren',
       'Insider threat-onderzoek initiëren (samen met Legal)',
@@ -95,9 +113,10 @@ export const ROLE_META: Record<Role, {
     notResponsibleFor: 'Technische en financiële beslissingen, perscommunicatie',
   },
   ops_manager: {
-    label: 'Operations Manager',
+    label: 'Operationeel manager',
     team: 'crisis_management',
-    description: 'Business continuity and operational impact',
+    domain: 'operations',
+    description: 'Bedrijfscontinuïteit en operationele impact',
     authorities: [
       'Operationele impact inschatten en rapporteren',
       'Noodprocedures en handmatige processen activeren',
@@ -107,67 +126,44 @@ export const ROLE_META: Record<Role, {
     notResponsibleFor: 'Technische herstelstappen, financiële goedkeuring',
   },
   it_manager: {
-    label: 'IT Manager',
+    label: 'IT-manager',
     team: 'technical_it',
-    description: 'IT infrastructure, systems isolation',
+    domain: 'technical',
+    description: 'IT-infrastructuur, systeem-isolatie, back-up en herstel',
     authorities: [
       'Systemen isoleren en netwerk segmenteren',
       'IT-infrastructuur monitoren en beheren',
       'Backups inventariseren en herstelbaarheid bepalen',
       'Technische maatregelen coördineren',
+      'Logs en forensische data veiligstellen',
     ],
     notResponsibleFor: 'Businessbeslissingen, communicatie naar pers of board',
   },
-  system_admin: {
-    label: 'System Administrator',
-    team: 'technical_it',
-    description: 'Technical validation, logs, backups, infrastructure',
-    authorities: [
-      'Logs en forensische data veiligstellen',
-      'Backupsystemen controleren en herstellen',
-      'Technische validatie van containment-stappen uitvoeren',
-    ],
-    notResponsibleFor: 'Businessbeslissingen, communicatie',
-  },
 }
 
-export const ROLE_FALLBACK: Partial<Record<Role, Role[]>> = {
-  head_of_comms: ["ceo", "ciso"],
-  ops_manager:   ["cfo", "ceo"],
-  hr_lead:       ["legal", "ceo"],
-  legal:         ["ciso", "ceo"],
-  cfo:           ["ceo"],
-  it_manager:    ["ciso", "system_admin"],
-  system_admin:  ["it_manager", "ciso"],
-  ciso:          ["it_manager", "ceo"],
-  ceo:           ["ciso", "cfo"],
-}
+// Minimum staffing to run a session — belongs to the role model, not to individual
+// scenarios. If fewer roles are joined the session can still start, but distributeRoles
+// warns and the coverage metric drops.
+export const MINIMUM_STAFFING: readonly Role[] = ['ceo', 'ciso', 'legal'] as const
 
 export type SimulationMode = 'event' | 'training'
-// Deel B §4.2 — 'lock' is server-authoritatieve fase tussen decision en review
-// waarin geen mutaties meer worden geaccepteerd (Event Mode reveal-berekening).
-// In ASSESSMENT-mode blijft de flow decision → review; lock wordt geskipt.
-export type RoundPhase = 'inject' | 'discussion' | 'decision' | 'lock' | 'review'
 
-export type AssessmentDimensionKey =
-  | 'decision_speed'
-  | 'decision_quality'
-  | 'escalation_timing'
-  | 'communication_clarity'
-  | 'compliance_awareness'
-  | 'mandate_clarity'
-  | 'dilemma_participation'
-  | 'framework_adherence'
+// Canonical four-phase round model. Every round has these four phases in this order.
+// No BOB/OODA sub-phase state, no `lock` UI phase — event-mode locking is an atomic
+// server-side transition between DECISION and REVIEW inside submitDecision/finalizeRound.
+export type RoundPhase = 'inject' | 'discussion' | 'decision' | 'review'
 
-// Kwaliteits-ranking van een keuze in de dimensies-context. Author zet dit
-// zodat het rapport én de review-fase kunnen laten zien welke van de opties
-// achteraf de "beste" was — niet als hard oordeel maar als IR-retainer perspectief.
+export const ROUND_PHASE_LABELS_NL: Record<RoundPhase, string> = {
+  inject:     'Inject',
+  discussion: 'Discussie',
+  decision:   'Beslissing',
+  review:     'Review',
+}
+
+// Author-side quality ranking of a decision option — shown in review as IR-retainer
+// perspective. Not a hard verdict; the score reflects awareness, justification and
+// consistency, not picking a preferred side.
 export type ChoiceQuality = 'best' | 'good' | 'poor' | 'wrong'
-
-// Multi-dimensie score-map. Een keuze kan meerdere dimensies raken (bv. snel
-// handelen = +decision_speed maar -compliance_awareness) — die trade-off is
-// precies wat we zichtbaar willen maken.
-export type ScoreImpacts = Partial<Record<AssessmentDimensionKey, number>>
 
 export interface RoleAction {
   id: string
@@ -177,17 +173,8 @@ export interface RoleAction {
   isRecommended?: boolean
   irPlanAligned: boolean
   consequence?: string
-  // Legacy single-dim scoring — blijft voor backwards compat. Voor nieuwe
-  // scenario's gebruik scoreImpacts. resolveScoreImpacts() promoveert oude
-  // structuur naar de map.
-  scoreImpact?: number
-  linkedDimension?: AssessmentDimensionKey
-  // Nieuw: multi-dimensie scoring. { decision_speed: +2, compliance_awareness: -1 }
-  scoreImpacts?: ScoreImpacts
-  // Author markeert welke van de rol-acties de "beste" was in de dimensie-context.
   qualityRank?: ChoiceQuality
-  // Facilitator/IR-retainer commentaar dat verschijnt in de review-fase én rapport.
-  // "Wij snappen deze keuze wegens speed, maar wettelijk zit je bij X."
+  // IR-retainer commentaar — verschijnt tijdens REVIEW én in het rapport.
   facilitatorCommentary?: string
   lessonLearned?: string
   respondsToMisleading?: boolean
@@ -199,17 +186,6 @@ export interface RoleAction {
     onlyToSubmitter?: boolean
   }
   supervisionAreas?: SupervisionArea[]
-}
-
-// Promote legacy {scoreImpact, linkedDimension} to the new map shape so that
-// scoring code only has to look at scoreImpacts. Kept in one place so the
-// legacy fields can be removed later without touching every consumer.
-export function resolveScoreImpacts(a: Pick<RoleAction, 'scoreImpact' | 'linkedDimension' | 'scoreImpacts'>): ScoreImpacts {
-  if (a.scoreImpacts && Object.keys(a.scoreImpacts).length > 0) return a.scoreImpacts
-  if (typeof a.scoreImpact === 'number' && a.linkedDimension) {
-    return { [a.linkedDimension]: a.scoreImpact }
-  }
-  return {}
 }
 
 export interface IrRetainerProfile {
@@ -315,12 +291,6 @@ export interface LearningObjective {
   achievedAt?: string
 }
 
-export interface FacilitatorRoundScore {
-  roundIndex: number
-  score: -1 | 0 | 1
-  scoredAt: string
-}
-
 export interface SpecialScore {
   type: SpecialType
   score: number
@@ -337,7 +307,6 @@ export interface SessionReport {
     decisionQuality: number
     processAdherence: number
     roleCompliance: number
-    facilitatorScore: number
     objectivesAchieved: number
     objectivesTotal: number
   }
@@ -346,7 +315,6 @@ export interface SessionReport {
     roundTitle: string
     decisions: SubmittedDecision[]
     flags: GovernanceFlag[]
-    facilitatorScore?: -1 | 0 | 1
   }>
   perObjective: Array<{
     roundIndex: number
@@ -356,7 +324,6 @@ export interface SessionReport {
   }>
   topFlags: GovernanceFlag[]
   recommendations: string[]
-  facilitatorRoundScores?: FacilitatorRoundScore[]
   specialScores?: SpecialScore[]
 }
 
@@ -399,13 +366,6 @@ export type ScenarioType =
   | 'bec_cfo_fraud'
   | 'supply_chain_compromise'
 
-export type DecisionFramework =
-  | 'bob'
-  | 'ooda'
-  | 'dair'
-  | 'nist_ir'
-  | 'free'
-
 export type ObservationLens =
   | 'symptoms'
   | 'impact'
@@ -440,7 +400,6 @@ export interface InjectSpanAnnotation {
   tag: InjectReliability
   authorNote?: string
 }
-export type BobPhase = 'beeldvorming' | 'oordeel' | 'besluit'
 
 export interface Inject {
   id: string
@@ -576,12 +535,10 @@ export interface ExerciseConfig {
   timerPerRound?: number
   difficulty?: DifficultyLevel
   selectedRoles?: Role[]
-  decisionFramework?: DecisionFramework
   goalId?: GoalId
   graphId?: string
   irRetainerName?: string
   irRetainerProfile?: IrRetainerProfile
-  phaseAutoAdvance?: 'off' | 'fixed_durations' | 'fit_to_round'
 }
 
 export interface Participant {
@@ -604,13 +561,6 @@ export interface Group {
   createdAt: number
 }
 
-export interface ActivePhaseState {
-  roundNumber: number
-  phaseIndex: number
-  phaseStartedAt: number   // unix ms — extending shifts this forward by +120000
-  extended: boolean
-}
-
 export interface PushedInject {
   inject: Inject
   roundIndex: number
@@ -622,16 +572,17 @@ export type TimelineEventType =
   | "session_started"
   | "session_ended"
   | "round_changed"
+  | "phase_changed"
   | "participant_joined"
   | "inject_pushed"
   | "inject_advanced"
   | "surprise_inject"
   | "special_triggered"
   | "special_completed"
-  | "discussion_phase_changed"
   | "inject_routes_plotted"
   | "inject_routes_replotted"
   | "inject_tagged"
+  | "melding_filed"
 
 export interface TimelineEvent {
   id: string
@@ -722,21 +673,11 @@ export interface SessionState {
   governanceFlags?: GovernanceFlag[]
   specialEvents?: SpecialEvent[]
   documents?: RoleDocument[]
-  facilitatorRoundScores?: FacilitatorRoundScore[]
   specialScores?: SpecialScore[]
-  assessmentEvents?: AssessmentEvent[]
-  activeDiscussionPhase?: ActivePhaseState
-  currentDiscussionPrompt?: string
-  currentDiscussionPhaseIndex?: number
-  // Runtime scaled duration for the active discussion phase (server computes,
-  // clients render). Populated only when a phase is active.
-  currentDiscussionPhaseEffectiveSeconds?: number
-  currentDiscussionPhasePaused?: boolean
-  phaseAutoAdvancePaused?: boolean
   // Graph runtime — populated when the session was created from a scenario graph.
   graph?: ScenarioGraph
   graphState?: GraphRuntimeState
-  // Locked-at-start inject → recipient routing. Undefined for sessions predating this feature.
+  // Locked-at-start inject → recipient routing.
   injectRoutePlan?: InjectRoutePlan
   // Whole-round phase timeline state (inject → discussion → decision → review).
   activeRoundPhaseState?: RoundPhaseState
@@ -748,6 +689,8 @@ export interface SessionState {
   notifications?: NotificationDraft[]
   // Story-driven meldplicht prompts spawned by inject/decision/chaser events.
   meldplichtPrompts?: MeldplichtPrompt[]
+  // Participant-initiated meldingen (Phase D — general escalation reports).
+  meldingen?: FiledMelding[]
   // Anchor for meldplicht deadline countdowns.
   incidentDetectedAt?: number
   // Boolean flags for chaser conditions and generic scenario state.
@@ -756,26 +699,82 @@ export interface SessionState {
   retainerState?: RetainerActivationState
   // Auditor-edited fields on the supervision report (chains, lessons).
   supervisionReportEdits?: SupervisionReportEdits
-  // Slim projection van de huidige/peek-ahead DecisionNode voor participants.
-  // Alleen aanwezig als de current round een decision heeft die participants
-  // mogen zien (perRole=true én phase = decision/review), of als het huidige
-  // node een decision is. Scoring-info wordt tijdens play-phase gescrubd,
-  // tijdens review-fase onthuld.
+  // Slim projection of the current/peek-ahead DecisionNode for participants.
   activeDecision?: ActiveDecisionState
-  // Deel B §1.2 — éénmalige rolresolutie bij session_started. Immutable snapshot;
-  // scoring reproduceerbaarheid vergt dat late roster-wijzigingen deze niet muteren.
-  // Plain JSON (geen scoring-package types) — de app leest deze rechtstreeks
-  // vanaf de state en de scoring-package construeert 'm indien nodig zelf.
+  // Deel B §1.2 — one-time role resolution at session_started. Immutable snapshot.
   roleResolution?: {
     effectiveOwners: Record<string, string>  // Domain → spec-RoleId (of 'NPC')
     rolCoverage: number
     distinctOwners: number
     resolvedAt: number
   }
-  // Deel B §4 — groepen (EVENT-mode). Ontbrekend of leeg = single-team ASSESSMENT.
+  // Phase C2 — the computed role distribution across joined participants.
+  // Immutable per-round snapshot so a mid-session recompute never mutates past rounds.
+  roleDistribution?: RoleDistributionSnapshot
+  // Facilitator overrides on distributeRoles output — participantId → additional role[]
+  // that supersedes what the algorithm assigned.
+  roleAssignmentOverrides?: Record<string, Role[]>
+  // Deel B §4 — groepen (EVENT-mode).
   groups?: Group[]
-  // Monotonically increasing revision — bumped on every persisted mutation. Optimistic-concurrency aid.
+  // Monotonically increasing revision — bumped on every persisted mutation.
   version?: number
+}
+
+// ─── Role distribution (Phase C2) ───
+
+export interface RoleDistributionEntry {
+  participantId: string
+  participantName: string
+  primaryRole: Role
+  // Additional roles this participant is standing in for (empty if only primary).
+  inheritedRoles: Role[]
+  // Total workload weight assigned (author-defined content units).
+  workload: number
+}
+
+export interface RoleDistributionSnapshot {
+  computedAt: number
+  entries: RoleDistributionEntry[]
+  // Roles authored in the scenario but not covered by any present participant —
+  // typically because MINIMUM_STAFFING is not met. Their content is dropped.
+  unassignedRoles: Role[]
+  // Coverage: fraction of authored roles that landed on a present participant. 0..1.
+  coverage: number
+}
+
+// ─── Participant-initiated melding (Phase D) ───
+
+export type MeldingRecipient = 'ir_retainer' | 'msp' | 'ncsc' | 'ap' | 'police' | 'insurer' | 'internal'
+
+export interface MeldingType {
+  id: string
+  label: string   // Dutch — what the participant sees in the button
+  triggersInjectId?: string  // authored inject in scenario data; spawned as follow-up
+}
+
+export interface MeldingMoment {
+  id: string
+  allowedRoles: Role[]         // empty = all roles
+  recipient: MeldingRecipient
+  helper?: string              // one-line Dutch hint on the participant UI
+  types: MeldingType[]         // 2-3 predefined report types
+  // Which round this melding-moment belongs to (round index, 0-based).
+  roundIndex: number
+  // Optional: only open while a specific inject is visible. Otherwise open for the whole round.
+  gateInjectId?: string
+}
+
+export interface FiledMelding {
+  id: string
+  momentId: string
+  participantId: string
+  participantName: string
+  role: Role
+  typeId: string
+  freeText?: string
+  filedAt: number
+  roundIndex: number
+  spawnedInjectId?: string     // set when the follow-up inject was created
 }
 
 export interface ActiveDecisionState {
@@ -833,8 +832,8 @@ export type LiveEventName =
   | "special_triggered"
   | "special_message"
   | "special_completed"
-  | "discussion_phase_changed"
   | "participant_ready"
+  | "melding_filed"
 
 export interface LiveEvent {
   name: LiveEventName

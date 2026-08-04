@@ -19,8 +19,8 @@ import {
 import type { ScenarioGraph } from "./graph/types"
 import { RETAINER_ACTIVATED_FLAG } from "./graph/types"
 import type {
-  ActivePhaseState, ExerciseConfig, FactCheckEntry, FactCheckTag, FacilitatorRoundScore,
-  GovernanceFlag, Inject, InjectAnnotation, InjectRoutePlan, InjectType,
+  ExerciseConfig, FactCheckEntry, FactCheckTag,
+  FiledMelding, GovernanceFlag, Inject, InjectAnnotation, InjectRoutePlan, InjectType,
   LearningObjective, LiveEvent, LiveEventName, MeldplichtPrompt, MeldplichtPromptTrigger,
   NotificationDraft, NotificationType,
   Participant, PublicState, RetainerActivationState, Role, RoleAction,
@@ -28,39 +28,34 @@ import type {
   SpecialMessage, SpecialScore, SpecialType, StreamMessage, SubmittedDecision, SupervisionReportEdits, TimelineEvent,
   TimelineEventType, Urgency,
 } from "./types"
-import { ROLE_FALLBACK } from "./types"
-import type { AssessmentEvent, AssessmentDimensionId } from "./engine/types"
-import { BOB_PHASES, OODA_PHASES } from "./engine/facilitator-support"
+import { computeAuthoredWorkload, distributeRoles, effectiveRolesForParticipant } from "./engine/distribute-roles"
 import { plotInjectRoutes } from "./inject-routing"
 import { buildTeamRoles } from "./team-roster"
-import { computeRoundPhaseDurations } from "./engine/round-phases"
+import { computeRoundPhaseDurations, PHASE_ORDER, nextPhase } from "./engine/round-phases"
 
-function remapMissingRoles(scenario: Scenario, selectedRoles: Role[]): Scenario {
-  const active = new Set(selectedRoles)
+// Migration: legacy `system_admin` role was merged into `it_manager`. Applied on
+// any scenario data flowing through the store so old graphs / templates keep working.
+function migrateLegacyRole(r: unknown): Role | null {
+  if (typeof r !== 'string') return null
+  if (r === 'system_admin') return 'it_manager'
+  const valid: readonly string[] = ['it_manager', 'ciso', 'head_of_comms', 'legal', 'ceo', 'cfo', 'hr_lead', 'ops_manager']
+  return valid.includes(r) ? (r as Role) : null
+}
 
-  function resolveRole(role: Role): Role | null {
-    if (active.has(role)) return role
-    return (ROLE_FALLBACK[role] ?? []).find(r => active.has(r)) ?? null
-  }
-
+function migrateScenarioRoles(scenario: Scenario): Scenario {
   return {
     ...scenario,
     rounds: scenario.rounds.map(round => ({
       ...round,
       injects: round.injects.map(inject => {
         if (!inject.targetRoles?.length) return inject
-        const remapped = [...new Set(
-          inject.targetRoles.map(r => resolveRole(r)).filter(Boolean) as Role[]
-        )]
-        return { ...inject, targetRoles: remapped.length > 0 ? remapped : undefined }
+        const migrated = [...new Set(inject.targetRoles.map(migrateLegacyRole).filter(Boolean) as Role[])]
+        return { ...inject, targetRoles: migrated.length > 0 ? migrated : undefined }
       }),
-      roleActions: round.roleActions?.map(action => {
-        if (action.allowedRoles.length === 0) return action
-        const remapped = [...new Set(
-          action.allowedRoles.map(r => resolveRole(r)).filter(Boolean) as Role[]
-        )]
-        return { ...action, allowedRoles: remapped.length > 0 ? remapped : [] }
-      }),
+      roleActions: round.roleActions?.map(action => ({
+        ...action,
+        allowedRoles: [...new Set(action.allowedRoles.map(migrateLegacyRole).filter(Boolean) as Role[])],
+      })),
     })),
   }
 }
@@ -95,7 +90,7 @@ function broadcastState(session: SessionState | null) {
   let ticked: SessionState | null = null
   if (session) {
     try {
-      ticked = tickPhases(tickRoundPhase(session))
+      ticked = tickRoundPhase(session)
     } catch (err) {
       // WHY: never let a tick error swallow the broadcast — log to timeline and
       // fall back to the pre-tick session so participants still get an update.
@@ -110,104 +105,38 @@ function broadcastState(session: SessionState | null) {
   for (const l of listeners) l({ type: "state", data: snapshot })
 }
 
+// Auto-advance within a round. Advances INJECT → DISCUSSION → DECISION → REVIEW
+// once each phase's minSeconds elapses. Once REVIEW is reached, this function
+// returns unchanged state — advancing OUT of REVIEW (to the next round or to
+// endSession) requires an explicit facilitator action via goToNextRound().
+// This is deliberate: it prevents auto-skipping the debrief.
 function tickRoundPhase(session: SessionState): SessionState {
   const state = session.activeRoundPhaseState
   if (!state) return session
-  if (session.phaseAutoAdvancePaused) return session
 
-  // Loop: kan meerdere fases overslaan als de tick lang niet is gedraaid.
   let cur = state
   let s = session
-  const order: RoundPhase[] = ["inject", "discussion", "decision", "lock", "review"]
-  // Max 5 stappen — één full ronde.
-  for (let step = 0; step < 5; step++) {
+  for (let step = 0; step < PHASE_ORDER.length; step++) {
     const durationMs = (cur.durations[cur.currentPhase] ?? 0) * 1000
     const elapsedMs = Date.now() - cur.phaseStartedAt
     if (elapsedMs < durationMs) return s
-    const currentIdx = order.indexOf(cur.currentPhase)
-    const nextPhase = order[currentIdx + 1]
-    if (!nextPhase) return s
+    const next = nextPhase(cur.currentPhase)
+    // REVIEW → next round is facilitator-driven, never auto. Return with REVIEW
+    // still active until goToNextRound() is called.
+    if (next === 'next_round') return s
     const nextStart = cur.phaseStartedAt + durationMs
-    const enteringDiscussion = nextPhase === "discussion"
     s = {
       ...s,
-      roundPhase: nextPhase,
+      roundPhase: next,
       activeRoundPhaseState: {
         ...cur,
-        currentPhase: nextPhase,
+        currentPhase: next,
         phaseStartedAt: nextStart,
       },
-      activeDiscussionPhase: enteringDiscussion
-        ? {
-            roundNumber: cur.roundNumber,
-            phaseIndex: 0,
-            phaseStartedAt: Date.now(),
-            extended: false,
-          }
-        : s.activeDiscussionPhase,
     }
     cur = s.activeRoundPhaseState!
   }
   return s
-}
-
-// ─── Phase auto-advance (Phase 10) ─────────────────────────────
-
-function computeEffectivePhaseSeconds(session: SessionState, phaseIndex: number): number | undefined {
-  const phases = session.config.decisionFramework === "ooda" ? OODA_PHASES : BOB_PHASES
-  const phase = phases[phaseIndex]
-  if (!phase) return undefined
-  const mode = session.config.phaseAutoAdvance ?? "fit_to_round"
-  if (mode !== "fit_to_round") return phase.durationSeconds
-  const round = session.scenario.rounds[session.currentRound]
-  const roundMinutes = round?.timerMinutes ?? session.config.timerPerRound ?? 10
-  const roundBudget = roundMinutes * 60
-  const total = phases.reduce((acc, p) => acc + p.durationSeconds, 0)
-  if (total <= 0) return phase.durationSeconds
-  const k = roundBudget / total
-  return Math.max(30, Math.round(phase.durationSeconds * k))
-}
-
-function tickPhases(session: SessionState): SessionState {
-  if (session.graph) return session
-  if (session.phaseAutoAdvancePaused) return session
-  const mode = session.config.phaseAutoAdvance ?? "fit_to_round"
-  if (mode === "off") return session
-  const cur = session.activeDiscussionPhase
-  if (!cur) return session
-  const phases = session.config.decisionFramework === "ooda" ? OODA_PHASES : BOB_PHASES
-  const phase = phases[cur.phaseIndex]
-  if (!phase) return session
-
-  const effectiveSec = computeEffectivePhaseSeconds(session, cur.phaseIndex)
-  if (!effectiveSec) return session
-  const elapsedMs = Date.now() - cur.phaseStartedAt
-  const budgetMs = effectiveSec * 1000
-  if (elapsedMs < budgetMs) return session
-
-  const nextIdx = cur.phaseIndex + 1
-  if (nextIdx >= phases.length) return session
-
-  const nextPhase = phases[nextIdx]
-  const advanced: SessionState = {
-    ...session,
-    activeDiscussionPhase: {
-      roundNumber: cur.roundNumber,
-      phaseIndex: nextIdx,
-      phaseStartedAt: cur.phaseStartedAt + budgetMs,
-      extended: false,
-    },
-    currentDiscussionPrompt: nextPhase.participantPrompt,
-    currentDiscussionPhaseIndex: nextIdx,
-  }
-  const withTimeline = pushTimeline(advanced, "discussion_phase_changed", {
-    roundNumber: cur.roundNumber,
-    phaseIndex: nextIdx,
-    phaseName: nextPhase.name,
-    auto: true,
-  })
-  emit("discussion_phase_changed", { phaseIndex: nextIdx, phaseName: nextPhase.name, auto: true })
-  return withTimeline
 }
 
 function emit(name: LiveEventName, payload: Record<string, unknown>) {
@@ -219,33 +148,33 @@ function emit(name: LiveEventName, payload: Record<string, unknown>) {
 // Strips all facilitator-only data before broadcasting to unauthenticated clients.
 // Server-side logic (flagging, scoring) always uses the real stored state.
 
-// If none of an action's allowedRoles is actually joined, redirect via ROLE_FALLBACK
-// to a joined role — or, if no fallback works, open the action to everyone.
-// Prevents dead options when a session runs with fewer roles than the scenario expects.
-function expandRolesForJoinedParticipants(action: RoleAction, joinedRoles: Set<Role>): RoleAction {
+// Given a session's role distribution, determine which app roles should be
+// treated as "covered" for a given RoleAction. Falls back to raw joined-roles
+// when no distribution has been computed yet (pre-start states).
+function expandRolesForJoinedParticipants(action: RoleAction, session: SessionState): RoleAction {
   if (action.allowedRoles.length === 0) return action
-  const anyDirect = action.allowedRoles.some(r => joinedRoles.has(r))
-  if (anyDirect) return action
-
-  // Try ROLE_FALLBACK: for each missing role, find the first fallback that IS joined
-  // and use it. Previously this branch returned the action unchanged, which left it
-  // invisible to everyone because allowedRoles still pointed at the absent role.
-  const rerouted = new Set<Role>()
-  for (const missing of action.allowedRoles) {
-    for (const cand of ROLE_FALLBACK[missing] ?? []) {
-      if (joinedRoles.has(cand)) { rerouted.add(cand); break }
-    }
+  const dist = session.roleDistribution
+  if (!dist) {
+    // Fallback: raw joined roles only. Options with no present role become invisible.
+    const joined = new Set<Role>((session.participants ?? []).map(p => p.role).filter(Boolean) as Role[])
+    const anyDirect = action.allowedRoles.some(r => joined.has(r))
+    return anyDirect ? action : { ...action, allowedRoles: [] }
   }
-  if (rerouted.size > 0) return { ...action, allowedRoles: [...rerouted] }
-  return { ...action, allowedRoles: [] }
+  // With a distribution: an authored role is covered if some participant holds it
+  // as primary OR inherits it.
+  const overrides = session.roleAssignmentOverrides ?? {}
+  const covered = new Set<Role>()
+  for (const e of dist.entries) {
+    for (const r of effectiveRolesForParticipant(e, overrides[e.participantId])) covered.add(r)
+  }
+  const anyCovered = action.allowedRoles.some(r => covered.has(r))
+  return anyCovered ? action : { ...action, allowedRoles: [] }
 }
 
 export function toParticipantState(session: SessionState): SessionState {
-  const joinedRoles = new Set<Role>((session.participants ?? []).map(p => p.role).filter(Boolean) as Role[])
   const stripInjectGroundTruth = (inject: Inject, isReviewRound: boolean): Inject => {
     if (isReviewRound) return inject
-    // WHY: participants must judge reliability themselves during play — the fact-check reveal
-    // waits until the review phase.
+    // Ground truth (reliability tag, span annotations) is revealed only during REVIEW.
     const { reliability: _r, groundTruthAnnotations: _g, ...safe } = inject
     const leak = safe as { reliability?: unknown; groundTruthAnnotations?: unknown }
     if (leak.reliability !== undefined || leak.groundTruthAnnotations !== undefined) {
@@ -260,7 +189,7 @@ export function toParticipantState(session: SessionState): SessionState {
     scenario: {
       ...session.scenario,
       rounds: session.scenario.rounds.map((round, i) => {
-        // Future rounds: expose shell only — no content, no injects, no actions
+        // Future rounds: shell only.
         if (i > session.currentRound) {
           return {
             ...round,
@@ -273,20 +202,19 @@ export function toParticipantState(session: SessionState): SessionState {
         const isReviewRound =
           (i < session.currentRound) ||
           (i === session.currentRound && session.roundPhase === "review")
-        // Current + past rounds: strip facilitator-only fields
         return {
           ...round,
           injects: round.injects.map(inj => stripInjectGroundTruth(inj, isReviewRound)),
           facilitatorNotes: undefined,
           roleActions: round.roleActions?.map(action => {
-            const expanded = expandRolesForJoinedParticipants(action, joinedRoles)
+            const expanded = expandRolesForJoinedParticipants(action, session)
             return {
               id: expanded.id,
               label: expanded.label,
               description: expanded.description,
               allowedRoles: expanded.allowedRoles,
               irPlanAligned: true,
-              // Facilitator commentary blijft verborgen tot review-fase — dan onthullen we het.
+              // Facilitator commentary is hidden until REVIEW.
               facilitatorCommentary: isReviewRound ? action.facilitatorCommentary : undefined,
               qualityRank: isReviewRound ? action.qualityRank : undefined,
               lessonLearned: isReviewRound ? action.lessonLearned : undefined,
@@ -303,30 +231,16 @@ export function toParticipantState(session: SessionState): SessionState {
         (p.roundIndex === session.currentRound && session.roundPhase === "review")
       return { ...p, inject: stripInjectGroundTruth(p.inject, isReviewRound) }
     }),
-    // Strip flags — these reveal which decisions were marked bad
     governanceFlags: [],
-    // Keep decisions for own-decision display, but strip flag metadata
     submittedDecisions: (session.submittedDecisions ?? []).map(d => ({
       ...d,
       isWrongRole: false,
       isIrDeviation: false,
     })),
-    // Pass through special events — participants only see what's relevant to them
     specialEvents: session.specialEvents ?? [],
-    // All documents included — filtered by role in the participant's own UI
     documents: session.documents ?? [],
-    // Expose the raw activeDiscussionPhase (includes phaseStartedAt) so participant
-    // clients can render a live countdown without needing to reverse-engineer it.
-    activeDiscussionPhase: session.activeDiscussionPhase,
-    currentDiscussionPrompt: session.activeDiscussionPhase
-      ? (session.config.decisionFramework === 'ooda' ? OODA_PHASES : BOB_PHASES)[session.activeDiscussionPhase.phaseIndex]?.participantPrompt
-      : undefined,
-    currentDiscussionPhaseIndex: session.activeDiscussionPhase?.phaseIndex,
-    currentDiscussionPhaseEffectiveSeconds: session.activeDiscussionPhase
-      ? computeEffectivePhaseSeconds(session, session.activeDiscussionPhase.phaseIndex)
-      : undefined,
-    currentDiscussionPhasePaused: session.phaseAutoAdvancePaused,
-    // Hide the full graph and internal traversal state from participants
+    // Hide the raw graph from participants; the engine-computed activeDecision
+    // is the only projection they need.
     graph: undefined,
     graphState: undefined,
     activeDecision: projectActiveDecision(session),
@@ -421,7 +335,7 @@ export async function getState(): Promise<PublicState> {
 export async function settleAndGetState(): Promise<PublicState> {
   const session = await dbGetSession()
   if (!session) return { session: null }
-  const ticked = tickPhases(tickRoundPhase(session))
+  const ticked = tickRoundPhase(session)
   if (ticked !== session && ticked.roundPhase !== session.roundPhase) {
     await dbSetSession(ticked)
     broadcastState(ticked)
@@ -441,9 +355,7 @@ export async function createSession(
   graph?: ScenarioGraph,
 ): Promise<SessionState> {
   if (!scenario) throw new Error("createSession requires a scenario — legacy generator is removed")
-  const resolvedScenario = config.selectedRoles?.length
-    ? remapMissingRoles(scenario, config.selectedRoles)
-    : scenario
+  const resolvedScenario = migrateScenarioRoles(scenario)
   const startNodeId = graph?.nodes.find(n => n.type === "start")?.id
   const session: SessionState = {
     id: genId("ses"),
@@ -486,7 +398,6 @@ export async function resetSession(): Promise<void> {
 const MAX_TIMELINE = 2000
 const MAX_PUSHED_INJECTS = 500
 const MAX_SUBMITTED_DECISIONS = 2000
-const MAX_ASSESSMENT_EVENTS = 2000
 
 function capCollections(s: SessionState): SessionState {
   const capped: SessionState = { ...s }
@@ -498,9 +409,6 @@ function capCollections(s: SessionState): SessionState {
   }
   if (capped.submittedDecisions && capped.submittedDecisions.length > MAX_SUBMITTED_DECISIONS) {
     capped.submittedDecisions = capped.submittedDecisions.slice(-MAX_SUBMITTED_DECISIONS)
-  }
-  if (capped.assessmentEvents && capped.assessmentEvents.length > MAX_ASSESSMENT_EVENTS) {
-    capped.assessmentEvents = capped.assessmentEvents.slice(-MAX_ASSESSMENT_EVENTS)
   }
   return capped
 }
@@ -515,7 +423,7 @@ async function mutate(fn: (s: SessionState) => SessionState | null | { error: st
       return { ok: false, error: updated.error }
     }
     const next = updated as SessionState
-    const ticked = capCollections(tickPhases(tickRoundPhase(next)))
+    const ticked = capCollections(tickRoundPhase(next))
     ticked.version = (session.version ?? 0) + 1
     await dbSetSession(ticked)
     broadcastState(ticked)
@@ -559,9 +467,6 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
         currentRound: roundIndex,
         roundStartedAt: now,
         roundPhase: "inject",
-        activeDiscussionPhase: undefined,
-        currentDiscussionPrompt: undefined,
-        currentDiscussionPhaseIndex: undefined,
         pushedInjects: [...updated.pushedInjects, ...autoPushed],
       }
       updated = pushTimeline(updated, "round_changed", { roundIndex })
@@ -658,24 +563,8 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
             key: chosen.key,
             label: chosen.label,
             narrative: chosen.narrative,
-            scoreImpact: chosen.scoreImpact,
           },
         } : undefined,
-      }
-      // Log outcome scoring against its linked dimension for the rapport
-      if (chosen.linkedDimension && typeof chosen.scoreImpact === "number") {
-        const normalized = Math.max(0, Math.min(100, 50 + chosen.scoreImpact * 5))
-        const ev: AssessmentEvent = {
-          timestamp: Date.now(),
-          dimensionId: chosen.linkedDimension as AssessmentDimensionId,
-          roundNumber: updated.currentRound,
-          value: normalized,
-          source: "system",
-          note: `Outcome: ${chosen.label}`,
-          lesson: chosen.lessonLearned,
-          scoreImpact: chosen.scoreImpact,
-        }
-        updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), ev] }
       }
       updated = pushTimeline(updated, "session_ended", { outcome: chosen.key })
     }
@@ -739,7 +628,7 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
       const now = Date.now()
       let updated = triggerEngine(s, { kind: "auto" })
       updated = { ...updated, status: "active" as const, startedAt: now }
-      updated = withRoleRedistribution(updated)
+      updated = withRoleDistribution(updated, now)
       updated = withInjectRoutePlan(updated)
       updated = withRoundPhaseState(updated, updated.currentRound, now)
       updated = pushTimeline(updated, "session_started", { roundIndex: updated.currentRound })
@@ -750,7 +639,7 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
     if (s.scenario.rounds.length === 0) return null
     const now = Date.now()
     let updated: SessionState = { ...s, status: "active" as const, currentRound: 0, roundStartedAt: now, startedAt: now }
-    updated = withRoleRedistribution(updated)
+    updated = withRoleDistribution(updated, now)
     updated = withInjectRoutePlan(updated)
     updated = withRoundPhaseState(updated, 0, now)
     updated = pushTimeline(updated, "session_started", { roundIndex: 0 })
@@ -762,53 +651,27 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
   return result
 }
 
-// Rewrite scenario roleActions.allowedRoles and injects.targetRoles at session-start
-// so that decisions and injects addressed to missing roles fall back to the joined
-// roles via ROLE_FALLBACK. Runtime UI helpers do this too, but doing it once at
-// start makes the facilitator story-view and adaptive-routing snapshot consistent.
-function withRoleRedistribution(session: SessionState): SessionState {
-  const joined = new Set<Role>(
-    session.participants.map(p => p.role).filter((r): r is Role => !!r),
-  )
-  if (joined.size === 0) return session
-
-  function redirectRoles(target: Role[]): Role[] {
-    if (target.length === 0) return target
-    const direct = target.filter(r => joined.has(r))
-    if (direct.length > 0) return direct
-    const rerouted = new Set<Role>()
-    for (const missing of target) {
-      for (const cand of ROLE_FALLBACK[missing] ?? []) {
-        if (joined.has(cand)) { rerouted.add(cand); break }
-      }
-    }
-    // If nothing matched even with fallback, drop the restriction (open to all).
-    return rerouted.size > 0 ? [...rerouted] : []
+// Compute the role distribution snapshot at session start. Deterministic —
+// same input → same output. Stored on SessionState.roleDistribution so downstream
+// code (UI, scoring) reads it instead of walking fallback chains ad hoc.
+function withRoleDistribution(session: SessionState, now: number): SessionState {
+  const authoredRolesSet = new Set<Role>()
+  for (const round of session.scenario.rounds) {
+    for (const a of round.roleActions ?? []) for (const r of a.allowedRoles) authoredRolesSet.add(r)
+    for (const inj of round.injects) for (const r of inj.targetRoles ?? []) authoredRolesSet.add(r)
   }
+  // Also include the primary role of every joined participant so seats without
+  // authored content still appear in the distribution.
+  for (const p of session.participants) if (p.role) authoredRolesSet.add(p.role)
 
-  const rewrittenRounds = session.scenario.rounds.map(round => ({
-    ...round,
-    roleActions: round.roleActions?.map(action => {
-      const next = redirectRoles(action.allowedRoles)
-      // Preserve reference equality when nothing changed to keep the diff minimal.
-      const changed = next.length !== action.allowedRoles.length ||
-        next.some((r, i) => r !== action.allowedRoles[i])
-      return changed ? { ...action, allowedRoles: next } : action
-    }),
-    injects: round.injects.map(inject => {
-      if (!inject.targetRoles?.length) return inject
-      const next = redirectRoles(inject.targetRoles)
-      // Preserve targetTeam semantics: if we redirected to nothing, drop targetRoles
-      // rather than emitting [] which would render as "no roles targeted".
-      if (next.length === 0) {
-        const { targetRoles: _t, ...rest } = inject
-        return rest
-      }
-      return { ...inject, targetRoles: next }
-    }),
-  }))
-
-  return { ...session, scenario: { ...session.scenario, rounds: rewrittenRounds } }
+  const authoredRoles = [...authoredRolesSet]
+  const workloads = computeAuthoredWorkload(session.scenario)
+  const snapshot = distributeRoles({
+    authoredRoles,
+    workloads,
+    presentParticipants: session.participants,
+  })
+  return { ...session, roleDistribution: { ...snapshot, computedAt: now } }
 }
 
 // Deel B §1.2 — éénmalige rolresolutie bij session_started. Immutable snapshot;
@@ -1085,6 +948,12 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
     return { ok: true }
   }
 
+  // Non-graph path: enforce that facilitators only leave REVIEW to next round or endSession.
+  const currentPhase = session.roundPhase ?? 'inject'
+  if (currentPhase !== 'review') {
+    return { ok: false, error: "Ronde kan pas worden afgesloten vanuit de Review-fase." }
+  }
+
   if (session.currentRound < session.scenario.rounds.length - 1) {
     const nextIdx = session.currentRound + 1
     const now = Date.now()
@@ -1093,9 +962,6 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
       currentRound: nextIdx,
       roundStartedAt: now,
       roundPhase: "inject" as RoundPhase,
-      activeDiscussionPhase: undefined,
-      currentDiscussionPrompt: undefined,
-      currentDiscussionPhaseIndex: undefined,
     }
     updated = withRoundPhaseState(updated, nextIdx, now)
     updated = anchorIncidentOnRoundIfNeeded(updated, nextIdx + 1, now)
@@ -1106,13 +972,117 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
     return { ok: true }
   }
 
-  // End of session
+  // End of session — only reachable from the final round's REVIEW.
   let updated: SessionState = { ...session, status: "ended" as const }
   updated = pushTimeline(updated, "session_ended", {})
   await dbSetSession(updated)
   broadcastState(updated)
   emit("session_ended", {})
   return { ok: true }
+}
+
+// Explicit force-end: facilitator override for aborting a session mid-scenario.
+// Requires the caller to pass `confirm: true` (route enforces a UI confirmation).
+export async function endSessionForced(input: { reason?: string } = {}): Promise<{ ok: boolean; error?: string }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+  if (session.status === 'ended') return { ok: true }
+  let updated: SessionState = { ...session, status: 'ended' as const }
+  updated = pushTimeline(updated, 'session_ended', { forced: true, reason: input.reason ?? '' })
+  await dbSetSession(updated)
+  broadcastState(updated)
+  emit('session_ended', { forced: true })
+  return { ok: true }
+}
+
+// Introspection helper for the facilitator UI: what's the next action label
+// from the current phase? Guarantees the dashboard never shows an ambiguous
+// "Volgende" button — the label always names what will happen.
+export interface NextActionDescriptor {
+  action: 'advance_phase' | 'next_round' | 'end_session' | 'blocked'
+  labelNL: string
+  blockedReason?: string
+}
+
+export function describeNextAction(session: SessionState): NextActionDescriptor {
+  const currentPhase = session.roundPhase ?? 'inject'
+  const totalRounds = session.scenario.rounds.length
+  const isLastRound = session.currentRound >= totalRounds - 1
+
+  if (currentPhase === 'review') {
+    if (isLastRound) return { action: 'end_session', labelNL: 'Sessie afronden' }
+    return { action: 'next_round', labelNL: `Start ronde ${session.currentRound + 2}` }
+  }
+  if (currentPhase === 'decision') {
+    // Guard: cannot leave DECISION while a required role hasn't submitted.
+    const missing = missingDecisionRoles(session)
+    if (missing.length > 0) {
+      return {
+        action: 'blocked',
+        labelNL: 'Wacht op ontbrekende inzendingen',
+        blockedReason: `Nog geen inzending van: ${missing.join(', ')}`,
+      }
+    }
+  }
+  const next = nextPhase(currentPhase)
+  if (next === 'next_round') {
+    // Shouldn't happen — review case handled above. Defensive.
+    return isLastRound
+      ? { action: 'end_session', labelNL: 'Sessie afronden' }
+      : { action: 'next_round', labelNL: `Start ronde ${session.currentRound + 2}` }
+  }
+  const nextLabels: Record<RoundPhase, string> = {
+    inject: 'Volgende fase: Discussie',
+    discussion: 'Volgende fase: Beslissing',
+    decision: 'Volgende fase: Review',
+    review: 'Start volgende ronde',
+  }
+  return { action: 'advance_phase', labelNL: nextLabels[currentPhase] }
+}
+
+// Which roles are expected to submit for this round's decision but haven't yet?
+// Used by describeNextAction and by setPhase to block DECISION→REVIEW transitions.
+function missingDecisionRoles(session: SessionState): Role[] {
+  if (!session.graph || !session.graphState) return []
+  const nodeById = new Map(session.graph.nodes.map(n => [n.id, n]))
+  const current = nodeById.get(session.graphState.currentNodeId)
+  if (!current) return []
+  // Only guard perRole decisions — facilitator-driven decisions have no participant SLA.
+  const decisionNode = current.type === 'decision'
+    ? current
+    : session.graph.edges
+        .filter(e => e.source === current.id && e.type === 'sequence')
+        .map(e => nodeById.get(e.target))
+        .find(n => n?.type === 'decision')
+  if (!decisionNode) return []
+  const dd = decisionNode.data as DecisionNodeData
+  if (dd.perRole !== true) return []
+
+  const dist = session.roleDistribution
+  if (!dist) return []
+  const overrides = session.roleAssignmentOverrides ?? {}
+  const rolesRequired = new Set<Role>()
+  for (const opt of dd.options) {
+    if (opt.allowedRole) rolesRequired.add(opt.allowedRole)
+  }
+  const submitted = new Set<string>(
+    (session.submittedDecisions ?? [])
+      .filter(d => d.roundIndex === session.currentRound)
+      .map(d => `${d.participantId}::${d.actionId}`),
+  )
+  const missing: Role[] = []
+  for (const entry of dist.entries) {
+    const roles = effectiveRolesForParticipant(entry, overrides[entry.participantId])
+    for (const r of roles) {
+      if (!rolesRequired.has(r)) continue
+      // Has this participant submitted anything for this decision?
+      const hasAny = (session.submittedDecisions ?? []).some(d =>
+        d.participantId === entry.participantId && d.roundIndex === session.currentRound,
+      )
+      if (!hasAny) missing.push(r)
+    }
+  }
+  return [...new Set(missing)]
 }
 
 export async function goToPrevRound(): Promise<{ ok: boolean; error?: string }> {
@@ -1192,43 +1162,35 @@ export async function pushSurpriseInject(input: {
 
 // ─── Phase management ─────────────────────────────────────────
 
-export async function setPhase(phase: RoundPhase): Promise<{ ok: boolean; error?: string }> {
+// Manual phase transition. Guards against illegal jumps: DECISION cannot be
+// left while participants owe a required submission (facilitator can pass
+// `force: true` to override, logged as a governance event).
+export async function setPhase(phase: RoundPhase, opts: { force?: boolean; reason?: string } = {}): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(s => {
     const now = Date.now()
-    const isGraphDriven = !!s.graph
-    // Update whole-round phase state so auto-advance realigns from this manual override.
+    const currentPhase = s.roundPhase ?? 'inject'
+
+    // Block accidentally leaving DECISION with pending submissions unless forced.
+    if (currentPhase === 'decision' && phase === 'review' && !opts.force) {
+      const missing = missingDecisionRoles(s)
+      if (missing.length > 0) {
+        return { error: `Nog geen inzending van: ${missing.join(', ')}. Klik "Fase forceren" om toch door te gaan.` }
+      }
+    }
+
     const nextRoundPhaseState: RoundPhaseState | undefined = s.activeRoundPhaseState
       ? { ...s.activeRoundPhaseState, currentPhase: phase, phaseStartedAt: now }
       : s.activeRoundPhaseState
-    if (phase === 'discussion' && !s.activeDiscussionPhase && !isGraphDriven) {
-      const phases = s.config.decisionFramework === 'ooda' ? OODA_PHASES : BOB_PHASES
-      const firstPhase = phases[0]
-      if (firstPhase) {
-        const active: ActivePhaseState = {
-          roundNumber: s.currentRound,
-          phaseIndex: 0,
-          phaseStartedAt: now,
-          extended: false,
-        }
-        return {
-          ...s,
-          roundPhase: phase,
-          activeDiscussionPhase: active,
-          currentDiscussionPrompt: firstPhase.participantPrompt,
-          activeRoundPhaseState: nextRoundPhaseState,
-        }
-      }
+
+    let updated: SessionState = { ...s, roundPhase: phase, activeRoundPhaseState: nextRoundPhaseState }
+    if (currentPhase === 'decision' && phase === 'review' && opts.force) {
+      updated = pushTimeline(updated, 'phase_changed', {
+        from: 'decision', to: 'review', forced: true, reason: opts.reason ?? '',
+      })
+    } else {
+      updated = pushTimeline(updated, 'phase_changed', { from: currentPhase, to: phase })
     }
-    // Leaving discussion clears the sub-phase timer.
-    const clearedSub = phase !== 'discussion'
-      ? { activeDiscussionPhase: undefined, currentDiscussionPrompt: undefined, currentDiscussionPhaseIndex: undefined }
-      : {}
-    return {
-      ...s,
-      roundPhase: phase,
-      activeRoundPhaseState: nextRoundPhaseState,
-      ...clearedSub,
-    }
+    return updated
   })
   if (result.ok) emit("phase_changed", { phase })
   return result
@@ -1274,19 +1236,16 @@ export async function joinGroup(input: { participantId: string; groupId: string 
   })
 }
 
-// Deel B §4.2 — force LOCK: bij time-out of expliciete host-actie, produceer
-// impliciete "geen besluit"-events voor beslispunten zonder inzending en
-// verplaats fase naar 'lock'.
-export async function forceLock(): Promise<{ ok: boolean; error?: string }> {
+// Event-mode: server-authoritative snapshot when the facilitator forces the end
+// of DECISION (typically because timer expired or all groups submitted). Fills
+// missing decisions with the authored `implicit` option, then jumps DECISION → REVIEW
+// atomically. `lock` is no longer a UI phase — it's this transition.
+export async function finalizeDecision(): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(s => {
-    if (!s.graph) return s  // niet-graph sessies hebben geen scoring, LOCK is no-op
+    if (!s.graph) return s
     const roundIdx = s.currentRound
     const now = Date.now()
-    // Voor elke DecisionNode in de huidige ronde, check per-groep of er is ingezonden.
-    // Ontbrekend → virtuele SubmittedDecision met actionId = eerste `implicit`-optie of fallback-id.
     const groups = s.groups ?? []
-    // Bepaal beslispunten voor deze ronde uit de graph (decision nodes waarvan
-    // parent-round via sequence-edges de huidige round-node is).
     const decisionNodes = s.graph.nodes.filter(n => n.type === 'decision')
     const submissions = s.submittedDecisions ?? []
     const missing: SubmittedDecision[] = []
@@ -1302,18 +1261,17 @@ export async function forceLock(): Promise<{ ok: boolean; error?: string }> {
           && (unit.groupId ? d.groupId === unit.groupId : !d.groupId),
         )
         if (already) continue
-        // Kies impliciete optie of fallback.
         const implicit = dd.options.find(o => o.implicit)
         const optId = implicit?.id ?? `__implicit_${node.id}`
         const optLabel = implicit?.label ?? 'Geen besluit binnen de tijd'
         missing.push({
           participantId: 'IMPLICIT',
           participantName: unit.name,
-          role: 'ceo',   // placeholder — scoring gebruikt groupId niet role voor implicit
+          role: 'ceo',
           roundIndex: roundIdx,
           actionId: optId,
           actionLabel: optLabel,
-          reasoning: 'Geen besluit binnen de tijd — impliciete keuze bij LOCK',
+          reasoning: 'Geen besluit binnen de tijd — impliciete keuze bij afronding beslissing',
           submittedAt: new Date(now).toISOString(),
           isWrongRole: false,
           isIrDeviation: false,
@@ -1322,15 +1280,24 @@ export async function forceLock(): Promise<{ ok: boolean; error?: string }> {
       }
     }
     const nextSubmissions = [...submissions, ...missing]
-    // Zet fase op 'lock' via de bestaande phase-flow.
+    // Atomic transition DECISION → REVIEW.
     const nextRoundPhaseState = s.activeRoundPhaseState
-      ? { ...s.activeRoundPhaseState, currentPhase: 'lock' as const, phaseStartedAt: now }
+      ? { ...s.activeRoundPhaseState, currentPhase: 'review' as const, phaseStartedAt: now }
       : s.activeRoundPhaseState
-    return { ...s, submittedDecisions: nextSubmissions, roundPhase: 'lock' as const, activeRoundPhaseState: nextRoundPhaseState }
+    let updated: SessionState = {
+      ...s,
+      submittedDecisions: nextSubmissions,
+      roundPhase: 'review' as const,
+      activeRoundPhaseState: nextRoundPhaseState,
+    }
+    updated = pushTimeline(updated, 'phase_changed', { from: 'decision', to: 'review', reason: 'finalize' })
+    return updated
   })
-  if (result.ok) emit("phase_changed", { phase: 'lock', forced: true })
+  if (result.ok) emit("phase_changed", { phase: 'review', reason: 'finalize' })
   return result
 }
+// Backwards-compat alias — old routes still import `forceLock`.
+export const forceLock = finalizeDecision
 
 // Idempotency-helper: bij EVENT-mode blokkeer dubbele submits per (groupId, roundIndex, decisionPointId).
 // Wordt aangeroepen in submitDecision.
@@ -1415,9 +1382,6 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
         allowedRoles: opt.allowedRole ? [opt.allowedRole] : [],
         isRecommended: opt.qualityRank === 'best',
         irPlanAligned: opt.qualityRank !== 'wrong',
-        scoreImpact: opt.scoreImpact,
-        linkedDimension: opt.linkedDimension,
-        scoreImpacts: opt.scoreImpacts,
         qualityRank: opt.qualityRank,
         facilitatorCommentary: opt.facilitatorCommentary,
         lessonLearned: opt.lessonLearned,
@@ -1427,11 +1391,9 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
   }
   if (!action) return { ok: false, error: "Invalid action." }
 
-  // C2: reject decisions submitted during lock or review — allow briefing/discussion/decision.
-  // Deel B §4.2: 'lock' is server-authoritatief; geen mutaties na LOCK.
-  // Briefing (inject-fase) is nu ook OK — participants kunnen alvast klikken als ze zeker zijn.
-  if (session.roundPhase === 'lock' || session.roundPhase === 'review') {
-    return { ok: false, error: `Beslissingen kunnen niet worden ingediend tijdens de '${session.roundPhase}' fase.` }
+  // Reject decisions during REVIEW — inject/discussion/decision are all valid.
+  if (session.roundPhase === 'review') {
+    return { ok: false, error: `Beslissingen kunnen niet worden ingediend tijdens de review-fase.` }
   }
 
   const role = activeRole
@@ -1539,9 +1501,8 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     governanceFlags: [...existingFlags, ...newFlags],
   }
 
-  // Deel B §4.2 — auto-LOCK: als in EVENT-mode alle groepen minstens één keuze
-  // hebben ingezonden voor deze ronde, transiteer naar 'lock'. Facilitator kan
-  // altijd forceren via forceLock() knop.
+  // Event-mode: if every group has submitted for this round, finalize the
+  // decision atomically (DECISION → REVIEW via finalizeDecision-equivalent).
   if (updated.mode === 'event' && updated.graph && updated.roundPhase === 'decision') {
     const groups = updated.groups ?? []
     if (groups.length > 0) {
@@ -1550,66 +1511,17 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
         submitsThisRound.some(d => d.groupId === g.id && d.roundIndex === input.roundIndex),
       )
       if (allGroupsSubmitted) {
-        updated = { ...updated, roundPhase: 'lock', activeRoundPhaseState: updated.activeRoundPhaseState
-          ? { ...updated.activeRoundPhaseState, currentPhase: 'lock', phaseStartedAt: Date.now() }
-          : updated.activeRoundPhaseState }
+        const now = Date.now()
+        updated = {
+          ...updated,
+          roundPhase: 'review',
+          activeRoundPhaseState: updated.activeRoundPhaseState
+            ? { ...updated.activeRoundPhaseState, currentPhase: 'review', phaseStartedAt: now }
+            : updated.activeRoundPhaseState,
+        }
+        updated = pushTimeline(updated, 'phase_changed', { from: 'decision', to: 'review', reason: 'all_groups_submitted' })
       }
     }
-  }
-
-  // C3: score decision_speed once per participant per round (not once per round).
-  if (session.config.goalId && session.roundStartedAt) {
-    const alreadyScored = (session.assessmentEvents ?? []).some(
-      e => e.dimensionId === 'decision_speed'
-        && e.roundNumber === input.roundIndex
-        && e.participantId === input.participantId
-    )
-    if (!alreadyScored) {
-      const deltaMin = (Date.now() - session.roundStartedAt) / 60000
-      const speedValue = deltaMin < 5 ? 100 : deltaMin < 10 ? 75 : deltaMin < 15 ? 50 : deltaMin < 20 ? 25 : 10
-      const speedEvent: AssessmentEvent = {
-        dimensionId: 'decision_speed',
-        roundNumber: input.roundIndex,
-        value: speedValue,
-        source: 'system',
-        timestamp: Date.now(),
-        participantId: input.participantId,
-      }
-      updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), speedEvent] }
-    }
-  }
-
-  // Score the action itself if it has scoring metadata
-  if (action.linkedDimension && typeof action.scoreImpact === "number") {
-    const normalized = Math.max(0, Math.min(100, 50 + action.scoreImpact * 5))
-    const ev: AssessmentEvent = {
-      timestamp: Date.now(),
-      dimensionId: action.linkedDimension as AssessmentDimensionId,
-      roundNumber: input.roundIndex,
-      value: normalized,
-      source: "system",
-      note: `Action: ${action.label} (${participant.name})`,
-      participantId: input.participantId,
-      lesson: action.lessonLearned,
-      scoreImpact: action.scoreImpact,
-    }
-    updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), ev] }
-  }
-
-  // Auto-penalize responses to misleading signals (BOB-training)
-  if (action.respondsToMisleading) {
-    const penalty: AssessmentEvent = {
-      timestamp: Date.now(),
-      dimensionId: "framework_adherence",
-      roundNumber: input.roundIndex,
-      value: 20,
-      source: "system",
-      note: `Reactie op misleidend signaal: ${action.label}`,
-      participantId: input.participantId,
-      lesson: `Actie gebaseerd op ongeverifieerd/misleidend signaal. BOB-vergissing: aanname behandeld als feit. Vraag altijd 'wat weten we zeker?' voor je handelt.`,
-      scoreImpact: -6,
-    }
-    updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), penalty] }
   }
 
   // Push a response inject when action has one (e.g. "Consult IR retainer")
@@ -1643,23 +1555,8 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
       const dd = currentNode.data as DecisionNodeData
       const option = dd.options.find(o => o.roleActionId === input.actionId)
       if (option) {
-        // Score the decision option
-        if (option.linkedDimension && typeof option.scoreImpact === "number") {
-          const normalized = Math.max(0, Math.min(100, 50 + option.scoreImpact * 5))
-          const ev: AssessmentEvent = {
-            timestamp: Date.now(),
-            dimensionId: option.linkedDimension as AssessmentDimensionId,
-            roundNumber: input.roundIndex,
-            value: normalized,
-            source: "system",
-            note: `Decision: ${option.label}`,
-            participantId: input.participantId,
-            lesson: option.lessonLearned,
-            scoreImpact: option.scoreImpact,
-          }
-          updated = { ...updated, assessmentEvents: [...(updated.assessmentEvents ?? []), ev] }
-        }
-        // If decision has advancesGraph:false, only score — don't move currentNodeId
+        // Delta-scoring is now handled purely by the outcomeVector at report time.
+        // If decision has advancesGraph:false, only record the choice — don't move currentNodeId.
         const advances = dd.advancesGraph !== false
         if (advances) {
           updated = triggerEngine(updated, { kind: "decision_made", handle: option.id })
@@ -2102,12 +1999,6 @@ export async function submitApForm(input: {
   return { ok: true }
 }
 
-const SPECIAL_DIMENSION_MAP: Record<SpecialType, AssessmentDimensionId | undefined> = {
-  ransomware_negotiation: 'decision_quality',
-  journalist_qa: 'communication_clarity',
-  ap_notification: 'compliance_awareness',
-}
-
 function applySpecialCompletion(session: SessionState, completedSpecial: SpecialEvent): SessionState {
   const entry: SpecialScore = {
     type: completedSpecial.type,
@@ -2129,28 +2020,10 @@ function applySpecialCompletion(session: SessionState, completedSpecial: Special
     }
   })
 
-  // D4: also record the special's outcome as an assessment event so debrief + report reflect it.
-  const nextEvents = [...(session.assessmentEvents ?? [])]
-  const dimensionId = SPECIAL_DIMENSION_MAP[completedSpecial.type]
-  if (session.config.goalId && dimensionId) {
-    const raw = completedSpecial.totalScore ?? 0
-    const normalized = Math.max(0, Math.min(100, Math.round((raw + 8) * 6.25)))
-    nextEvents.push({
-      timestamp: Date.now(),
-      dimensionId,
-      roundNumber: session.currentRound,
-      value: normalized,
-      source: 'system',
-      note: `Special: ${completedSpecial.type} (raw score ${raw})`,
-      participantId: completedSpecial.assignedParticipantId,
-    })
-  }
-
   let updated: SessionState = {
     ...session,
     scenario: { ...session.scenario, rounds: updatedRounds },
     specialScores: [...(session.specialScores ?? []), entry],
-    assessmentEvents: nextEvents,
   }
 
   if (updated.graph && updated.graphState) {
@@ -2198,94 +2071,6 @@ export async function completeSpecial(specialId: string): Promise<{ ok: boolean;
   return { ok: true }
 }
 
-export async function addAssessmentEvent(
-  event: Omit<AssessmentEvent, 'timestamp'>,
-): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
-  if (!session) return { ok: false, error: "No active session." }
-  const newEvent: AssessmentEvent = { ...event, timestamp: Date.now() }
-  // D7: dedupe by (dimensionId, roundNumber, source, participantId) — latest write wins.
-  const filtered = (session.assessmentEvents ?? []).filter(e => !(
-    e.dimensionId === newEvent.dimensionId &&
-    e.roundNumber === newEvent.roundNumber &&
-    e.source === newEvent.source &&
-    e.participantId === newEvent.participantId
-  ))
-  const updated: SessionState = {
-    ...session,
-    assessmentEvents: [...filtered, newEvent],
-  }
-  await dbSetSession(updated)
-  broadcastState(updated)
-  return { ok: true }
-}
-
-export async function setDiscussionPhase(
-  roundNumber: number,
-  phaseIndex: number,
-  action: 'set' | 'extend' = 'set',
-): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
-  if (!session) return { ok: false, error: 'No active session.' }
-
-  const phases = session.config.decisionFramework === 'ooda' ? OODA_PHASES : BOB_PHASES
-  if (phaseIndex < 0 || phaseIndex >= phases.length) {
-    return { ok: false, error: 'Invalid phase index.' }
-  }
-  const phase = phases[phaseIndex]
-
-  let phaseStartedAt: number
-  let extended: boolean
-
-  if (action === 'extend' && session.activeDiscussionPhase?.phaseIndex === phaseIndex) {
-    // Shift phaseStartedAt forward by 2 minutes — increases remaining time
-    phaseStartedAt = (session.activeDiscussionPhase.phaseStartedAt) + 120_000
-    extended = true
-  } else {
-    phaseStartedAt = Date.now()
-    extended = false
-  }
-
-  const activeDiscussionPhase: ActivePhaseState = { roundNumber, phaseIndex, phaseStartedAt, extended }
-  const updated: SessionState = {
-    ...session,
-    activeDiscussionPhase,
-    currentDiscussionPrompt: phase.participantPrompt,
-  }
-  await dbSetSession(updated)
-  broadcastState(updated)
-  emit('discussion_phase_changed', {
-    phaseName: phase.name,
-    participantPrompt: phase.participantPrompt,
-    phaseIndex,
-    totalPhases: phases.length,
-    roundNumber,
-  })
-  return { ok: true }
-}
-
-export async function setPhaseAutoAdvancePaused(paused: boolean): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
-  if (!session) return { ok: false, error: "No active session." }
-  const wasPaused = !!session.phaseAutoAdvancePaused
-  let updated: SessionState = { ...session, phaseAutoAdvancePaused: paused }
-  // Un-pausing: reset phaseStartedAt so we don't skip the missed portion — pick up
-  // where we left off. If we tracked the elapsed-at-pause time we'd use that; the
-  // simplest safe behavior is to reset to now.
-  if (wasPaused && !paused && session.activeDiscussionPhase) {
-    updated = {
-      ...updated,
-      activeDiscussionPhase: {
-        ...session.activeDiscussionPhase,
-        phaseStartedAt: Date.now(),
-      },
-    }
-  }
-  await dbSetSession(updated)
-  broadcastState(updated)
-  return { ok: true }
-}
-
 export async function markParticipantReady(participantId: string): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(session => {
     const participants = session.participants.map(p =>
@@ -2295,6 +2080,88 @@ export async function markParticipantReady(participantId: string): Promise<{ ok:
   })
   if (result.ok) emit('participant_ready', { participantId })
   return result
+}
+
+// ─── Participant-initiated melding (Phase D) ──────────────────
+// A participant chooses to file a report/escalation at an open melding-moment.
+// The engine spawns the authored follow-up inject for that report type.
+
+export async function fileMelding(input: {
+  participantId: string
+  momentId: string
+  typeId: string
+  freeText?: string
+}): Promise<{ ok: boolean; error?: string; melding?: FiledMelding }> {
+  const session = await dbGetSession()
+  if (!session) return { ok: false, error: "No active session." }
+
+  const participant = session.participants.find(p => p.id === input.participantId)
+  if (!participant || !participant.role) return { ok: false, error: "Deelnemer heeft geen rol." }
+
+  // Locate the melding-moment on the current round.
+  const roundNode = session.graph?.nodes.find(
+    n => n.type === 'round' && (n.data as { title: string }).title === session.scenario.rounds[session.currentRound]?.title,
+  )
+  const roundData = roundNode?.data as { meldingMoments?: import("./types").MeldingMoment[] } | undefined
+  const moment = roundData?.meldingMoments?.find(m => m.id === input.momentId)
+  if (!moment) return { ok: false, error: "Melding-moment niet gevonden." }
+  if (moment.allowedRoles.length > 0 && !moment.allowedRoles.includes(participant.role)) {
+    return { ok: false, error: "Deze rol mag deze melding niet indienen." }
+  }
+  const type = moment.types.find(t => t.id === input.typeId)
+  if (!type) return { ok: false, error: "Melding-type niet gevonden." }
+
+  const melding: FiledMelding = {
+    id: genId('mld'),
+    momentId: moment.id,
+    participantId: participant.id,
+    participantName: participant.name,
+    role: participant.role,
+    typeId: type.id,
+    freeText: input.freeText,
+    filedAt: Date.now(),
+    roundIndex: session.currentRound,
+  }
+
+  // Spawn follow-up inject if authored.
+  let spawnedInjectId: string | undefined
+  const followInjectNode = type.triggersInjectId
+    ? session.graph?.nodes.find(n => n.id === type.triggersInjectId && n.type === 'inject')
+    : undefined
+  if (followInjectNode) {
+    const inj: Inject = {
+      id: genId('inj-mld'),
+      type: 'intel',
+      title: (followInjectNode.data as { title?: string }).title ?? `Reactie op melding: ${type.label}`,
+      content: (followInjectNode.data as { content?: string }).content ?? '',
+      urgency: 'medium',
+      source: 'Systeem',
+      senderName: (followInjectNode.data as { senderName?: string }).senderName ?? 'Reactie',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    }
+    spawnedInjectId = inj.id
+    melding.spawnedInjectId = spawnedInjectId
+    const pushed = { inject: inj, roundIndex: session.currentRound, pushedAt: Date.now() }
+    let updated: SessionState = {
+      ...session,
+      meldingen: [...(session.meldingen ?? []), melding],
+      pushedInjects: [...session.pushedInjects, pushed],
+    }
+    updated = pushTimeline(updated, 'melding_filed', { melding, spawnedInjectId })
+    updated = pushTimeline(updated, 'inject_pushed', { roundIndex: session.currentRound, inject: inj })
+    await dbSetSession(updated)
+    broadcastState(updated)
+    emit('melding_filed', { melding })
+    emit('push_inject', { inject: inj, roundIndex: session.currentRound })
+    return { ok: true, melding }
+  }
+
+  let updated: SessionState = { ...session, meldingen: [...(session.meldingen ?? []), melding] }
+  updated = pushTimeline(updated, 'melding_filed', { melding })
+  await dbSetSession(updated)
+  broadcastState(updated)
+  emit('melding_filed', { melding })
+  return { ok: true, melding }
 }
 
 // ─── Scenario graphs ──────────────────────────────────────────
@@ -2310,19 +2177,7 @@ export async function facilitatorSkipDecision(): Promise<{ ok: boolean; error?: 
   const fallback = dd.options[0]
   if (!fallback) return { ok: false, error: "Decision has no options to fall back to." }
 
-  // Penalize decision-speed
-  const penalty: AssessmentEvent = {
-    timestamp: Date.now(),
-    dimensionId: "decision_speed",
-    roundNumber: session.currentRound,
-    value: 20,
-    source: "facilitator",
-    note: `Beslissing overgeslagen door facilitator: ${dd.prompt.slice(0, 60)}`,
-    lesson: "Team was niet decisief binnen de beschikbare tijd. Facilitator koos een default-pad. Snelheid is een NIS2-plicht — trage besluitvorming = compliance-risico.",
-    scoreImpact: -4,
-  }
-
-  let updated: SessionState = { ...session, assessmentEvents: [...(session.assessmentEvents ?? []), penalty] }
+  let updated: SessionState = session
   updated = triggerEngine(updated, { kind: "decision_made", handle: fallback.id })
   if (updated.graphState) {
     updated = {
@@ -2397,21 +2252,6 @@ export async function listScenarioGraphs(_ownerId?: string): Promise<ScenarioGra
 
 export async function deleteScenarioGraph(id: string): Promise<void> {
   await dbDeleteScenarioGraph(id)
-}
-
-export async function submitFacilitatorRoundScore(
-  roundIndex: number,
-  score: -1 | 0 | 1,
-): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
-  if (!session) return { ok: false, error: "No active session." }
-
-  const existing = (session.facilitatorRoundScores ?? []).filter(s => s.roundIndex !== roundIndex)
-  const entry: FacilitatorRoundScore = { roundIndex, score, scoredAt: new Date().toISOString() }
-  const updated: SessionState = { ...session, facilitatorRoundScores: [...existing, entry] }
-  await dbSetSession(updated)
-  broadcastState(updated)
-  return { ok: true }
 }
 
 export async function upsertNotificationDraft(input: {

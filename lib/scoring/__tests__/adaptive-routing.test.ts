@@ -11,7 +11,7 @@ import type { TeamId } from '@/lib/team-roster'
 
 const teamRoles: Record<TeamId, Role[]> = {
   crisis_management: ['ceo', 'ciso', 'cfo', 'legal', 'head_of_comms', 'hr_lead', 'ops_manager'],
-  technical_it:      ['it_manager', 'system_admin'],
+  technical_it:      ['it_manager', 'it_manager'],
 }
 
 const inject = (id: string, opts: Partial<Inject> = {}): Inject => ({
@@ -30,7 +30,7 @@ describe('adaptive routing — 3/5/9 rosters (Fase 2)', () => {
 
   // ── 9 rollen: volledige bezetting ────────────────────────────────────
   describe('9-rol volledig team', () => {
-    const present: Role[] = ['ceo', 'ciso', 'cfo', 'legal', 'head_of_comms', 'hr_lead', 'ops_manager', 'it_manager', 'system_admin']
+    const present: Role[] = ['ceo', 'ciso', 'cfo', 'legal', 'head_of_comms', 'hr_lead', 'ops_manager', 'it_manager', 'it_manager']
     const roleResolution = reso(present)
 
     it('directe route naar bezette rol werkt (identity)', () => {
@@ -68,7 +68,7 @@ describe('adaptive routing — 3/5/9 rosters (Fase 2)', () => {
 
     it('inject naar system_admin → onbezet → FORENSIEK-fallback → SECURITY_LEAD (ciso)', () => {
       const routed = resolveInjectRecipientsAdaptive({
-        inject: inject('forensic-log', { targetRoles: ['system_admin'] }),
+        inject: inject('forensic-log', { targetRoles: ['it_manager'] }),
         presentRoles: present, teamRoles, roleResolution,
       })
       expect(routed).toEqual(['ciso'])
@@ -83,7 +83,7 @@ describe('adaptive routing — 3/5/9 rosters (Fase 2)', () => {
     })
 
     it('geen informatie mag stilletjes verdwijnen — elke inject krijgt een geadresseerde', () => {
-      for (const roleAsTarget of ['hr_lead', 'ops_manager', 'system_admin', 'head_of_comms'] as Role[]) {
+      for (const roleAsTarget of ['hr_lead', 'ops_manager', 'it_manager', 'head_of_comms'] as Role[]) {
         const routed = resolveInjectRecipientsAdaptive({
           inject: inject(`x-${roleAsTarget}`, { targetRoles: [roleAsTarget] }),
           presentRoles: present, teamRoles, roleResolution,

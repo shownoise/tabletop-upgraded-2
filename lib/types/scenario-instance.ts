@@ -1,7 +1,6 @@
 import type {
   InjectChannel,
   ScenarioType,
-  DecisionFramework,
   ObservationLens,
   ModuleId,
   EmotionalTone,
@@ -37,7 +36,7 @@ export interface ModuleDefinition {
   default_lens: ObservationLens
   default_duration_minutes: number
   default_channels: InjectChannel[]
-  framework_prompts: Record<DecisionFramework, string[]>
+  framework_prompts?: Record<string, string[]>
   scope_hints: string[]
 }
 
@@ -94,7 +93,7 @@ export interface ModuleInstance {
   severity: 'medium' | 'high' | 'critical'
   visible_phases: string[]
   observation_lens: ObservationLens
-  decision_framework: DecisionFramework
+  // decision_framework removed — team picks framework at the table
   situation: string
   injects: RichInject[]
   decisions: DecisionBox[]
@@ -115,7 +114,7 @@ export interface ScenarioInstance {
     codename: string
     client_profile: ClientProfile
     scenario_type: ScenarioType
-    decision_framework: DecisionFramework
+    // decision_framework removed — team picks framework at the table
     generated_at: string
     language: 'nl' | 'en'
   }
@@ -132,7 +131,7 @@ export interface TemplateModuleSlot {
   duration_minutes?: number
   custom_lens?: ObservationLens
   custom_channels?: InjectChannel[]
-  decision_framework?: DecisionFramework
+  // decision_framework removed
   facilitator_notes_extra?: string[]
 }
 
@@ -140,7 +139,7 @@ export interface TemplateModuleSlot {
 
 export interface ScenarioSkeleton {
   scenario_type: ScenarioType
-  decision_framework: DecisionFramework
+  // decision_framework removed — team picks framework at the table
   client_profile: ClientProfile
   attack_chain: AttackChainPhase[]
   modules: Array<{
@@ -149,7 +148,7 @@ export interface ScenarioSkeleton {
     t_offset: string
     duration_minutes: number
     observation_lens: ObservationLens
-    decision_framework: DecisionFramework
+    // decision_framework removed — team picks framework at the table
     visible_phases: string[]
     default_channels: InjectChannel[]
   }>

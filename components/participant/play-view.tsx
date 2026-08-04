@@ -23,6 +23,7 @@ import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
 import { MeldplichtTray } from "./meldplicht-tray"
+import { MeldingButton } from "./melding-button"
 import { RetainerActivationPanel } from "./retainer-activation-panel"
 import { SpecialModal } from "./special-modal"
 import { PhaseTimer, PhaseSegments } from "./phase-timer"
@@ -42,7 +43,7 @@ const FEEDBACK_KEY = "ctt:feedback_rounds"
 // The session lead chairs the meeting: advances BOB/OODA phases.
 // Priority: CEO first, then first available crisis management role.
 const SESSION_LEAD_PRIORITY: Role[] = [
-  'ceo', 'ciso', 'cfo', 'ops_manager', 'legal', 'head_of_comms', 'hr_lead', 'it_manager', 'system_admin',
+  'ceo', 'ciso', 'cfo', 'ops_manager', 'legal', 'head_of_comms', 'hr_lead', 'it_manager', 'it_manager',
 ]
 
 function getSessionLeadRole(participants: { role?: Role | null }[]): Role | null {
@@ -106,9 +107,7 @@ function IntroOverlay({
 
   const goalId = session?.config.goalId as GoalId | undefined
   const goal = goalId ? (() => { try { return getGoal(goalId) } catch { return null } })() : null
-  const frameworkDesc = session?.config.decisionFramework
-    ? FRAMEWORK_DESCRIPTIONS[session.config.decisionFramework]
-    : FRAMEWORK_DESCRIPTIONS.bob
+  const frameworkDesc = FRAMEWORK_DESCRIPTIONS.bob
 
   async function handleReady() {
     if (participantId && !marking) {
@@ -256,18 +255,6 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
       </button>
       {expanded && (
         <div className="px-4 pb-4 flex flex-col gap-4 pt-4">
-          {/* BOB fase badge — subtiel, above situation */}
-          {(currentRound as { bobPhase?: string }).bobPhase && (
-            <div className="flex items-center gap-2 -mt-1">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">BOB fase</span>
-              <span className="font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 border border-tt-accent/40 bg-tt-accent/10 text-tt-accent">
-                {(currentRound as { bobPhase?: string }).bobPhase === "beeldvorming" ? "Beeldvorming — feiten verzamelen"
-                  : (currentRound as { bobPhase?: string }).bobPhase === "oordeel" ? "Oordeelsvorming — opties wegen"
-                  : "Besluitvorming — kiezen"}
-              </span>
-            </div>
-          )}
-
           <p className="font-mono text-xs leading-relaxed text-tt-bright whitespace-pre-wrap">
             {stripMarkdown(currentRound.situation_update)}
           </p>
@@ -356,7 +343,7 @@ function RolePickerLobby({
 
   const ALL_ROLES_ORDERED: Role[] = [
     "ceo", "ciso", "cfo", "legal", "head_of_comms", "hr_lead", "ops_manager",
-    "it_manager", "system_admin",
+    "it_manager", "it_manager",
   ]
   const allowedRoles: Role[] = (session.config.selectedRoles?.length ?? 0) > 0
     ? ALL_ROLES_ORDERED.filter(r => session.config.selectedRoles!.includes(r))
@@ -1058,7 +1045,7 @@ export function PlayView() {
       {/* Whole-round phase timeline (four top-level phases) */}
       {currentRound && session.activeRoundPhaseState && (
         <div className="mx-auto max-w-6xl px-4 pt-3 md:px-8">
-          <RoundPhaseTimeline state={session.activeRoundPhaseState} paused={session.phaseAutoAdvancePaused} />
+          <RoundPhaseTimeline state={session.activeRoundPhaseState} />
         </div>
       )}
 
@@ -1212,12 +1199,17 @@ export function PlayView() {
               <ReviewCommentary session={session} participantId={participantId} roundIndex={session.currentRound} />
             )}
             {/* Confidence-tally — persoonlijk overzicht van eigen zekerheid per ronde */}
-            {(session.roundPhase === "review" || session.roundPhase === "lock") && participantId && (
+            {(session.roundPhase === "review") && participantId && (
               <ConfidenceTally session={session} participantId={participantId} />
             )}
 
             {/* Meldplicht tray — story-driven prompt cards (top of feed area) */}
             {participantId && <MeldplichtTray session={session} participantId={participantId} />}
+
+            {/* Melding button — participant-initiated escalation. Visible only when a moment is open for this role. */}
+            {participantId && participantRole && (
+              <MeldingButton session={session} participantId={participantId} participantRole={participantRole} />
+            )}
 
             {/* Inject feed — always shown for context */}
             <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} session={session} participantId={participantId ?? undefined} />

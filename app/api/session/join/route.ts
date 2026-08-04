@@ -7,7 +7,7 @@ import { rateLimit } from "@/lib/rate-limit"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-const VALID_ROLES = ["it_manager", "ciso", "head_of_comms", "legal", "ceo", "cfo", "system_admin", "hr_lead", "ops_manager"] as const
+const VALID_ROLES = ["it_manager", "ciso", "head_of_comms", "legal", "ceo", "cfo", "it_manager", "hr_lead", "ops_manager"] as const
 
 const JoinBody = z.object({
   name: z.string().min(1).max(80),

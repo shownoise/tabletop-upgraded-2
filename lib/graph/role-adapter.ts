@@ -16,7 +16,6 @@ export const APP_ROLE_TO_SPEC: Record<Role, RoleId> = {
   hr_lead:        'HR',
   ops_manager:    'BUSINESS_OWNER',
   it_manager:     'IT_LEAD',
-  system_admin:   'IT_LEAD',    // system_admin valt onder IT_LEAD-mandaat voor spec-doeleinden
 }
 
 export function toSpecRole(role: Role): RoleId {
@@ -45,8 +44,7 @@ export const APP_ROLE_TO_DOMAINS: Record<Role, Domain[]> = {
   head_of_comms:  ['EXTERNE_COMMS', 'INTERNE_COMMS'],
   hr_lead:        ['PERSONEEL', 'INTERNE_COMMS'],
   ops_manager:    ['BEDRIJFSPROCES', 'HERSTEL'],
-  it_manager:     ['HERSTEL', 'CONTAINMENT'],
-  system_admin:   ['FORENSIEK', 'HERSTEL'],
+  it_manager:     ['HERSTEL', 'CONTAINMENT', 'FORENSIEK'],
 }
 
 export function domainsFor(role: Role): Domain[] {

@@ -6,16 +6,14 @@ import { ROUND_PHASE_TIMINGS } from "@/lib/engine/round-phases"
 
 interface Props {
   state: RoundPhaseState
-  paused?: boolean
 }
 
-export function RoundPhaseTimeline({ state, paused }: Props) {
+export function RoundPhaseTimeline({ state }: Props) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
-    if (paused) return
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [paused])
+  }, [])
 
   const order: RoundPhase[] = ["inject", "discussion", "decision", "review"]
   const currentIdx = order.indexOf(state.currentPhase)

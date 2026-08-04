@@ -1,67 +1,52 @@
-import type { AssessmentDimensionKey, RoleAction, ScoreImpacts, SubmittedDecision } from "@/lib/types"
-import { resolveScoreImpacts } from "@/lib/types"
-import type { DecisionNodeData, OutcomeNodeData, ScenarioGraph, RoundNodeData } from "./types"
+import type { SubmittedDecision } from "@/lib/types"
+import type { DecisionNodeData, OutcomeNodeData, OutcomeVector, ScenarioGraph } from "./types"
 
 interface SubmissionRef {
   actionId?: string
   optionId?: string
 }
 
-// Trekt alle scoreImpacts uit één graph + één set gesubmitte referenties.
-// Combineert:
-//  - RoleAction submissions (per-rol per-ronde keuzes)
-//  - DecisionNode option picks (graph-decision keuzes)
-// Legacy single-dim scoreImpact+linkedDimension worden gepromovoot naar de map.
-function collectImpacts(graph: ScenarioGraph, submissions: SubmissionRef[]): ScoreImpacts[] {
+// The 6 outcome dimensions — CONT/FOR/BC/JUR/VER/KOS.
+const DIMS: readonly (keyof OutcomeVector)[] = ['CONT', 'FOR', 'BC', 'JUR', 'VER', 'KOS'] as const
+
+// Sum outcome-vectors from every decision option that was selected. Options
+// without an explicit outcomeVector contribute zero.
+function collectOutcomeVectors(graph: ScenarioGraph, submissions: SubmissionRef[]): OutcomeVector[] {
   const optionIds = new Set(submissions.map(s => s.optionId).filter(Boolean) as string[])
   const actionIds = new Set(submissions.map(s => s.actionId).filter(Boolean) as string[])
-  const impacts: ScoreImpacts[] = []
-
+  const vectors: OutcomeVector[] = []
   for (const n of graph.nodes) {
-    if (n.type === 'decision') {
-      const d = n.data as DecisionNodeData
-      for (const opt of d.options) {
-        const matched = optionIds.has(opt.id) || (opt.roleActionId ? actionIds.has(opt.roleActionId) : false)
-        if (!matched) continue
-        impacts.push(resolveScoreImpacts(opt))
-      }
-    }
-    if (n.type === 'round') {
-      const r = n.data as RoundNodeData
-      for (const action of r.roleActions ?? []) {
-        if (!actionIds.has(action.id)) continue
-        impacts.push(resolveScoreImpacts(action))
-      }
+    if (n.type !== 'decision') continue
+    const d = n.data as DecisionNodeData
+    for (const opt of d.options) {
+      const matched = optionIds.has(opt.id) || (opt.roleActionId ? actionIds.has(opt.roleActionId) : false)
+      if (!matched) continue
+      if (opt.outcomeVector) vectors.push(opt.outcomeVector)
     }
   }
-  return impacts
+  return vectors
 }
 
-// Cumulatieve score — som van alle dimensies bij elkaar. Geeft je één
-// gecomprimeerd getal voor de outcome-bandwidth check.
+// Cumulative score — flat sum of every outcome dimension across every selected
+// option. Used for score-range outcome selection.
 export function cumulativeScore(graph: ScenarioGraph, submissions: SubmissionRef[]): number {
-  const all = collectImpacts(graph, submissions)
+  const vectors = collectOutcomeVectors(graph, submissions)
   let total = 0
-  for (const m of all) for (const v of Object.values(m)) total += v ?? 0
+  for (const v of vectors) for (const d of DIMS) total += v[d] ?? 0
   return total
 }
 
-// Per-dimensie breakdown — laat zien welke dimensies goed/slecht scoren.
-// Trade-offs worden hierdoor zichtbaar: "snel handelen" kan +decision_speed
-// hebben maar -compliance_awareness.
-export function scoreByDimension(graph: ScenarioGraph, submissions: SubmissionRef[]): Record<AssessmentDimensionKey, number> {
-  const all = collectImpacts(graph, submissions)
-  const totals = {} as Record<AssessmentDimensionKey, number>
-  for (const m of all) {
-    for (const [dim, val] of Object.entries(m) as [AssessmentDimensionKey, number][]) {
-      totals[dim] = (totals[dim] ?? 0) + val
-    }
-  }
+// Per-dimension breakdown across the 6 outcome axes. Reveals trade-offs — a
+// fast-decisive choice may score +CONT but −JUR, and this is what surfaces it.
+export function scoreByDimension(graph: ScenarioGraph, submissions: SubmissionRef[]): OutcomeVector {
+  const vectors = collectOutcomeVectors(graph, submissions)
+  const totals: OutcomeVector = { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 }
+  for (const v of vectors) for (const d of DIMS) totals[d] += v[d] ?? 0
   return totals
 }
 
-// Selecteer outcome op basis van cumulatieve score-bandwidth.
-// Preferentie bij overlap: smalste range wint, hoogste min als tiebreaker.
+// Pick an outcome node whose scoreRange contains the cumulative score. Tie-break
+// on narrowest range, then highest min.
 export function selectOutcomeByScore(graph: ScenarioGraph, total: number): OutcomeNodeData | undefined {
   const outcomes = graph.nodes
     .filter(n => n.type === 'outcome')
@@ -85,20 +70,18 @@ export function selectOutcomeByScore(graph: ScenarioGraph, total: number): Outco
   })[0]
 }
 
-// Convenience: bouw submissions-ref direct uit een lijst SubmittedDecision.
 export function submissionsFromDecisions(decisions: SubmittedDecision[]): SubmissionRef[] {
   return decisions.map(d => ({ actionId: d.actionId }))
 }
 
-// Ranking helper — bepaal welke van een set opties (RoleActions of options)
-// de "beste" is op basis van cumulatieve dimensie-punten. Voor gebruik in
-// review-fase en debrief: laat zien wat de author-marker qualityRank was én
-// wat de cumulatieve dimensies zeggen.
-export function bestChoiceIndex(items: Array<{ scoreImpact?: number; linkedDimension?: AssessmentDimensionKey; scoreImpacts?: ScoreImpacts }>): number {
+// Rank a set of options by summed outcome-vector: highest sum wins. Used in the
+// reveal panel to identify the "IR-retainer preferred" pick from the options.
+export function bestChoiceIndex(items: Array<{ outcomeVector?: OutcomeVector }>): number {
   if (items.length === 0) return -1
   const totals = items.map(i => {
-    const map = resolveScoreImpacts(i as RoleAction)
-    return Object.values(map).reduce((s, v) => s + (v ?? 0), 0)
+    const v = i.outcomeVector
+    if (!v) return 0
+    return DIMS.reduce((s, d) => s + (v[d] ?? 0), 0)
   })
   let bestIdx = 0
   for (let i = 1; i < totals.length; i++) if (totals[i] > totals[bestIdx]) bestIdx = i

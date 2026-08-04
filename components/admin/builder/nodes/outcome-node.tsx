@@ -12,20 +12,9 @@ interface Actions {
 
 export function OutcomeNode({ id, data, selected }: NodeProps) {
   const d = data as unknown as OutcomeNodeData & Actions
-  const score = d.scoreImpact
-  const scoreLabel = typeof score === "number"
-    ? score > 0 ? `+${score}` : score === 0 ? "±0" : `${score}`
-    : null
-  const scoreClass = typeof score !== "number"
-    ? "text-white/80"
-    : score > 0
-      ? "text-emerald-100"
-      : score < 0
-        ? "text-red-100"
-        : "text-white/80"
-
-  const variantBorder = typeof score === "number"
-    ? score >= 0
+  const scoreRange = d.scoreRange
+  const variantBorder = scoreRange && typeof scoreRange.min === "number"
+    ? scoreRange.min >= 0
       ? "border-emerald-300 dark:border-emerald-800"
       : "border-red-300 dark:border-red-900"
     : undefined
@@ -37,7 +26,6 @@ export function OutcomeNode({ id, data, selected }: NodeProps) {
       title={d.label || "Outcome"}
       width={240}
       variantBorder={variantBorder}
-      meta={scoreLabel ? <span className={`rounded-md bg-white/20 px-1.5 py-0.5 font-mono text-[10px] font-bold ${scoreClass}`}>{scoreLabel}</span> : undefined}
       onDuplicate={d.onDuplicate ? () => d.onDuplicate?.(id) : undefined}
       onDelete={d.onDelete ? () => d.onDelete?.(id) : undefined}
     >
