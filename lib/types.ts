@@ -29,6 +29,9 @@ export interface RoleMeta {
   authorities: string[]
   notResponsibleFor: string
   isTopDecisionMaker?: boolean  // never handed off by distributeRoles
+  // One-line Dutch mandate summary — surfaced to a participant taking over the
+  // role in a solo/understaffed session so they can quickly adopt its perspective.
+  mandateSummary: string
 }
 
 export const ROLE_META: Record<Role, RoleMeta> = {
@@ -38,6 +41,7 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     domain: 'leadership',
     isTopDecisionMaker: true,
     description: 'Directiebesluiten, communicatie naar board',
+    mandateSummary: 'Eindverantwoordelijk voor strategische keuzes, board-communicatie en het autoriseren van onomkeerbare stappen.',
     authorities: [
       'Beslissen over betaling losgeld (of weigering)',
       'Openbare communicatie autoriseren',
@@ -52,6 +56,7 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     team: 'crisis_management',
     domain: 'technical',
     description: 'Beveiligingsstrategie, coördinatie incidentrespons',
+    mandateSummary: 'Coördineert incidentrespons, weegt technische risico\'s af en stuurt de externe IR-partij aan.',
     authorities: [
       'Coördineren van de incidentrespons',
       'Aanbevelen van isolatie en containment-maatregelen',
@@ -66,6 +71,7 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     team: 'crisis_management',
     domain: 'financial',
     description: 'Financiële besluiten, verzekering, losgeld',
+    mandateSummary: 'Bewaakt financiële impact, activeert verzekering en adviseert over losgeld- en herstelbudget.',
     authorities: [
       'Goedkeuren van financiële noodbesluiten',
       'Contact met verzekeraar opnemen',
@@ -79,6 +85,7 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     team: 'crisis_management',
     domain: 'legal',
     description: 'Compliance, meldplichten aan toezichthouders',
+    mandateSummary: 'Bewaakt meldplichten (AVG 72u, NIS2 24u) en beoordeelt aansprakelijkheid en klantverplichtingen.',
     authorities: [
       'AP-melding coördineren (AVG: binnen 72 uur)',
       'NIS2-meldplicht bewaken richting NCSC',
@@ -92,6 +99,7 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     team: 'crisis_management',
     domain: 'communication',
     description: 'Interne en externe communicatie',
+    mandateSummary: 'Regisseert interne en externe boodschap, treedt op als woordvoerder en bewaakt de reputatie.',
     authorities: [
       'Interne communicatie naar medewerkers verzorgen',
       'Perscommunicatie afstemmen met CEO',
@@ -105,6 +113,7 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     team: 'crisis_management',
     domain: 'people',
     description: 'Medewerkerscommunicatie en insider-threat casussen',
+    mandateSummary: 'Zorgt voor medewerkers en welzijn, en trekt insider-onderzoek samen met Legal.',
     authorities: [
       'Medewerkerscommunicatie coördineren',
       'Insider threat-onderzoek initiëren (samen met Legal)',
@@ -117,6 +126,7 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     team: 'crisis_management',
     domain: 'operations',
     description: 'Bedrijfscontinuïteit en operationele impact',
+    mandateSummary: 'Houdt primaire processen draaiend, activeert workarounds en bepaalt herstelprioriteit.',
     authorities: [
       'Operationele impact inschatten en rapporteren',
       'Noodprocedures en handmatige processen activeren',
@@ -130,6 +140,7 @@ export const ROLE_META: Record<Role, RoleMeta> = {
     team: 'technical_it',
     domain: 'technical',
     description: 'IT-infrastructuur, systeem-isolatie, back-up en herstel',
+    mandateSummary: 'Isoleert systemen, borgt back-ups en logs, en coördineert technisch herstel.',
     authorities: [
       'Systemen isoleren en netwerk segmenteren',
       'IT-infrastructuur monitoren en beheren',
@@ -192,62 +203,64 @@ export interface IrRetainerProfile {
   name: string
   activationNumber: string
   activationEmail?: string
-  authorizedActivators: string[]
-  slaMinutesToFirstContact: number
-  handoffChecklist: string[]
   scopeIncludes: string[]
   scopeExcludes: string[]
 }
 
-export type NotificationType = 'ncsc_24h' | 'ncsc_72h' | 'ncsc_final' | 'ap_72h'
+// ─── Regulatory notification regime (Phase 2) ───
+//
+// Data-driven meldplicht: authors ship one RegulatoryRegime per jurisdiction
+// (default: nl_avg_nis2). At runtime the session tracks obligations per
+// milestone. An inject with `triggersRegulatoryNotification: true` auto-opens
+// the initial milestone; filing the initial opens the closing milestone.
+// Any staffed role can file. Filed on-time / late / never gets folded back
+// into the round's scoring vector via the regime's scoring config.
 
-export type MeldplichtPromptTrigger =
-  | 'inject_flagged'
-  | 'decision_taken'
-  | 'chaser_fired'
-  | 'facilitator_manual'
+export type OutcomeDimensionKey = 'CONT' | 'FOR' | 'BC' | 'JUR' | 'VER' | 'KOS'
 
-export interface MeldplichtPrompt {
-  id: string
-  type: NotificationType
-  roundNumber: number
-  triggeredAt: number
-  triggerReason: {
-    kind: MeldplichtPromptTrigger
-    sourceId?: string
-    summary: string
-  }
-  status: 'open' | 'drafted' | 'submitted' | 'dismissed'
+export interface RegulatoryMilestone {
+  id: string                 // 'initial' | 'closing'
+  label: string              // Dutch, participant-facing
+  deadlineHours: number      // hours from obligation-open (exercise-time)
+  purpose: string            // one-sentence Dutch description shown in UI
 }
 
-export interface NotificationDraft {
+export interface RegulatoryRegime {
   id: string
-  type: NotificationType
-  createdBy: string
-  createdAt: number
-  submittedAt?: number
-  content: {
-    suspectMalicious?: string
-    crossBorderImpact?: string
-    responsibleContact?: string
-    initialImpactAssessment?: string
-    iocs?: string
-    mitigations?: string
-    otherFields?: Record<string, string>
-  }
-  score?: {
-    completeness: number
-    onTime: boolean
-    submittedBeforeChaser: boolean
+  authorityLabel: string
+  obligation: string
+  jurisdiction: string
+  milestones: RegulatoryMilestone[]        // exactly two: initial + closing
+  triggerFlag: string                       // 'triggersRegulatoryNotification'
+  scoring: {
+    onTime:  Partial<Record<OutcomeDimensionKey, number>>
+    late:    Partial<Record<OutcomeDimensionKey, number>>
+    omitted: Partial<Record<OutcomeDimensionKey, number>>
   }
 }
 
-export interface RetainerActivationState {
-  chosenActivator?: string
-  chosenActivatorAuthorized?: boolean
-  dialedAt?: number
-  handoffCompleted?: string[]
-  updatedAt: number
+export interface RegulatoryObligationState {
+  regimeId: string
+  milestoneId: string
+  status: 'open' | 'filed' | 'expired'
+  openedAtRound: number         // 1-based round number when the obligation opened
+  openedAtHour: number          // exercise-hours since incident awareness at open time
+  filedAtRound?: number
+  filedAtHour?: number
+  filedBy?: string              // participantId
+  filedByRole?: Role
+  freeText?: string             // participant free-text — "Wat is er gebeurd?"
+  keyPoints?: string            // second free-text field — "Wat wordt er nu gedaan?"
+  expiredAtRound?: number       // filled when a still-open milestone is marked expired
+}
+
+// Phase 3 — retainer activation is now a single participant-decision that sets
+// the RETAINER_ACTIVATED_FLAG capability. This snapshot records who activated
+// and when so the review reveal + supervision report can grade the timing.
+export interface RetainerActivation {
+  activatedAtRound: number   // 1-based
+  activatedByParticipantId: string
+  activatedAtTs: number
 }
 
 export interface SubmittedDecision {
@@ -261,8 +274,8 @@ export interface SubmittedDecision {
   submittedAt: string
   isWrongRole: boolean
   isIrDeviation: boolean
-  // Deel B §7.2 — zekerheidstap 1..5 bij inzending, voor KALIBRATIE-scoring.
-  // Optioneel; ontbrekend → KALIBRATIE valt uit de weging.
+  // Zekerheidstap 1..5 bij inzending. Wordt privé teruggetoond aan de deelnemer
+  // na REVIEW; niet zichtbaar voor anderen tijdens de sessie.
   confidence?: 1 | 2 | 3 | 4 | 5
   // Deel B §4 — bij EVENT-mode: welke groep heeft dit ingezonden. Idempotency
   // is dan (groupId, roundIndex). In ASSESSMENT-mode ongebruikt.
@@ -423,6 +436,13 @@ export interface Inject {
   // Optional per-span ground truth for annotation-level scoring (Phase D.11).
   groundTruthAnnotations?: InjectSpanAnnotation[]
   supervisionAreas?: SupervisionArea[]
+  // Regulatory notification trigger — when true, firing this inject opens the
+  // initial regulatory obligation on the session (see RegulatoryRegime).
+  // Idempotent per session: the second inject with this flag is a no-op.
+  triggersRegulatoryNotification?: boolean
+  // Phase 3 — capability-gated visibility. Injects with this flag set are hidden
+  // from participants until session.flags[requiresCapability] === true.
+  requiresCapability?: string
 }
 
 export interface FacilitatorNotes {
@@ -583,6 +603,9 @@ export type TimelineEventType =
   | "inject_routes_replotted"
   | "inject_tagged"
   | "melding_filed"
+  | "regulatory_obligation_opened"
+  | "regulatory_obligation_filed"
+  | "regulatory_obligation_expired"
 
 export interface TimelineEvent {
   id: string
@@ -685,18 +708,19 @@ export interface SessionState {
   factChecks?: FactCheckEntry[]
   // Inline text-highlight annotations on inject bodies (private per participant).
   injectAnnotations?: InjectAnnotation[]
-  // Notification duty (Cbw/AVG meldplicht) — active gameplay.
-  notifications?: NotificationDraft[]
-  // Story-driven meldplicht prompts spawned by inject/decision/chaser events.
-  meldplichtPrompts?: MeldplichtPrompt[]
+  // Regulatory notification regime — the jurisdictional obligation attached
+  // to this session (default: NL AVG + NIS2). Data-driven; scenarios may override.
+  regulatoryRegime?: RegulatoryRegime
+  // Live obligation state — one entry per milestone opened this session.
+  regulatoryObligations?: RegulatoryObligationState[]
   // Participant-initiated meldingen (Phase D — general escalation reports).
   meldingen?: FiledMelding[]
   // Anchor for meldplicht deadline countdowns.
   incidentDetectedAt?: number
   // Boolean flags for chaser conditions and generic scenario state.
   flags?: Record<string, boolean>
-  // IR-retainer activation mini-flow state.
-  retainerState?: RetainerActivationState
+  // Phase 3 — snapshot of the retainer-activation decision (once set, immutable).
+  retainerActivation?: RetainerActivation
   // Auditor-edited fields on the supervision report (chains, lessons).
   supervisionReportEdits?: SupervisionReportEdits
   // Slim projection of the current/peek-ahead DecisionNode for participants.
@@ -777,19 +801,43 @@ export interface FiledMelding {
   spawnedInjectId?: string     // set when the follow-up inject was created
 }
 
+export interface ActiveDecisionPending {
+  optionId: string
+  optionLabel: string
+  allowedRole?: Role
+  // Alleen ingevuld in review-fase — de reveal.
+  qualityRank?: ChoiceQuality
+  facilitatorCommentary?: string
+  lessonLearned?: string
+}
+
+// Sequential presentation of pending options for one participant. Enables
+// solo/understaffed play: a single participant with multiple inherited roles
+// works through their pending list one option at a time.
+export interface ActiveDecisionParticipantPending {
+  // Ordered role sequence this participant is playing this round — primary
+  // role first, then each inherited role that actually has a matching option
+  // in the current DecisionNode.
+  roleSequence: Role[]
+  // Position in roleSequence of the next role whose option the participant sees.
+  currentIndex: number
+  // Denominator for the "Beslissing X van Y" progress indicator.
+  total: number
+  // Zero-indexed count of decisions this participant has already submitted
+  // for this decision node in the current round.
+  completed: number
+}
+
 export interface ActiveDecisionState {
   nodeId: string
   prompt: string
   perRole: boolean
-  options: Array<{
-    id: string
-    label: string
-    allowedRole?: Role
-    // Alleen ingevuld in review-fase — de reveal.
-    qualityRank?: ChoiceQuality
-    facilitatorCommentary?: string
-    lessonLearned?: string
-  }>
+  // Full visible option set (as today, needed for facilitator view + backwards).
+  options: ActiveDecisionPending[]
+  // Per-participant sequential pending queue. Present when at least one
+  // participant still owes a submission. Omitted per-participant once they
+  // have completed all their roles.
+  pendingByParticipant?: Record<string, ActiveDecisionParticipantPending>
 }
 
 export interface SupervisionReportEdits {
@@ -834,6 +882,8 @@ export type LiveEventName =
   | "special_completed"
   | "participant_ready"
   | "melding_filed"
+  | "regulatory_obligation_opened"
+  | "regulatory_obligation_filed"
 
 export interface LiveEvent {
   name: LiveEventName

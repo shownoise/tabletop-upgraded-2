@@ -3,9 +3,8 @@
 import { useMemo } from "react"
 import type { SessionState } from "@/lib/types"
 
-// Deel B §7.2 — persoonlijke confidence-tally voor deelnemers na LOCK/review.
-// Toont hun eigen zekerheids-invoer per ronde, gecombineerd met de eigen
-// keuze. Geen aggregate KALIBRATIE (die is teamniveau), wel een spiegel:
+// Persoonlijke zekerheids-spiegel voor deelnemers na REVIEW.
+// Toont hun eigen zekerheids-invoer per ronde, gecombineerd met de eigen keuze:
 // "waar was je overtuigd, waar minder".
 
 export function ConfidenceTally({
@@ -69,7 +68,7 @@ export function ConfidenceTally({
         ))}
       </div>
       <p className="mt-3 font-mono text-[10px] text-tt-dim">
-        Kalibratie op teamniveau verschijnt in het rapport na de sessie.
+        Je zekerheid was privé — niet zichtbaar voor anderen tijdens de sessie.
       </p>
     </div>
   )

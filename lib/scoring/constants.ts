@@ -2,27 +2,9 @@
 // SemVer: major = dimension added/removed, minor = weights changed, patch = formula fix.
 export const SCORING_VERSION = '1.0.0'
 
-// Deel A §7.8 — default gewichten voor de geometrisch-gemiddelde PROCES-aggregatie.
-// Configureerbaar per oefening; deze default staat opgeschreven in de spec.
-export const DEFAULT_PROCESS_WEIGHTS = {
-  BESLUIT: 0.18,
-  MANDAAT: 0.18,
-  AANNAME: 0.13,
-  ADAPT: 0.13,
-  EXTERN: 0.18,
-  VOLHOUD: 0.08,
-  DELEN: 0.12,
-} as const
-
 // De zes uitkomstdimensies (Deel A §5). Vast, nooit per klant aanpassen.
 export const OUTCOME_DIMENSIONS = ['CONT', 'FOR', 'BC', 'JUR', 'VER', 'KOS'] as const
 export type OutcomeDimension = typeof OUTCOME_DIMENSIONS[number]
-
-// De zeven procesdimensies (Deel A §7).
-export const PROCESS_DIMENSIONS = [
-  'BESLUIT', 'MANDAAT', 'AANNAME', 'ADAPT', 'EXTERN', 'VOLHOUD', 'DELEN',
-] as const
-export type ProcessDimension = typeof PROCESS_DIMENSIONS[number]
 
 // De tien domeinen (Deel A §4.1).
 export const DOMAINS = [
@@ -45,10 +27,6 @@ export const DEFAULT_DOMAIN_OWNERSHIP: Record<Domain, readonly string[]> = {
   BEDRIJFSPROCES:   ['BUSINESS_OWNER', 'CRISIS_LEAD'],
   EXTERNE_PARTIJEN: ['CRISIS_LEAD', 'RETAINER_LIAISON'],
 } as const
-
-// Deel B §1.5 — drempels waaronder MANDAAT/DELEN als "niet meetbaar" (null) worden gerapporteerd.
-export const MANDATE_MIN_DISTINCT_OWNERS = 3
-export const SHARE_MIN_ROL_COVERAGE = 0.4
 
 // Deel A §7.1 — Tempo-formule σ in log-ruimte. Spec: 0,6.
 export const TEMPO_SIGMA = 0.6

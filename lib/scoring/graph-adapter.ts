@@ -119,24 +119,40 @@ export function sessionToEvents(session: SessionState): ExerciseEvent[] {
     events.push(submittedDecisionToEvent(d, session))
   }
 
-  // Notifications als external-party activations.
-  for (const n of session.notifications ?? []) {
-    if (!n.submittedAt) continue
-    events.push({
-      kind: 'external_party_activated',
-      t: n.submittedAt,
-      partyId: n.type,
-      actionable: 1,  // ingezonden = actionable; facilitator kan later corrigeren via facilitator_q_j
-    })
+  // Regulatory obligations as external-party activations. Timing (on-time /
+  // late / omitted) is folded back into the round's outcome vector via the
+  // regime's scoring config (see outcome-round.ts).
+  const regime = session.regulatoryRegime
+  for (const o of session.regulatoryObligations ?? []) {
+    if (o.status === 'filed' && o.filedAtRound !== undefined) {
+      const anchor = session.incidentDetectedAt ?? session.startedAt ?? session.createdAt
+      const t = anchor + (o.filedAtHour ?? 0) * 60 * 60 * 1000
+      events.push({
+        kind: 'external_party_activated',
+        t,
+        partyId: `regulatory:${o.regimeId}:${o.milestoneId}`,
+        actionable: 1,
+      })
+    } else if (o.status === 'expired') {
+      const anchor = session.incidentDetectedAt ?? session.startedAt ?? session.createdAt
+      const ms = regime?.milestones.find(m => m.id === o.milestoneId)
+      const t = anchor + ((o.openedAtHour + (ms?.deadlineHours ?? 0)) * 60 * 60 * 1000)
+      events.push({
+        kind: 'external_party_activated',
+        t,
+        partyId: `regulatory:${o.regimeId}:${o.milestoneId}`,
+        actionable: 0,
+      })
+    }
   }
 
   // Retainer-activatie ook als external party.
-  if (session.retainerState?.dialedAt) {
+  if (session.retainerActivation?.activatedAtTs) {
     events.push({
       kind: 'external_party_activated',
-      t: session.retainerState.dialedAt,
+      t: session.retainerActivation.activatedAtTs,
       partyId: 'retainer',
-      actionable: session.retainerState.chosenActivatorAuthorized ? 1 : 0.5,
+      actionable: 1,
     })
   }
 
@@ -172,17 +188,32 @@ function numberRoundsFromStart(graph: ScenarioGraph): Map<string, number> {
   const map = new Map<string, number>()
   const start = graph.nodes.find(n => n.type === 'start')
   if (!start) return map
-  const seq = new Map<string, string>()
-  for (const e of graph.edges) if (e.type === 'sequence') seq.set(e.source, e.target)
+  // Follow sequence edges first; when a decision node is encountered, follow any
+  // branch edge from it to a round node (all branches from a per-role decision
+  // typically converge on the same next round; we pick one). Injects and
+  // outcomes are terminal for round-numbering purposes.
+  type OutgoingEdge = { target: string; type: string }
+  const outgoingByNode: Map<string, OutgoingEdge[]> = new Map()
+  for (const e of graph.edges) {
+    const list = outgoingByNode.get(e.source) ?? []
+    list.push({ target: e.target, type: e.type })
+    outgoingByNode.set(e.source, list)
+  }
+  const nodeById = new Map(graph.nodes.map(n => [n.id, n] as const))
   let cursor: string | undefined = start.id
   let num = 0
   const visited = new Set<string>()
   while (cursor && !visited.has(cursor)) {
     visited.add(cursor)
-    const node = graph.nodes.find(n => n.id === cursor)
+    const node = nodeById.get(cursor)
     if (!node) break
     if (node.type === 'round') { num++; map.set(node.id, num) }
-    cursor = seq.get(cursor)
+    const outs: OutgoingEdge[] = outgoingByNode.get(cursor) ?? []
+    // Prefer sequence edges; fall back to any branch edge that lands on a round.
+    const seqNext = outs.find((e: OutgoingEdge) => e.type === 'sequence')
+    if (seqNext) { cursor = seqNext.target; continue }
+    const branchToRound = outs.find((e: OutgoingEdge) => e.type === 'branch' && nodeById.get(e.target)?.type === 'round')
+    cursor = branchToRound?.target
   }
   return map
 }
@@ -338,16 +369,35 @@ function mapTimelineToEvent(te: TimelineEvent): ExerciseEvent | null {
 
 function submittedDecisionToEvent(d: SubmittedDecision, session: SessionState): ExerciseEvent {
   const specRole = d.role ? APP_ROLE_TO_SPEC[d.role] : 'CRISIS_LEAD'
+  // d.actionId can be either (a) a RoleAction id — in which case the scenario
+  // spec's decisionPoint.id equals the actionId and both event fields are the
+  // same, or (b) a DecisionNode option id, in which case the scoring engine
+  // keys the decision point by the containing NODE id, not the option id.
+  // Resolve which case this is by walking the graph. Without this resolution
+  // DecisionNode submissions never match a decision point in the scoring
+  // engine and silently fall through to NO_DECISION_FALLBACK_VECTOR.
+  const decisionPointId = resolveDecisionPointId(d.actionId, session) ?? d.actionId
   return {
     kind: 'decision_submitted',
     t: Date.parse(d.submittedAt) || session.startedAt || session.createdAt,
     round: d.roundIndex + 1,
-    decisionPointId: d.actionId,
+    decisionPointId,
     optionId: d.actionId,
     by: specRole,
     groupId: d.groupId,
     confidence: d.confidence,
   }
+}
+
+function resolveDecisionPointId(actionId: string, session: SessionState): string | null {
+  const graph = session.graph
+  if (!graph) return null
+  for (const node of graph.nodes) {
+    if (node.type !== 'decision') continue
+    const dd = node.data as DecisionNodeData
+    if (dd.options.some(o => o.id === actionId)) return node.id
+  }
+  return null
 }
 
 // Silence unused-symbol warnings while the AppInject and NO_DECISION_FALLBACK_VECTOR

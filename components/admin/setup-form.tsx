@@ -697,9 +697,6 @@ function IrRetainerProfileEditor({
   const p: IrRetainerProfile = value ?? {
     name: "",
     activationNumber: "",
-    authorizedActivators: [],
-    slaMinutesToFirstContact: 30,
-    handoffChecklist: [],
     scopeIncludes: [],
     scopeExcludes: [],
   }
@@ -716,19 +713,6 @@ function IrRetainerProfileEditor({
       </FieldRow>
       <FieldRow label="E-mail (optioneel)">
         <Input value={p.activationEmail ?? ""} onChange={e => patch({ activationEmail: e.target.value || undefined })} />
-      </FieldRow>
-      <FieldRow label="SLA minuten tot eerste contact">
-        <Input type="number" min={0} value={p.slaMinutesToFirstContact} onChange={e => patch({ slaMinutesToFirstContact: Number(e.target.value) })} />
-      </FieldRow>
-      <FieldRow label="Geautoriseerde activators (komma-gescheiden)">
-        <Input
-          value={p.authorizedActivators.join(", ")}
-          onChange={e => patch({ authorizedActivators: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
-          placeholder="CISO, IT Manager, CEO"
-        />
-      </FieldRow>
-      <FieldRow label="Overdrachtchecklist (één per regel)">
-        <Textarea rows={3} value={p.handoffChecklist.join("\n")} onChange={e => patch({ handoffChecklist: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })} />
       </FieldRow>
       <FieldRow label="Scope includes (één per regel)">
         <Textarea rows={2} value={p.scopeIncludes.join("\n")} onChange={e => patch({ scopeIncludes: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })} />

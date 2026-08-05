@@ -6,7 +6,7 @@ import type {
   ScenarioGraph,
   OutcomeVector,
 } from "./types"
-import { EYE_SECURITY_RETAINER, DEFAULT_MELDPLICHT, DEFAULT_FEATURES } from "./types"
+import { EYE_SECURITY_RETAINER, DEFAULT_FEATURES } from "./types"
 import type {
   ChoiceQuality,
   InjectChannel,
@@ -46,12 +46,17 @@ export interface WizardPlanInject {
   urgency: Urgency
   senderName?: string
   senderHandle?: string
+  source?: string  // free-text source label (e.g. "RTV Oost — regionale redactie")
   timestamp?: string
   targetTeam?: "all" | "crisis_management" | "technical_it"
   targetRoles?: Role[]
   nis2Relevant?: boolean
   reliability?: InjectReliability
   deliverySeconds?: number
+  // Phase 3 — capability-gated visibility. Inject hidden until session.flags[key]==true.
+  requiresCapability?: string
+  // Phase 2 — opens the initial regulatory obligation on the session when fired.
+  triggersRegulatoryNotification?: boolean
 }
 
 export interface WizardPlanMeldingType {
@@ -82,6 +87,7 @@ export interface WizardPlanRound {
   redFlags?: string[]
   openingPrompts?: string[]
   facilitatorPerspective?: string
+  reviewPrompts?: string[]
 }
 
 // Per-round decision — participants pick one option that carries an explicit
@@ -93,13 +99,20 @@ export interface WizardPlanDecision {
   options: Array<{
     label: string
     linksToRoleActionId?: string
-    leadsTo: string  // "round:<index>" | "outcome:<key>"
+    // "round:<index>" | "outcome:<key>". If omitted, defaults to the next round
+    // in sequence (or the first outcome if there is no next round). Useful when
+    // the decision is scoring-only and every option should just continue.
+    leadsTo?: string
     allowedRole?: Role
     outcomeVector?: OutcomeVector
     qualityRank?: ChoiceQuality
     facilitatorCommentary?: string
     lessonLearned?: string
     implicit?: boolean
+    // Phase 3 — capability wiring. See DecisionNodeData.options[] in graph/types.ts.
+    capabilityFlag?: string
+    consumesOptionAfterUse?: boolean
+    requiresCapability?: string
   }>
 }
 
@@ -203,6 +216,7 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
       roleActions,
       openingPrompts: round.openingPrompts,
       facilitatorPerspective: round.facilitatorPerspective,
+      reviewPrompts: round.reviewPrompts,
       meldingMoments: meldingMoment ? [meldingMoment] : undefined,
       facilitatorNotes: {
         discussionGoal: round.discussionGoal ?? "",
@@ -230,12 +244,15 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
         urgency: inj.urgency,
         senderName: inj.senderName,
         senderHandle: inj.senderHandle,
+        source: inj.source,
         timestamp: inj.timestamp,
         targetTeam: inj.targetTeam,
         targetRoles: inj.targetRoles,
         nis2Relevant: inj.nis2Relevant,
         reliability: inj.reliability,
         deliverySeconds: inj.deliverySeconds,
+        requiresCapability: inj.requiresCapability,
+        triggersRegulatoryNotification: inj.triggersRegulatoryNotification,
       }
       nodes.push({
         id: injectId,
@@ -290,6 +307,9 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
         facilitatorCommentary: opt.facilitatorCommentary,
         lessonLearned: opt.lessonLearned,
         implicit: opt.implicit,
+        capabilityFlag: opt.capabilityFlag,
+        consumesOptionAfterUse: opt.consumesOptionAfterUse,
+        requiresCapability: opt.requiresCapability,
       }))
       const data: DecisionNodeData = {
         kind: "decision",
@@ -305,8 +325,14 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
         data,
       })
       edges.push({ id: nid("e"), source: roundNodeIds[i], target: did, type: "sequence" })
+      // Default target: next round in sequence, or first outcome if this is the
+      // final round. Authors may override per-option via `leadsTo`.
+      const defaultTarget = roundNodeIds[i + 1]
+        ?? (plan.outcomes[0] ? outcomeIdByKey.get(plan.outcomes[0].key) : undefined)
       decision.options.forEach((opt, oi) => {
-        const target = resolveTarget(opt.leadsTo, roundNodeIds, outcomeIdByKey)
+        const target = opt.leadsTo
+          ? resolveTarget(opt.leadsTo, roundNodeIds, outcomeIdByKey)
+          : defaultTarget
         if (target) {
           edges.push({
             id: nid("e"),
@@ -335,7 +361,6 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
     irRetainerName: EYE_SECURITY_RETAINER.name,
     irRetainerProfile: EYE_SECURITY_RETAINER,
     irPlaybook: plan.irPlaybook,
-    meldplicht: DEFAULT_MELDPLICHT,
     features: DEFAULT_FEATURES,
   }
 }

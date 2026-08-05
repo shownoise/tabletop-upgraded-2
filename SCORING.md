@@ -65,6 +65,21 @@ The trend chart in the reveal panel renders **only completed rounds** — rounds
 - `roleResolution` — the distributed role snapshot (Phase C2) — coverage %, distinct owners, and effective domain owners as **participant IDs**, no longer raw spec-role strings. The reveal panel maps these back to app-role labels + participant names, fixing the "every role shows CRISIS_LEAD" bug.
 - `meta` — `scoringVersion`, `rolCoverage`. Facilitator-only.
 
+## Solo play / understaffed sessions
+
+Phase 4 introduces a sequential decision queue for participants who have inherited additional roles because their spec-mate never joined. Solo play is the extreme case — one participant carrying 6+ roles — but the same mechanic covers every gap between MINIMUM_STAFFING and a fully staffed room.
+
+**Per-dimension behaviour.** Nothing changes in `computeRoundOutcome` (`lib/scoring/outcome-round.ts`). Each authored option still contributes its `outcomeVector` to the round's dimension sum, then the round's `perDimension` is the average of all submitted-option vectors within that round. A solo participant who submits 6 decisions in one round produces the same shape of sum-then-average as 6 different people would.
+
+**Distinct-owner metric.** `roleResolution.distinctOwners` counts unique effective owners across the 10 spec-domains. In solo play this is 1 — the sole participant carries every domain via the fallback chain. Two consequences:
+
+- `dropOptionalDecisions()` (in `lib/scoring/dry-run.ts`) may drop optional decisions when `distinctOwners < optionalDecisionThreshold`. Authors who set an `optionalDecisionThreshold > 1` are explicitly signalling "this decision only counts when at least N distinct owners are present" — the scenario should degrade gracefully, not error out.
+- The facilitator report footer names the participant as sole owner across every domain; this is expected, not a bug.
+
+**Non-degenerate scores.** Because each authored option carries a distinct `outcomeVector`, a solo run still produces a meaningful profile. The round's `perDimension` is the average of the vectors of the options the participant actually chose — it is neither zero (because vectors are non-zero) nor a copy of any single option (unless the participant happened to pick options with identical vectors). The IR-retainer perspective in the review panel remains a per-decision reveal, so the debrief works the same way whether one or eight people played.
+
+**What the participant sees.** During the DECISION phase the ticket walks through the participant's role queue one option at a time. For inherited roles a Dutch hand-off notice is rendered above the option so the participant deliberately switches perspective before choosing. The DECISION → REVIEW transition is blocked until every queue item has been submitted (or the facilitator forces it via "Fase forceren").
+
 ## What the participant sees
 
 Per axis, the reveal panel renders:

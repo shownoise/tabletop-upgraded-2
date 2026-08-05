@@ -1,4 +1,4 @@
-import type { Inject, NotificationDraft, Role, Round, SessionState, SpecialType } from "@/lib/types"
+import type { Inject, Role, Round, SessionState, SpecialType } from "@/lib/types"
 import type {
   ChaserNodeData,
   DecisionNodeData,
@@ -156,8 +156,6 @@ export function evaluateChasersOnRoundStart(
   session: SessionState,
   roundNumber: number,
 ): Inject[] {
-  const meldplicht = graph.meldplicht
-  if (meldplicht && !meldplicht.chasersEnabled) return []
   const results: Inject[] = []
   for (const node of graph.nodes) {
     if (node.type !== "chaser") continue
@@ -175,10 +173,10 @@ export function evaluateChasersOnRoundStart(
 
 function conditionTrue(chaser: ChaserNodeData, session: SessionState): boolean {
   const cond = chaser.condition
-  if (cond.kind === "notification_missing") {
-    if (!cond.type) return false
-    const notes = session.notifications ?? []
-    return !notes.some((n: NotificationDraft) => n.type === cond.type && !!n.submittedAt)
+  if (cond.kind === "regulatory_obligation_open") {
+    if (!cond.milestoneId) return false
+    const list = session.regulatoryObligations ?? []
+    return list.some(o => o.milestoneId === cond.milestoneId && o.status === 'open')
   }
   if (cond.kind === "decision_not_taken") {
     if (!cond.roleActionId) return false

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react"
 import type { AssessmentReport } from "@/lib/scoring"
-import type { SessionState, Role } from "@/lib/types"
+import type { RegulatoryObligationState, RegulatoryRegime, SessionState, Role } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import { effectiveRolesForParticipant } from "@/lib/engine/distribute-roles"
+import { retainerAdvice } from "@/lib/scoring/retainer-advice"
 
 // REVIEW-fase reveal — Dutch labels, no abbreviations, explicit direction per axis.
 // Trend only renders completed rounds. Version + coverage moved to facilitator-only debug panel.
@@ -57,9 +58,10 @@ export function RevealPanel({
 
   if (!visible) return null
 
-  // Trend: only render outcomes for rounds that have actually completed
-  // (round.round <= currentRound). Never pre-fill future rounds.
-  const completedOutcomes = report?.outcomes.filter(o => o.round <= currentRound) ?? []
+  // Trend: only render outcomes for rounds that have real submissions.
+  // "Rounds we passed through with no data" collapse into a distinct empty state
+  // upstream — the trend never shows a fallback vector as a real value.
+  const completedOutcomes = report?.outcomes.filter(o => o.round <= currentRound && o.hasSubmissions) ?? []
 
   return (
     <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-4">
@@ -91,9 +93,15 @@ export function RevealPanel({
                       <div key={dim.key} className="rounded border border-border bg-background p-2">
                         <div className="flex items-baseline justify-between mb-1">
                           <span className="text-sm font-semibold">{dim.label}</span>
-                          <span className={`font-mono text-sm font-bold ${positive ? "text-emerald-600" : "text-rose-600"}`}>
-                            {positive ? "+" : ""}{value.toFixed(1)} — {positive ? "positief" : "negatief"}
-                          </span>
+                          {round.hasSubmissions ? (
+                            <span className={`font-mono text-sm font-bold ${positive ? "text-emerald-600" : "text-rose-600"}`}>
+                              {positive ? "+" : ""}{value.toFixed(1)} — {positive ? "positief" : "negatief"}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-500 bg-amber-100/60 dark:bg-amber-900/30 px-2 py-0.5 rounded">
+                              nog niet gemeten
+                            </span>
+                          )}
                         </div>
                         <p className="text-[11px] text-muted-foreground leading-snug">{dim.hint}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5 italic">{dim.direction}</p>
@@ -101,6 +109,41 @@ export function RevealPanel({
                     )
                   })}
                 </div>
+                {!round.hasSubmissions && (
+                  <p className="mt-2 text-[11px] text-muted-foreground italic">
+                    In deze ronde zijn nog geen beslissingen ingediend. Zodra iemand een keuze maakt, verschijnen hier waarden.
+                  </p>
+                )}
+                {session?.regulatoryRegime && (() => {
+                  const advice = regulatoryAdviceForRound(
+                    session.regulatoryObligations ?? [],
+                    session.regulatoryRegime,
+                    currentRound,
+                    session.status === 'ended',
+                  )
+                  if (!advice) return null
+                  return (
+                    <p className={`mt-3 text-xs italic ${
+                      advice.tone === 'good'
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : advice.tone === 'warn'
+                          ? 'text-amber-700 dark:text-amber-400'
+                          : 'text-rose-700 dark:text-rose-400'
+                    }`}>{advice.text}</p>
+                  )
+                })()}
+                {session && (() => {
+                  const advice = retainerAdvice(session)
+                  return (
+                    <p className={`mt-2 text-xs italic ${
+                      advice.tone === 'good'
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : advice.tone === 'warn'
+                          ? 'text-amber-700 dark:text-amber-400'
+                          : 'text-rose-700 dark:text-rose-400'
+                    }`}>{advice.text}</p>
+                  )
+                })()}
               </div>
             )
           })()}
@@ -171,4 +214,45 @@ export function RevealPanel({
       )}
     </div>
   )
+}
+
+// Build the Dutch advice sentence for the current review round.
+// - filed on-time / late in this exact round → concrete outcome
+// - filed on-time / late in a previous round → reminder still relevant
+// - still open past deadline (session ended)  → escalating "omitted" finding
+// - still open, within deadline               → reminder (soft tone)
+function regulatoryAdviceForRound(
+  obligations: RegulatoryObligationState[],
+  regime: RegulatoryRegime,
+  currentRound: number,
+  sessionEnded: boolean,
+): { text: string; tone: 'good' | 'warn' | 'bad' } | null {
+  if (obligations.length === 0) return null
+  // Concrete filing this round?
+  for (const o of obligations) {
+    if (o.filedAtRound === currentRound && o.status === 'filed') {
+      const ms = regime.milestones.find(m => m.id === o.milestoneId)
+      if (!ms) continue
+      const deadlineHour = o.openedAtHour + ms.deadlineHours
+      const onTime = (o.filedAtHour ?? Number.POSITIVE_INFINITY) <= deadlineHour
+      return onTime
+        ? { text: `Meldplicht: op tijd ingediend in ronde ${o.filedAtRound}.`, tone: 'good' }
+        : { text: `Meldplicht: te laat ingediend in ronde ${o.filedAtRound} — na de wettelijke termijn.`, tone: 'bad' }
+    }
+    if (o.expiredAtRound === currentRound || (sessionEnded && o.status === 'expired')) {
+      const ms = regime.milestones.find(m => m.id === o.milestoneId)
+      const label = ms?.label ?? o.milestoneId
+      return { text: `Meldplicht: ${label} is niet ingediend — expliciete bevinding in de nabespreking.`, tone: 'bad' }
+    }
+  }
+  // Still-open, deadline not yet reached — surface as reminder.
+  const openStill = obligations.find(o => o.status === 'open')
+  if (openStill) {
+    const ms = regime.milestones.find(m => m.id === openStill.milestoneId)
+    if (ms) return {
+      text: `Meldplicht: ${ms.label.toLowerCase()} staat nog open — deadline binnen ${ms.deadlineHours} uur na bekendwording.`,
+      tone: 'warn',
+    }
+  }
+  return null
 }

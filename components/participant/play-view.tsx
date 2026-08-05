@@ -22,9 +22,8 @@ import { ReviewCommentary } from "./review-commentary"
 import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
-import { MeldplichtTray } from "./meldplicht-tray"
+import { RegulatoryNotificationButton } from "./regulatory-notification-button"
 import { MeldingButton } from "./melding-button"
-import { RetainerActivationPanel } from "./retainer-activation-panel"
 import { SpecialModal } from "./special-modal"
 import { PhaseTimer, PhaseSegments } from "./phase-timer"
 import { Empty } from "@/components/ui/empty"
@@ -536,6 +535,12 @@ function TeamRoleSwitcher({
 // perRole=true → participants submitten zelf. Leest van activeDecision
 // (peek-ahead vanuit de round tijdens decision-fase). qualityRank + commentary
 // zijn alleen bevolkt in review-fase.
+//
+// Phase 4 — solo/understaffed play: if the projection carries a
+// pendingByParticipant entry, the ticket presents one option at a time in the
+// participant's role sequence. When the current role is an inherited (not
+// primary) role, a hand-off notice is shown so the participant knows they are
+// stepping into a different mandate.
 function DecisionTicket({
   session,
   participantId,
@@ -549,37 +554,59 @@ function DecisionTicket({
   const [error, setError] = useState<string | null>(null)
 
   const ad = (session as unknown as { activeDecision?: {
-    nodeId: string; prompt: string; perRole: boolean
-    options: Array<{ id: string; label: string; allowedRole?: Role }>
+    nodeId: string
+    prompt: string
+    perRole: boolean
+    options: Array<{ optionId: string; optionLabel: string; allowedRole?: Role }>
+    pendingByParticipant?: Record<string, {
+      roleSequence: Role[]
+      currentIndex: number
+      total: number
+      completed: number
+    }>
   } }).activeDecision
   if (!ad || !ad.perRole) return null
 
-  // In EVENT-mode: iPad = team, the "active role" is picked via the team switcher
-  // (passed in as participantRole prop). In ASSESSMENT-mode: filter op eigen rol.
   const isEventMode = session.mode === "event"
-  // Team-device must have picked a role before submitting — otherwise the decision
-  // would be miskeyed. In assessment mode the assigned role suffices.
-  const canSubmit = !!participantId && !!participantRole
   const roundIndex = session.currentRound
 
-  // In event mode dedupe on (participantId, roundIndex, role) so the same team device
-  // can carry submissions for multiple roles.
-  const already = (session.submittedDecisions ?? []).find(
-    d => d.participantId === participantId
-      && d.roundIndex === roundIndex
-      && (!isEventMode || d.role === participantRole),
-  )
+  // Solo/understaffed queue: which role is this participant acting for right now?
+  // Event mode still respects the team-switcher (participantRole prop); we only
+  // consult the pending queue in non-event flows.
+  const pending = participantId && !isEventMode
+    ? ad.pendingByParticipant?.[participantId]
+    : undefined
+  const primaryRole = pending?.roleSequence[0]
+  const queueCurrentRole = pending && pending.currentIndex < pending.roleSequence.length
+    ? pending.roleSequence[pending.currentIndex]
+    : undefined
+  const activeRole: Role | undefined = queueCurrentRole ?? participantRole
+  const canSubmit = !!participantId && !!activeRole
 
-  // Only offer the options relevant to the acting role — even in event mode. Prevents
-  // the team from accidentally submitting an option meant for a role they're not
-  // currently pretending to be.
-  const mine = participantRole
-    ? ad.options.filter(o => !o.allowedRole || o.allowedRole === participantRole)
-    : ad.options
-  const visibleOptions = mine.length > 0 ? mine : ad.options
+  // Completion in queue mode is when we've walked past the last item.
+  const queueDone = !!pending && pending.completed >= pending.total
+
+  // In event mode fall back to the legacy per-round already-submitted lookup.
+  const already = isEventMode
+    ? (session.submittedDecisions ?? []).find(
+        d => d.participantId === participantId
+          && d.roundIndex === roundIndex
+          && d.role === participantRole,
+      )
+    : undefined
+
+  // Pick the option to present. In queue mode: the option whose allowedRole
+  // matches the current role in the sequence. Otherwise fall back to the
+  // legacy filter (options the acting role is allowed to submit).
+  let visibleOptions = pending
+    ? ad.options.filter(o => o.allowedRole === queueCurrentRole)
+    : (activeRole
+      ? ad.options.filter(o => !o.allowedRole || o.allowedRole === activeRole)
+      : ad.options)
+  if (!pending && visibleOptions.length === 0) visibleOptions = ad.options
 
   async function pick(optionId: string) {
-    if (!participantId || !canSubmit) return
+    if (!participantId || !canSubmit || !activeRole) return
     setError(null)
     setSubmitting(optionId)
     try {
@@ -589,7 +616,9 @@ function DecisionTicket({
         roundIndex,
         actionId: optionId,
         reasoning: "",
-        activeRole: isEventMode ? participantRole : undefined,
+        // WHY: in queue mode the acting role can differ from the stored role,
+        // so we pass it through explicitly to dedupe on the right tuple.
+        activeRole: (pending || isEventMode) ? activeRole : undefined,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Indienen mislukt")
@@ -598,7 +627,22 @@ function DecisionTicket({
     }
   }
 
-  const headline = already ? "Jouw keuze is ingediend" : "Kies voor jouw rol"
+  if (queueDone) {
+    return (
+      <div className="rounded-xl border-2 border-emerald-500/40 bg-emerald-500/5 px-4 py-3 flex items-center gap-2">
+        <CheckCircle className="size-4 text-emerald-600 dark:text-emerald-400" />
+        <span className="font-mono text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+          Alle beslissingen voor deze ronde ingediend
+        </span>
+      </div>
+    )
+  }
+
+  const isMulti = !!pending && pending.total > 1
+  const isHandoff = !!pending && !!queueCurrentRole && !!primaryRole && queueCurrentRole !== primaryRole
+  const headline = already
+    ? "Jouw keuze is ingediend"
+    : (isMulti ? `Beslissing ${pending!.completed + 1} van ${pending!.total}` : "Kies voor jouw rol")
 
   return (
     <div className="rounded-xl border-2 border-yellow-500/40 bg-yellow-500/5 px-4 py-3 flex flex-col gap-2">
@@ -607,13 +651,31 @@ function DecisionTicket({
         <span className="font-mono text-[11px] uppercase tracking-wider text-yellow-700 dark:text-yellow-400">
           {headline}
         </span>
-        {participantRole && (
+        {activeRole && (
           <span className="font-mono text-[9px] rounded-full border border-yellow-500/40 px-1.5 py-0.5 text-yellow-700 dark:text-yellow-400">
-            {ROLE_META[participantRole]?.label ?? participantRole}
+            {ROLE_META[activeRole]?.label ?? activeRole}
           </span>
         )}
       </div>
       <p className="text-sm font-medium">{ad.prompt}</p>
+      {isHandoff && queueCurrentRole && (
+        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="size-3.5 text-amber-700 dark:text-amber-400" />
+            <span className="font-mono text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400">
+              Deze rol is in deze sessie niet bezet: {ROLE_META[queueCurrentRole]?.label ?? queueCurrentRole}
+            </span>
+          </div>
+          <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-100">
+            Normaal beslist deze rol hierover. Omdat er nu niemand voor die rol is, neem jij deze
+            beslissing er ook bij. Zet even je hoed van {ROLE_META[queueCurrentRole]?.label ?? queueCurrentRole} op —
+            mandaat en perspectief zijn anders dan bij je hoofdrol.
+          </p>
+          <p className="text-xs italic text-amber-900/80 dark:text-amber-100/80">
+            Focus: {ROLE_META[queueCurrentRole]?.mandateSummary ?? ROLE_META[queueCurrentRole]?.description ?? ''}
+          </p>
+        </div>
+      )}
       {already && (
         <div className="rounded border border-tt-border bg-tt-bright/5 px-2 py-1.5 text-xs">
           Ingediend: <span className="font-medium">{already.actionLabel}</span>
@@ -621,13 +683,13 @@ function DecisionTicket({
       )}
       <div className="flex flex-col gap-1">
         {visibleOptions.map(opt => {
-          const isSubmitting = submitting === opt.id
-          const isThisChoice = already?.actionId === opt.id
+          const isSubmitting = submitting === opt.optionId
+          const isThisChoice = already?.actionId === opt.optionId
           return (
             <button
-              key={opt.id}
+              key={opt.optionId}
               type="button"
-              onClick={() => canSubmit && !already && pick(opt.id)}
+              onClick={() => canSubmit && !already && pick(opt.optionId)}
               disabled={!canSubmit || !!already || isSubmitting}
               className={`flex items-center gap-2 rounded border px-2 py-1.5 text-xs text-left transition-colors ${
                 isThisChoice
@@ -640,7 +702,7 @@ function DecisionTicket({
               <span className={isThisChoice ? "text-tt-accent" : "text-yellow-600 dark:text-yellow-400"}>
                 {isThisChoice ? "•" : "→"}
               </span>
-              <span className="flex-1">{opt.label}</span>
+              <span className="flex-1">{opt.optionLabel}</span>
               {opt.allowedRole && (
                 <span className="font-mono text-[9px] rounded-full border border-border px-1.5 py-0.5 text-muted-foreground">
                   {ROLE_META[opt.allowedRole]?.label ?? opt.allowedRole}
@@ -1203,8 +1265,8 @@ export function PlayView() {
               <ConfidenceTally session={session} participantId={participantId} />
             )}
 
-            {/* Meldplicht tray — story-driven prompt cards (top of feed area) */}
-            {participantId && <MeldplichtTray session={session} participantId={participantId} />}
+            {/* Regulatory notification — appears when a data-driven regime obligation opens. */}
+            {participantId && <RegulatoryNotificationButton session={session} participantId={participantId} />}
 
             {/* Melding button — participant-initiated escalation. Visible only when a moment is open for this role. */}
             {participantId && participantRole && (
@@ -1246,11 +1308,6 @@ export function PlayView() {
                 ))}
               </ul>
             </div>
-
-            {/* IR-retainer activation — visible when scenario has retainer profile authored */}
-            {participantId && (session.graph?.irRetainerProfile || session.config.irRetainerProfile) && (
-              <RetainerActivationPanel session={session} participantId={participantId} />
-            )}
 
             {/* IR / Crisis Playbook — always shown when authored on the scenario graph */}
             <IrPlaybookPanel session={session} participantRole={participantRole} />

@@ -18,10 +18,9 @@ import { SpecialsPanel } from "./specials-panel"
 import { GraphPathPanel } from "./graph-path-panel"
 import { InjectRoutePlan } from "./inject-route-plan"
 import { FactCheckPanel } from "./fact-check-panel"
-import { NotificationTracker } from "./notification-tracker"
+import { RegulatoryObligationsPanel } from "./regulatory-obligations-panel"
 import { MeldingenPanel } from "./meldingen-panel"
 import { SupervisionReportView } from "./supervision-report"
-import { ScoringPanel } from "./scoring-panel"
 import { RevealPanel } from "./reveal-panel"
 import { GroupProgress } from "./group-progress"
 import { EventModeHelp } from "./event-mode-help"
@@ -505,8 +504,8 @@ export function ControlDashboard() {
         {/* Toezichthouder-rapport — beschikbaar zodra sessie loopt */}
         <ToezichthouderReportPanel />
 
-        {/* Notification tracker — meldplicht drafts live */}
-        <NotificationTracker session={session} />
+        {/* Regulatory obligations — data-driven meldplicht state, real-time */}
+        <RegulatoryObligationsPanel session={session} />
 
         {/* Participant-filed meldingen — only renders if any have been filed. */}
         <MeldingenPanel session={session} />
@@ -574,14 +573,6 @@ export function ControlDashboard() {
             {/* Groepsdruk-inject (Deel B §7.6) — actief tijdens discussion/decision */}
             {session.graph && isActive && session.mode === "event" && (
               <GroupProgress session={session} />
-            )}
-
-            {/* Live scoring — polt /api/session/score. Mode volgt session.mode. */}
-            {session.graph && isActive && (
-              <ScoringPanel
-                visible={true}
-                mode={session.mode === "event" ? "EVENT" : "ASSESSMENT"}
-              />
             )}
 
             {/* Reveal (Deel B §5.2) — verschijnt tijdens lock/review */}

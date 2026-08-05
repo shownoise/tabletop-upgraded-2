@@ -15,7 +15,7 @@ export function computeRoundOutcome(
 ): RoundOutcome {
   const roundSpec = scenario.rounds.find(r => r.number === round)
   if (!roundSpec) {
-    return { round, normalized: 0, perDimension: emptyVector(), points: 50 }
+    return { round, normalized: 0, perDimension: emptyVector(), points: 50, hasSubmissions: false }
   }
   const decisionsThisRound = scenario.decisionPoints.filter(d => d.round === round)
   // Latest submission per (decisionPointId).
@@ -31,6 +31,7 @@ export function computeRoundOutcome(
   // Sommeer per-dim over alle beslispunten.
   const sums = emptyVector()
   let n = 0
+  let submittedCount = 0
   for (const dp of decisionsThisRound) {
     const optId = submissionsById.get(dp.id)
     const vec = optId
@@ -39,6 +40,7 @@ export function computeRoundOutcome(
     if (!vec) continue
     for (const dim of OUTCOME_DIMENSIONS) sums[dim] += vec[dim]
     n++
+    if (optId) submittedCount++
   }
 
   const perDim = emptyVector()
@@ -54,7 +56,7 @@ export function computeRoundOutcome(
   const normalized = den === 0 ? 0 : num / den
   const points = Math.round(100 * (normalized + 1) / 2)
 
-  return { round, normalized, perDimension: perDim, points }
+  return { round, normalized, perDimension: perDim, points, hasSubmissions: submittedCount > 0 }
 }
 
 function emptyVector(): Record<OutcomeDimension, number> {

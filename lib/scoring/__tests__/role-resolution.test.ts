@@ -33,7 +33,6 @@ describe('roleResolution — Deel B §1', () => {
     expect(r.effectiveOwners.HERSTEL).toBe('IT_LEAD')
     expect(r.effectiveOwners.CONTAINMENT).toBe('IT_LEAD')
     expect(r.effectiveOwners.EXTERNE_COMMS).toBe('CRISIS_LEAD')
-    // distinctOwners bepaalt of MANDAAT meetbaar is.
     expect(r.distinctOwners).toBe(3)
   })
 
@@ -83,5 +82,28 @@ describe('roleResolution — Deel B §1', () => {
     for (const d of DOMAINS) {
       expect(DEFAULT_DOMAIN_OWNERSHIP[d]).toContain('CRISIS_LEAD')
     }
+  })
+
+  it('phase-1: bij volledige bezetting resolven onderscheidbare domeinen naar onderscheidbare eigenaren (geen CRISIS_LEAD-collaps)', () => {
+    // Regressie op de "elke domein → CRISIS_LEAD"-bug in de oude ScoringPanel.
+    // Bij een volledig bezet team hoort een spreiding van effectiveOwners over
+    // de rollen, niet één rol die alle domeinen absorbeert.
+    const roster = { presentRoles: ['LEGAL_DPO', 'FINANCE_PROC', 'IT_LEAD', 'SECURITY_LEAD', 'COMMS', 'HR', 'BUSINESS_OWNER', 'CRISIS_LEAD', 'RETAINER_LIAISON'] }
+    const r = resolveRoles(roster, emptyScenario)
+
+    const ownersByDomain = r.effectiveOwners
+    const uniqueOwners = new Set(Object.values(ownersByDomain))
+    // Bij 10 domeinen en 9 aanwezige rollen verwachten we minstens 6 verschillende
+    // eigenaren; anders is een gedeelde-fallback bug terug.
+    expect(uniqueOwners.size).toBeGreaterThanOrEqual(6)
+
+    // Specifieke assertions per domein zodat een silent collapse zichtbaar wordt.
+    expect(ownersByDomain.JURIDISCH).toBe('LEGAL_DPO')
+    expect(ownersByDomain.GELD).toBe('FINANCE_PROC')
+    expect(ownersByDomain.EXTERNE_COMMS).toBe('COMMS')
+    expect(ownersByDomain.PERSONEEL).toBe('HR')
+    expect(ownersByDomain.BEDRIJFSPROCES).toBe('BUSINESS_OWNER')
+    expect(ownersByDomain.CONTAINMENT).toBe('SECURITY_LEAD')
+    expect(ownersByDomain.HERSTEL).toBe('IT_LEAD')
   })
 })

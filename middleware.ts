@@ -18,7 +18,6 @@ const PUBLIC_API_ROUTES = new Set<string>([
   "/api/session/annotate-inject",
   "/api/session/annotate-inject/remove",
   "/api/session/notifications",
-  "/api/session/retainer-activation",
   "/api/session/meldplicht-prompt/dismiss",
   "/api/session/special/message",
   "/api/session/special/form",

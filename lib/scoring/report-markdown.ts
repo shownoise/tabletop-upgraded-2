@@ -12,8 +12,6 @@ export function renderAssessmentMarkdown(r: AssessmentReport): string {
   lines.push(`- Scoring-versie: **${r.meta.scoringVersion}**`)
   lines.push(`- Rolcoverage: **${(r.meta.rolCoverage * 100).toFixed(0)}%** (${r.meta.distinctOwners} verschillende eigenaren)`)
   lines.push(`- Totaal punten: **${r.totalPoints}**`)
-  if (r.processAggregate !== null) lines.push(`- Proces-aggregate: **${r.processAggregate.toFixed(2)} / 5**`)
-  if (r.calibration !== null) lines.push(`- Kalibratie: **${r.calibration.toFixed(2)}** (negatief = overtuiging matcht uitkomst; positief = het meest zeker waar het het meest miszat)`)
   if (r.droppedOptionalDecisions.length > 0) {
     lines.push(``)
     lines.push(`> Verkorte versie gespeeld — ${r.droppedOptionalDecisions.length} optionele beslispunten overgeslagen wegens klein team.`)
@@ -26,19 +24,6 @@ export function renderAssessmentMarkdown(r: AssessmentReport): string {
   lines.push(`|---|---|---|${OUTCOME_DIMENSIONS.map(() => '---').join('|')}|`)
   for (const o of r.outcomes) {
     lines.push(`| ${o.round} | ${o.points} | ${o.normalized.toFixed(2)} | ${OUTCOME_DIMENSIONS.map(d => o.perDimension[d].toFixed(1)).join(' | ')} |`)
-  }
-
-  lines.push(``)
-  lines.push(`## Procesdimensies`)
-  lines.push(``)
-  lines.push(`| Dimensie | Score | Kwaliteit | Reden |`)
-  lines.push(`|---|---|---|---|`)
-  for (const d of r.processDimensions) {
-    const score = d.value === null ? '—' : d.value.toFixed(2)
-    const quality = d.dataQuality === 'measured' ? '✓ meting'
-      : d.dataQuality === 'observation' ? 'observatie'
-      : 'geen data'
-    lines.push(`| ${d.label} | ${score} | ${quality} | ${d.reason ?? ''} |`)
   }
 
   lines.push(``)

@@ -1,6 +1,5 @@
 import type { ScenarioGraph } from "./types"
-import { nis2PolderStormExample } from "./examples-nis2-polder-storm"
-import { simpleStoryExample } from "./examples-simple-story"
+import { schoolverenigingScenario } from "./examples-schoolvereniging"
 
 // Registry of ScenarioGraph starter templates. Each build() returns a fresh
 // graph with unique node ids, ready to load into the builder canvas.
@@ -18,20 +17,13 @@ export interface Example {
 
 export const EXAMPLES: Example[] = [
   {
-    key: "nis2_polder_storm",
-    label: "★ OPERATIE POLDER-STORM — Ransomware + Exfil (NIS2)",
+    key: "schoolvereniging_ransomware",
+    label: "★ Onderwijsvereniging — Play-ransomware (AVG + NIS2)",
     description:
-      "Startscenario voor Dutch MKB+ als essential entity onder NIS2. Ransomware met data-exfiltratie, " +
-      "72 uur tijdsbestek, 5 rondes met alle 8 rollen actief, twee melding-momenten (IR-retainer + AP-melding), " +
-      "misleading signalen op R1/R3, en cumulatieve outcome-scoring op de 6 uitkomstdimensies.",
-    build: nis2PolderStormExample,
-  },
-  {
-    key: "simple_story",
-    label: "Ransomware Crisis — 7 rondes (uitgebreid)",
-    description:
-      "Complete 7-ronde variant: detectie, exfiltratie, ransom-note, media/HR/klant-onrust, herstel, leaksite, post-mortem. " +
-      "Meer parallelle keuzes per ronde en langere runtime — voor teams die de basis al beheersen.",
-    build: simpleStoryExample,
+      "Nederlandse onderwijsvereniging (MKB+, 5 VO-scholen, ~4000 leerlingen) getroffen door Play-ransomware met exfiltratie. " +
+      "6 rondes over 5 dagen verhaaltijd. Essentiële entiteit onder NIS2, verwerkingsverantwoordelijke onder AVG. " +
+      "Realistische MKB+-pijnpunten: uitbestede ICT (MSP), backup nooit volledig getest, IT-coördinator op vakantie, " +
+      "cyberpolis-clausules onbekend, leverancierscontract met notificatie-clause (Magister 48u).",
+    build: schoolverenigingScenario,
   },
 ]

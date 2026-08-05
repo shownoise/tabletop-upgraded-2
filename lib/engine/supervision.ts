@@ -1,8 +1,8 @@
 import type {
   FactCheckEntry,
   GovernanceFlag,
-  NotificationDraft,
-  NotificationType,
+  RegulatoryObligationState,
+  RegulatoryRegime,
   Role,
   SessionState,
   SubmittedDecision,
@@ -261,10 +261,11 @@ export interface PseudoSessionState {
   scenario?: SessionState['scenario']
   submittedDecisions?: SubmittedDecision[]
   factChecks?: FactCheckEntry[]
-  notifications?: NotificationDraft[]
+  regulatoryRegime?: RegulatoryRegime
+  regulatoryObligations?: RegulatoryObligationState[]
   incidentDetectedAt?: number
   flags?: Record<string, boolean>
-  retainerState?: SessionState['retainerState']
+  retainerActivation?: SessionState['retainerActivation']
   timeline?: SessionState['timeline']
   governanceFlags?: GovernanceFlag[]
   participants?: SessionState['participants']
@@ -370,42 +371,28 @@ export function collectInjectEvidence(session: PseudoSessionState): SupervisionE
 
 export function collectNotificationEvidence(session: PseudoSessionState): SupervisionEvidence[] {
   const out: SupervisionEvidence[] = []
-  for (const n of session.notifications ?? []) {
-    if (!n.submittedAt) continue
+  const regime = session.regulatoryRegime
+  if (!regime) return out
+  for (const o of session.regulatoryObligations ?? []) {
+    if (o.status !== 'filed') continue
+    const ms = regime.milestones.find(m => m.id === o.milestoneId)
+    const label = ms?.label ?? o.milestoneId
+    const anchor = session.incidentDetectedAt ?? 0
+    const ts = anchor + (o.filedAtHour ?? 0) * 60 * 60 * 1000
     out.push({
       kind: 'notification_draft',
-      timestamp: n.submittedAt,
-      summary: `Melding ${notificationLabel(n.type)} ingediend`,
-      relatedIds: [n.id],
+      timestamp: ts,
+      summary: `${label} ingediend`,
+      relatedIds: [`${o.regimeId}:${o.milestoneId}`],
       supervisionArea: 'notification_duty',
     })
   }
   return out
 }
 
-export function notificationLabel(type: NotificationType): string {
-  switch (type) {
-    case 'ncsc_24h': return 'NCSC vroegtijdige waarschuwing (24u)'
-    case 'ncsc_72h': return 'NCSC melding met initiële beoordeling (72u)'
-    case 'ncsc_final': return 'NCSC eindverslag / voortgangsverslag'
-    case 'ap_72h': return 'AP-melding (AVG, 72u)'
-  }
-}
-
-export function notificationDeadlineMinutes(type: NotificationType): number {
-  switch (type) {
-    case 'ncsc_24h': return 24 * 60
-    case 'ncsc_72h': return 72 * 60
-    case 'ap_72h': return 72 * 60
-    case 'ncsc_final': return 30 * 24 * 60
-  }
-}
-
 export interface NotificationScoreInputs {
   submitted: boolean
   submittedBeforeDeadline: boolean
-  submittedBeforeChaser: boolean
-  completeness: number
 }
 
 export function scoreNotificationBundle(inputs: NotificationScoreInputs[]): SupervisionScore {
@@ -414,24 +401,23 @@ export function scoreNotificationBundle(inputs: NotificationScoreInputs[]): Supe
   if (!anySubmitted) return 0
   const allSubmitted = inputs.every(i => i.submitted)
   const allOnTime = inputs.every(i => i.submitted && i.submittedBeforeDeadline)
-  const allCompleteEnough = inputs.every(i => i.completeness >= 0.8)
-  if (allSubmitted && allOnTime && allCompleteEnough) return 3
-  if (allSubmitted && allOnTime) return 2
+  if (allSubmitted && allOnTime) return 3
+  if (allSubmitted) return 2
   return 1
 }
 
 export interface RetainerScoreInputs {
   activated: boolean
-  authorizedActivator: boolean
-  contactedWithinSla: boolean
-  handoffFraction: number
+  activatedAtRound?: number   // 1-based
 }
 
+// Phase 3 — timing-driven grading. Round-1/-2 activation = full credit;
+// later activation = partial credit; never activated = 0.
 export function scoreRetainer(inputs: RetainerScoreInputs): SupervisionScore {
   if (!inputs.activated) return 0
-  if (!inputs.authorizedActivator) return 1
-  if (inputs.contactedWithinSla && inputs.handoffFraction >= 0.6) return 3
-  if (inputs.handoffFraction >= 0.4) return 2
+  const round = inputs.activatedAtRound ?? Number.POSITIVE_INFINITY
+  if (round <= 2) return 3
+  if (round <= 4) return 2
   return 1
 }
 
@@ -470,17 +456,6 @@ export function computeCoverage(graph: ScenarioGraph): CoverageEntry[] {
   })
 }
 
-function completenessOf(draft: NotificationDraft): number {
-  const c = draft.content
-  const fields = [c.suspectMalicious, c.crossBorderImpact, c.responsibleContact, c.initialImpactAssessment, c.iocs, c.mitigations]
-  const filled = fields.filter(f => (f?.trim().length ?? 0) >= 20).length
-  return filled / fields.length
-}
-
-function deadlineFor(type: NotificationType, incidentDetectedAt: number): number {
-  return incidentDetectedAt + notificationDeadlineMinutes(type) * 60 * 1000
-}
-
 export function scoreAreaFromEvidence(
   area: SupervisionArea,
   session: PseudoSessionState,
@@ -490,54 +465,45 @@ export function scoreAreaFromEvidence(
   const forArea = decisionItems.filter(d => d.area === area)
   const injectItems = evidence.filter(e => e.kind === 'inject_handled')
   const startedAt = session.incidentDetectedAt ?? 0
-  const meldplicht = session.graph?.meldplicht
+  const regime = session.regulatoryRegime
 
   if (area === 'notification_duty') {
-    const types: NotificationType[] = []
-    if (!meldplicht || meldplicht.ncsc24hEnabled) types.push('ncsc_24h')
-    if (!meldplicht || meldplicht.ncsc72hEnabled) types.push('ncsc_72h')
-    if (meldplicht?.ncscFinalEnabled) types.push('ncsc_final')
-    if (!meldplicht || meldplicht.apEnabled) types.push('ap_72h')
-    const drafts = session.notifications ?? []
-    const chaserFlags = session.flags ?? {}
-    const inputs: NotificationScoreInputs[] = types.map(t => {
-      const drafted = drafts.find(d => d.type === t)
-      const submitted = !!drafted?.submittedAt
-      const submittedBeforeDeadline = submitted && !!drafted?.submittedAt && drafted.submittedAt <= deadlineFor(t, startedAt || (drafted.createdAt ?? Date.now()))
-      const submittedBeforeChaser = submitted && !chaserFlags[`chaser_${t}_fired`]
-      const completeness = drafted ? completenessOf(drafted) : 0
-      return { submitted, submittedBeforeDeadline, submittedBeforeChaser, completeness }
+    if (!regime) {
+      return { score: 0, rationale: 'Geen regulatory regime actief in deze sessie.' }
+    }
+    const list = session.regulatoryObligations ?? []
+    const inputs: NotificationScoreInputs[] = regime.milestones.map(ms => {
+      const o = list.find(x => x.milestoneId === ms.id)
+      if (!o) return { submitted: false, submittedBeforeDeadline: false }
+      const submitted = o.status === 'filed'
+      const filedHour = o.filedAtHour ?? Number.POSITIVE_INFINITY
+      const deadlineHour = o.openedAtHour + ms.deadlineHours
+      const submittedBeforeDeadline = submitted && filedHour <= deadlineHour
+      return { submitted, submittedBeforeDeadline }
     })
     const score = scoreNotificationBundle(inputs)
     const parts: string[] = []
-    types.forEach((t, i) => {
+    regime.milestones.forEach((ms, i) => {
       const s = inputs[i]
-      if (!s.submitted) parts.push(`${notificationLabel(t)}: niet ingediend.`)
-      else if (!s.submittedBeforeDeadline) parts.push(`${notificationLabel(t)}: ingediend na wettelijke deadline.`)
-      else if (!s.submittedBeforeChaser) parts.push(`${notificationLabel(t)}: pas na chaser ingediend.`)
-      else parts.push(`${notificationLabel(t)}: op tijd ingediend (volledigheid ${(s.completeness * 100).toFixed(0)}%).`)
+      if (!s.submitted) parts.push(`${ms.label}: niet ingediend.`)
+      else if (!s.submittedBeforeDeadline) parts.push(`${ms.label}: ingediend na wettelijke deadline.`)
+      else parts.push(`${ms.label}: op tijd ingediend.`)
     })
     return { score, rationale: parts.join(' ') || 'Geen meldplicht-evidence beschikbaar.' }
   }
 
   if (area === 'ir_retainer') {
-    const rs = session.retainerState
-    const graphProfile = session.graph?.irRetainerProfile
-    const configProfile = session.config?.irRetainerProfile
-    const profile = configProfile ?? graphProfile
-    const activated = !!rs?.dialedAt || (session.flags?.[RETAINER_ACTIVATED_FLAG] === true)
-    const authorized = !!rs?.chosenActivatorAuthorized
-    const handoffCount = rs?.handoffCompleted?.length ?? 0
-    const handoffTotal = profile?.handoffChecklist.length ?? 0
-    const handoffFraction = handoffTotal > 0 ? handoffCount / handoffTotal : 0
-    const contactedWithinSla = !!rs?.dialedAt && (!!startedAt) && (rs.dialedAt - startedAt) <= (profile?.slaMinutesToFirstContact ?? 60) * 60 * 1000
-    const score = scoreRetainer({ activated, authorizedActivator: authorized, contactedWithinSla, handoffFraction })
+    const ra = session.retainerActivation
+    const activated = !!ra?.activatedAtTs || (session.flags?.[RETAINER_ACTIVATED_FLAG] === true)
+    const score = scoreRetainer({ activated, activatedAtRound: ra?.activatedAtRound })
     const parts: string[] = []
     if (!activated) parts.push('IR-retainer niet geactiveerd.')
-    else {
-      parts.push(authorized ? 'Geautoriseerde activator gebruikt.' : 'Geen geautoriseerde activator.')
-      parts.push(contactedWithinSla ? 'Binnen SLA gecontacteerd.' : 'SLA overschreden of niet bepaald.')
-      parts.push(`Overdrachtchecklist ${Math.round(handoffFraction * 100)}% compleet.`)
+    else if (ra?.activatedAtRound !== undefined) {
+      if (ra.activatedAtRound <= 2) parts.push(`IR-retainer vroeg geactiveerd (ronde ${ra.activatedAtRound}).`)
+      else if (ra.activatedAtRound <= 4) parts.push(`IR-retainer geactiveerd in ronde ${ra.activatedAtRound} — deel van de forensische kansen mogelijk verloren.`)
+      else parts.push(`IR-retainer laat geactiveerd (ronde ${ra.activatedAtRound}).`)
+    } else {
+      parts.push('IR-retainer geactiveerd (timing onbekend).')
     }
     return { score, rationale: parts.join(' ') }
   }
@@ -731,6 +697,3 @@ export function previewSupervisionReport(graph: ScenarioGraph, outcomeId: string
   }
 }
 
-export function completenessOfDraft(draft: NotificationDraft): number {
-  return completenessOf(draft)
-}

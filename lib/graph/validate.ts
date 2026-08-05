@@ -166,22 +166,18 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
     })
   }
 
-  const meldplicht = graph.meldplicht
-  if (meldplicht?.enabled) {
-    const notificationTagged = graph.nodes.some(n => {
-      const d = n.data as { supervisionAreas?: string[]; roleActions?: { supervisionAreas?: string[] }[] }
-      if ((d.supervisionAreas ?? []).includes('notification_duty')) return true
-      return (d.roleActions ?? []).some(a => (a.supervisionAreas ?? []).includes('notification_duty'))
-    })
-    if (!notificationTagged) {
-      issues.push({ severity: "warning", message: "Meldplicht staat aan maar geen enkele node/actie is getagd met 'notification_duty'." })
-    }
-    if (meldplicht.chasersEnabled) {
-      const hasChaser = graph.nodes.some(n => n.type === "chaser")
-      if (!hasChaser) {
-        issues.push({ severity: "warning", message: "Chasers staan aan maar er is geen chaser-node in de graph." })
-      }
-    }
+  // Regulatory-notification trigger: warn if no inject in the graph carries
+  // triggersRegulatoryNotification. Without one, the meldplicht path never
+  // opens during play.
+  const anyTrigger = graph.nodes.some(n => {
+    if (n.type !== 'inject' && n.type !== 'chaser') return false
+    const injData = n.type === 'inject'
+      ? (n.data as { triggersRegulatoryNotification?: boolean })
+      : ((n.data as { inject?: { triggersRegulatoryNotification?: boolean } }).inject ?? {})
+    return injData.triggersRegulatoryNotification === true
+  })
+  if (!anyTrigger) {
+    issues.push({ severity: "warning", message: "Geen enkele inject in deze graph draagt `triggersRegulatoryNotification: true` — de meldplicht wordt tijdens spel nooit geopend." })
   }
 
   const outcomeNodes = graph.nodes.filter(n => n.type === "outcome")

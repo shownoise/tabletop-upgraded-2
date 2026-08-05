@@ -3,6 +3,7 @@ import { requireFacilitator } from '@/lib/auth-guard'
 import { getState } from '@/lib/session-store'
 import { scoreExercise, scoreExerciseByGroup, buildAssessmentReport } from '@/lib/scoring'
 import { sessionToScoringInput } from '@/lib/scoring/graph-adapter'
+import { applyRegulatoryAdjustment } from '@/lib/regulatory/scoring-adjustment'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
   }
 
   if (format === 'report') {
-    const report = buildAssessmentReport(input)
+    const report = applyRegulatoryAdjustment(state.session, buildAssessmentReport(input))
     return NextResponse.json(report)
   }
   const output = scoreExercise(input)

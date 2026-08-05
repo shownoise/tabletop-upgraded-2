@@ -1,4 +1,4 @@
-import { OUTCOME_DIMENSIONS, PROCESS_DIMENSIONS, type OutcomeDimension, type ProcessDimension } from './constants'
+import { OUTCOME_DIMENSIONS, type OutcomeDimension } from './constants'
 import { buildEndReveal } from './reveal'
 import { scoreExercise } from './score-exercise'
 import type { ExerciseInput, RoundOutcome, ScoringOutput } from './types'
@@ -16,16 +16,6 @@ export interface AssessmentReport {
     distinctOwners: number
   }
   outcomes: RoundOutcome[]
-  processDimensions: Array<{
-    key: ProcessDimension
-    label: string
-    value: number | null
-    dataQuality: 'measured' | 'observation' | 'null'
-    reason?: string
-    detail?: Record<string, number | null>
-  }>
-  processAggregate: number | null
-  calibration: number | null
   totalPoints: number
   // Deel B §6 "spiderweb per rol": filter outcomes op besluiten waarvan die rol
   // eigenaar was — beperkt tot beschikbaar in de input.
@@ -48,16 +38,6 @@ export function buildAssessmentReport(input: ExerciseInput): AssessmentReport {
       distinctOwners: s.roleResolution.distinctOwners,
     },
     outcomes: s.outcomes,
-    processDimensions: PROCESS_DIMENSIONS.map(key => ({
-      key,
-      label: PROCESS_LABELS[key],
-      value: s.dimensions[key].value,
-      dataQuality: s.dimensions[key].dataQuality,
-      reason: s.dimensions[key].reason,
-      detail: s.dimensions[key].detail,
-    })),
-    processAggregate: s.processAggregate,
-    calibration: s.calibration ?? null,
     totalPoints: s.totalPoints,
     spider: {
       team: teamSpider,
@@ -179,14 +159,4 @@ function phraseFor(label: string, v: number): string {
   if (v === 0)   return `Neutraal op ${label}.`
   if (v > -1.5)  return `Verlies op ${label} (${v.toFixed(1)}).`
   return `Kritiek verlies op ${label} (${v.toFixed(1)}).`
-}
-
-const PROCESS_LABELS: Record<ProcessDimension, string> = {
-  BESLUIT: 'Besluitvorming',
-  MANDAAT: 'Mandaat & escalatie',
-  AANNAME: 'Aannames expliciet',
-  ADAPT:   'Adaptiviteit',
-  EXTERN:  'Coördinatie externen',
-  VOLHOUD: 'Volhoudbaarheid',
-  DELEN:   'Informatiedeling',
 }

@@ -38,7 +38,7 @@ export function ReviewCommentary({ session, participantId, roundIndex }: Props) 
       </div>
       <div className="flex flex-col divide-y divide-border">
         {mine.map(dec => {
-          const opt = ad.options.find(o => o.id === dec.actionId)
+          const opt = ad.options.find(o => o.optionId === dec.actionId)
           const rank = opt?.qualityRank
           const meta = rank ? QUALITY_META[rank] : null
           return (

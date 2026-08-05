@@ -237,7 +237,7 @@ export function DecisionPanel({
               />
             </div>
 
-            {/* Confidence — Deel B §7.2 zekerheidstap 1..5 voor KALIBRATIE */}
+            {/* Confidence — zekerheidstap 1..5, privé teruggetoond aan deelnemer in REVIEW */}
             <div className="flex flex-col gap-1.5">
               <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
                 Hoe zeker ben je? (optioneel)

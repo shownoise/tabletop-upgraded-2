@@ -25,17 +25,11 @@ export function simulateExercise(input: DryRunInput): ExerciseInput {
   let t = 0
   const step = roundBudgetMinutes * 60_000 / 5  // 5 stappen per ronde
   const events: ExerciseEvent[] = [{ kind: 'session_start', t }]
-  let rng = mulberry32(seed)
+  const rng = mulberry32(seed)
 
   for (const round of scenario.rounds) {
     events.push({ kind: 'round_phase_changed', t: (t += step), round: round.number, toPhase: 'briefing' })
     events.push({ kind: 'round_phase_changed', t: (t += step), round: round.number, toPhase: 'overleg' })
-
-    // Alle scenario-injects van deze ronde: één ontvanger per inject.
-    for (const inj of scenario.injects.filter(i => i.round === round.number)) {
-      const recipient = inj.visibleTo?.[0] ?? simulatedRoles[Math.floor(rng() * simulatedRoles.length)]
-      events.push({ kind: 'inject_received', t: (t += 1000), round: round.number, injectId: inj.id, recipient })
-    }
 
     events.push({ kind: 'round_phase_changed', t: (t += step), round: round.number, toPhase: 'keuze' })
 

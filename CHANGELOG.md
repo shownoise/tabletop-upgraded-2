@@ -2,6 +2,81 @@
 
 All deletions from the phase-A audit through phase-G. Roll forward, not back.
 
+## Session 3 — second-pass refactor (Phase 1–5)
+
+Full report: `REGRESSION.md` (root-cause) + `SCORING.md` (updated model).
+
+### Root cause of the "disconnected scoring pipeline"
+
+The prior refactor built the correct new panel (`RevealPanel`) and the correct scoring engine, but did not delete the old panel (`ScoringPanel`) — and the underlying decision → event id mapping was broken for `DecisionNode` submissions. Specifically:
+
+1. `SubmittedDecision.actionId` holds the **option** id for DecisionNode submissions.
+2. The scoring engine keys decision points by the containing **node** id.
+3. These never matched — so every submission was silently dropped, every round fell back to `NO_DECISION_FALLBACK_VECTOR = { CONT: -1, FOR: 0, BC: -1, JUR: -1, VER: 0, KOS: 0 }`, and the old `ScoringPanel` honestly rendered "5 rounds, no data" — which looked like `PUNTEN TOTAAL 185` and `–` on 6 of 7 dimensions.
+
+The panel was doing its job. The engine was doing its job. The bridge between them was broken for the primary authored path (DecisionNode). Fix: `lib/scoring/graph-adapter.ts::resolveDecisionPointId()` — for each submitted `actionId`, walk `session.graph.nodes` and return the id of the DecisionNode whose `options[]` contains it.
+
+### Phase 1 — scoring pipeline
+
+- Fixed the id-mapping bug (above) at `lib/scoring/graph-adapter.ts:361` (`resolveDecisionPointId`).
+- Deleted the shadow `components/admin/scoring-panel.tsx` and its mount at `control-dashboard.tsx:581`.
+- Deleted the 7-process-dimension system in its entirety (canonical model is now 6 outcome axes only, per SCORING.md):
+  - Files deleted: `lib/scoring/dimensions/{aanname,adapt,besluit,delen,extern,mandaat,volhoud}.ts`, `lib/scoring/aggregate.ts`, `lib/scoring/calibration.ts`, `lib/scoring/mode-matrix.ts`, `lib/scoring/__tests__/{besluit,dimensions}.test.ts`.
+  - Symbols deleted: `ProcessDimension`, `DEFAULT_PROCESS_WEIGHTS`, `PROCESS_DIMENSIONS`, `MANDATE_MIN_DISTINCT_OWNERS`, `SHARE_MIN_ROL_COVERAGE`, `aggregateProcess`, `scoreCalibration`, `maskUnmeasurable`, `MODE_MATRIX`, `isMeasurable`, `DimensionScore`, `ScoringOutput.dimensions`, `ScoringOutput.processAggregate`, `ScoringOutput.calibration`, and every `score{Besluit,Mandaat,Aanname,Adapt,Extern,Volhoud,Delen}` function.
+  - Event variants deleted from `ExerciseEvent`: `facilitator_slider`, `inject_received`, `inject_shared`, `escalation_fired`, `handoff_recorded`, `roster_snapshot`, `facilitator_q_j`, `facilitator_handoff_quality`.
+- Added `RoundOutcome.hasSubmissions: boolean` — the `RevealPanel` renders an explicit amber `nog niet gemeten` badge when false, so a score of exactly zero can never look like "no data".
+- Debug metadata (`Scoring v… · rolCov …%`) moved to the facilitator-only footer of the reveal panel (was always-visible in `ScoringPanel`).
+- Confidence submission (per-decision 1..5) retained as a private participant reflection; the aggregate calibration was participant-facing debug metadata and is gone.
+- New acceptance test in `lib/scoring/__tests__/decision-to-scoring.test.ts` — proves a decision in round 3 moves that round's dimensions and produces a distinct outcome from a different option.
+- New assertion in `role-resolution.test.ts` — with full staffing, distinct domains resolve to distinct owners (no CRISIS_LEAD-everywhere collapse).
+
+### Phase 2 — regulatory notification (data-driven)
+
+- New file `lib/regulatory/regimes.ts` — `RegulatoryRegime` and `NL_AVG_NIS2_REGIME` (default). Milestones: initial (24h per NIS2 art. 23) + closing (720h per NIS2 art. 23 lid 4c). Verified against Regulation 2022/2555 and AVG art. 33.
+- New file `lib/regulatory/scoring-adjustment.ts` — folds regime scoring into the assessment report at API-boundary time; the pure scoring engine remains regime-agnostic.
+- New API route `POST /api/session/regulatory-filing` — any staffed role can file; two free-text fields only.
+- New UI: `components/participant/regulatory-notification-button.tsx` (auto-appears when obligation open, disappears once anyone files) + `components/admin/regulatory-obligations-panel.tsx` (facilitator status).
+- Auto-open behaviour: an inject with `triggersRegulatoryNotification: true` opens the `initial` milestone the moment the inject fires. On filing, the `closing` milestone auto-opens with a 720h deadline.
+- Advice text in the review reveal — three tones (on-time / late / omitted) per Dutch AVG/NIS2 phrasing.
+- Deleted: `NotificationType`, `NotificationDraft`, `MeldplichtPrompt`, `MeldplichtPromptTrigger`, `session.notifications`, `session.meldplichtPrompts`, the API routes `/api/session/notifications` and `/api/session/meldplicht-prompt/{dismiss,manual}`, and the components `NotificationTracker`, `NotificationDrafter`, `MeldplichtTray`.
+
+### Phase 3 — IR retainer consolidation
+
+The two activation paths (a UI flow with activator/dial/handoff + a decision option that only fired a follow-up inject) collapse to one participant-decision path that sets a session-level capability flag.
+
+- New authored fields on decision options (`lib/graph/types.ts::DecisionNodeData.options[]`): `capabilityFlag?: string`, `consumesOptionAfterUse?: boolean`, `requiresCapability?: string`.
+- New authored field on `InjectNodeData` and runtime `Inject`: `requiresCapability?: string`.
+- `session-store.ts::submitDecision` now sets `session.flags[capabilityFlag]` when the chosen option carries the flag, and stamps `session.retainerActivation` when that flag is `RETAINER_ACTIVATED_FLAG`.
+- The `activeDecision` projection and `toParticipantState` hide options/injects whose gating flag is not yet set.
+- New advice utility `lib/scoring/retainer-advice.ts` — three tones based on `activatedAtRound`.
+- Deleted: `components/participant/retainer-activation-panel.tsx`, `app/api/session/retainer-activation/route.ts`, `updateRetainerActivation()` in `session-store.ts`, `api.updateRetainer` in `api-client.ts`, `RetainerActivationState` type, `session.retainerState`, and `IrRetainerProfile.{authorizedActivators, slaMinutesToFirstContact, handoffChecklist}`.
+- `lib/engine/supervision.ts::scoreRetainer` rewritten to grade on `activatedAtRound` (early → 3, mid → 2, late → 1, never → 0).
+
+### Phase 4 — solo / understaffed play
+
+- New: `RoleMeta.mandateSummary` (required, populated for all 8 roles) — the one-line Dutch mandate a solo player reads when picking up an inherited role.
+- Extended `ActiveDecisionState` with `pendingByParticipant: Record<participantId, { roleSequence, currentIndex, total, completed }>`.
+- `session-store.ts::projectActiveDecision` computes the sequential queue per participant based on `roleDistribution.entries`.
+- `session-store.ts::missingDecisionRoles` and `describeNextAction` rewritten to count per `(participantId, role)` — the DECISION → REVIEW transition is blocked until every pending item is submitted, with the count shown in Dutch on the facilitator's next-action label.
+- `components/participant/play-view.tsx::DecisionTicket` rewritten: renders progress badge `Beslissing X van Y` when multi and a prominent amber hand-off notice when the active role is inherited.
+- New solo section in `SCORING.md` documenting per-dimension normalization when one participant answers everything.
+- New tests: `lib/__tests__/solo-play.test.ts` (6 cases).
+
+### Phase 5 — new scenario
+
+- Moved to `backup/scenarios/`: `examples-nis2-polder-storm.ts`, `examples-simple-story.ts`.
+- New file `lib/graph/examples-schoolvereniging.ts` — 6-round scenario for a Dutch onderwijsvereniging (~4000 students, 5 schools, outsourced ICT via `WestNet ICT B.V.`, `Play` ransomware, €680k Monero demand, Magister/ParnasSys/LoonBureau supplier chain, AVG + NIS2 in scope). ~10,500 words of Dutch prose.
+- 21 injects across 6 rounds (avg 3.5/round), 6 DecisionNodes with 102 total options, 13 cross-role coupling moments via `capabilityFlag`/`requiresCapability`, 1 explicit red herring, review prompts per round.
+- Registered as the single starter in `EXAMPLES` — `★ Onderwijsvereniging — Play-ransomware (AVG + NIS2)`.
+- New scenario-guardrail tests in `lib/graph/__tests__/schoolvereniging-scenario.test.ts` (8 cases).
+- Small schema additions: `RoundNodeData.reviewPrompts?: string[]`. Fixed a latent bug in `graph-adapter.ts::numberRoundsFromStart` where the sequence chain from `start` stopped at the first decision node when every round has one — now falls back to branch edges.
+
+### Test count
+
+Before session 3: 111 tests. After session 3: **177 tests**, all passing.
+
+---
+
 ## Session 2 additions
 
 - **AI scenario wizard** — completely rewritten for the new 6-axis schema.

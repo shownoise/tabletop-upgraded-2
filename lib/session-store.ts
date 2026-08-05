@@ -21,13 +21,15 @@ import { RETAINER_ACTIVATED_FLAG } from "./graph/types"
 import type {
   ExerciseConfig, FactCheckEntry, FactCheckTag,
   FiledMelding, GovernanceFlag, Inject, InjectAnnotation, InjectRoutePlan, InjectType,
-  LearningObjective, LiveEvent, LiveEventName, MeldplichtPrompt, MeldplichtPromptTrigger,
-  NotificationDraft, NotificationType,
-  Participant, PublicState, RetainerActivationState, Role, RoleAction,
+  LearningObjective, LiveEvent, LiveEventName,
+  Participant, PublicState, RegulatoryObligationState, RegulatoryRegime,
+  RetainerActivation, Role, RoleAction,
   RoleDocument, RoundPhase, RoundPhaseState, Scenario, SessionState, SimulationMode, SpecialEvent,
   SpecialMessage, SpecialScore, SpecialType, StreamMessage, SubmittedDecision, SupervisionReportEdits, TimelineEvent,
   TimelineEventType, Urgency,
 } from "./types"
+import { ROLE_META } from "./types"
+import { NL_AVG_NIS2_REGIME } from "./regulatory/regimes"
 import { computeAuthoredWorkload, distributeRoles, effectiveRolesForParticipant } from "./engine/distribute-roles"
 import { plotInjectRoutes } from "./inject-routing"
 import { buildTeamRoles } from "./team-roster"
@@ -184,6 +186,14 @@ export function toParticipantState(session: SessionState): SessionState {
     }
     return safe
   }
+  // Phase 3 — capability-gated inject visibility. An inject with
+  // requiresCapability set is hidden until the corresponding flag on
+  // session.flags is truthy. Applied uniformly to scenario.rounds[].injects
+  // and pushedInjects so no leak path exists.
+  const capabilityAllows = (inj: Inject): boolean => {
+    if (!inj.requiresCapability) return true
+    return !!(session.flags ?? {})[inj.requiresCapability]
+  }
   return {
     ...session,
     scenario: {
@@ -204,7 +214,9 @@ export function toParticipantState(session: SessionState): SessionState {
           (i === session.currentRound && session.roundPhase === "review")
         return {
           ...round,
-          injects: round.injects.map(inj => stripInjectGroundTruth(inj, isReviewRound)),
+          injects: round.injects
+            .filter(capabilityAllows)
+            .map(inj => stripInjectGroundTruth(inj, isReviewRound)),
           facilitatorNotes: undefined,
           roleActions: round.roleActions?.map(action => {
             const expanded = expandRolesForJoinedParticipants(action, session)
@@ -224,13 +236,15 @@ export function toParticipantState(session: SessionState): SessionState {
         }
       }),
     },
-    pushedInjects: session.pushedInjects.map(p => {
-      const isReviewRound =
-        p.roundIndex < 0 ||
-        p.roundIndex < session.currentRound ||
-        (p.roundIndex === session.currentRound && session.roundPhase === "review")
-      return { ...p, inject: stripInjectGroundTruth(p.inject, isReviewRound) }
-    }),
+    pushedInjects: session.pushedInjects
+      .filter(p => capabilityAllows(p.inject))
+      .map(p => {
+        const isReviewRound =
+          p.roundIndex < 0 ||
+          p.roundIndex < session.currentRound ||
+          (p.roundIndex === session.currentRound && session.roundPhase === "review")
+        return { ...p, inject: stripInjectGroundTruth(p.inject, isReviewRound) }
+      }),
     governanceFlags: [],
     submittedDecisions: (session.submittedDecisions ?? []).map(d => ({
       ...d,
@@ -277,22 +291,79 @@ function projectActiveDecision(session: SessionState): import("./types").ActiveD
 
   const dd = dnode.data as import("./graph/types").DecisionNodeData
   if (dd.perRole !== true) return undefined  // Facilitator-picks blijven verborgen voor participants
+
+  // Phase 3 — filter option list:
+  //   • consumesOptionAfterUse: drop options already submitted in this session
+  //     (matched by option id in submittedDecisions). Never affects the
+  //     historical record — only future presentations.
+  //   • requiresCapability: drop options whose gating flag is not yet set.
+  const flags = session.flags ?? {}
+  const submittedOptionIds = new Set((session.submittedDecisions ?? []).map(d => d.actionId))
+  const visibleOptions = dd.options.filter(o => {
+    if (o.consumesOptionAfterUse && submittedOptionIds.has(o.id)) return false
+    if (o.requiresCapability && !flags[o.requiresCapability]) return false
+    return true
+  })
+
+  const projectedOptions: import("./types").ActiveDecisionPending[] = visibleOptions.map(o => ({
+    optionId: o.id,
+    optionLabel: o.label,
+    allowedRole: o.allowedRole,
+    ...(isReview
+      ? {
+          qualityRank: o.qualityRank,
+          facilitatorCommentary: o.facilitatorCommentary,
+          lessonLearned: o.lessonLearned,
+        }
+      : {}),
+  }))
+
+  // Phase 4 — solo/understaffed sequential play. For each participant with a
+  // roleDistribution entry, produce an ordered pending queue over the roles
+  // they own (primary first, then inherited) that have a matching option in
+  // this decision node. Skip roles that don't appear as allowedRole on any
+  // visible option; they legitimately have no decision this round.
+  const pendingByParticipant: Record<string, import("./types").ActiveDecisionParticipantPending> = {}
+  const dist = session.roleDistribution
+  const overrides = session.roleAssignmentOverrides ?? {}
+  const optionIds = new Set(visibleOptions.map(o => o.id))
+  const rolesWithOption = new Set<Role>(
+    visibleOptions.map(o => o.allowedRole).filter((r): r is Role => !!r),
+  )
+  if (dist) {
+    for (const entry of dist.entries) {
+      const roles = effectiveRolesForParticipant(entry, overrides[entry.participantId])
+      const roleSequence = roles.filter(r => rolesWithOption.has(r))
+      if (roleSequence.length === 0) continue
+      // Count how many of this participant's decisions have already been submitted
+      // against this node's option set in the current round.
+      const submittedRoles = new Set<Role>()
+      for (const d of session.submittedDecisions ?? []) {
+        if (d.participantId !== entry.participantId) continue
+        if (d.roundIndex !== session.currentRound) continue
+        if (!optionIds.has(d.actionId)) continue
+        submittedRoles.add(d.role)
+      }
+      const total = roleSequence.length
+      const completed = roleSequence.filter(r => submittedRoles.has(r)).length
+      if (completed >= total) continue  // all done — omit
+      // currentIndex points at the first role in the sequence not yet submitted.
+      const currentIndex = roleSequence.findIndex(r => !submittedRoles.has(r))
+      pendingByParticipant[entry.participantId] = {
+        roleSequence,
+        currentIndex: currentIndex < 0 ? total : currentIndex,
+        total,
+        completed,
+      }
+    }
+  }
+
   return {
     nodeId: dnode.id,
     prompt: dd.prompt,
     perRole: true,
-    options: dd.options.map(o => ({
-      id: o.id,
-      label: o.label,
-      allowedRole: o.allowedRole,
-      ...(isReview
-        ? {
-            qualityRank: o.qualityRank,
-            facilitatorCommentary: o.facilitatorCommentary,
-            lessonLearned: o.lessonLearned,
-          }
-        : {}),
-    })),
+    options: projectedOptions,
+    ...(Object.keys(pendingByParticipant).length > 0 ? { pendingByParticipant } : {}),
   }
 }
 
@@ -382,6 +453,9 @@ export async function createSession(
     graphState: graph && startNodeId
       ? { currentNodeId: startNodeId, pathHistory: [startNodeId], branchLog: [] }
       : undefined,
+    // Default regulatory regime — NL AVG + NIS2. Scenarios may swap this later.
+    regulatoryRegime: NL_AVG_NIS2_REGIME,
+    regulatoryObligations: [],
   }
   await dbSetSession(session)
   broadcastState(session)
@@ -472,7 +546,7 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
       updated = pushTimeline(updated, "round_changed", { roundIndex })
       for (const p of autoPushed) {
         updated = pushTimeline(updated, "inject_pushed", { roundIndex, inject: p.inject })
-        updated = evalInjectTriggeredPrompts(updated, p.inject)
+        updated = maybeOpenRegulatoryObligationFromInject(updated, p.inject)
       }
       updated = mergeInjectRoutePlan(updated, round.injects.map(i => i.id))
       updated = withRoundPhaseState(updated, roundIndex, now)
@@ -490,11 +564,7 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
           }))
           const flagUpdates: Record<string, boolean> = { ...(updated.flags ?? {}) }
           for (const c of chasers) {
-            // best-effort: mark chaser as fired keyed by inject id
             flagUpdates[`chaser_${c.id}_fired`] = true
-            // also mark notification chasers by type using suffix in title if identifiable — else generic
-            if (c.title.includes("NCSC") && c.title.toLowerCase().includes("vroeg")) flagUpdates["chaser_ncsc_24h_fired"] = true
-            if (c.title.includes("Autoriteit Persoonsgegevens") || c.title.includes("AP")) flagUpdates["chaser_ap_72h_fired"] = true
           }
           updated = {
             ...updated,
@@ -503,7 +573,7 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
           }
           for (const p of chasePushes) {
             updated = pushTimeline(updated, "inject_pushed", { roundIndex, inject: p.inject, chaser: true })
-            updated = evalChaserTriggeredPrompts(updated, p.inject)
+            updated = maybeOpenRegulatoryObligationFromInject(updated, p.inject)
           }
           updated = mergeInjectRoutePlan(updated, chasers.map(c => c.id))
         }
@@ -566,6 +636,7 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
           },
         } : undefined,
       }
+      updated = expireOpenRegulatoryObligations(updated)
       updated = pushTimeline(updated, "session_ended", { outcome: chosen.key })
     }
   }
@@ -702,28 +773,18 @@ function withRoleResolution(session: SessionState, now: number): SessionState {
   }
 }
 
+// Anchor the deadline clock at session start. The regulatory-notification
+// system reads incidentDetectedAt as the "T0" against which milestone hours
+// are measured. Scenarios that want a later anchor should keep the trigger
+// inject in a later round — the obligation still opens at the inject moment,
+// and its own openedAtHour is anchored from incidentDetectedAt.
 function withIncidentDetectedAt(session: SessionState, now: number): SessionState {
-  const meldplicht = session.graph?.meldplicht
-  if (meldplicht && !meldplicht.enabled) return session
-  const when = meldplicht?.incidentDetectedAt ?? 'start'
-  if (when === 'start') return { ...session, incidentDetectedAt: now }
-  // WHY: when the scenario anchors on a specific round, leave incidentDetectedAt
-  // unset until that round begins (see anchorIncidentOnRoundIfNeeded).
   if (session.incidentDetectedAt) return session
-  return session
+  return { ...session, incidentDetectedAt: now }
 }
 
-// Anchor the meldplicht clock to the round the graph names (round_1|round_2|round_3),
-// but only the first time we enter that round.
-function anchorIncidentOnRoundIfNeeded(session: SessionState, roundNumber: number, now: number): SessionState {
-  const meldplicht = session.graph?.meldplicht
-  if (!meldplicht || !meldplicht.enabled) return session
+function anchorIncidentOnRoundIfNeeded(session: SessionState, _roundNumber: number, now: number): SessionState {
   if (session.incidentDetectedAt) return session
-  const when = meldplicht.incidentDetectedAt ?? 'start'
-  const map: Record<string, number> = { round_1: 1, round_2: 2, round_3: 3 }
-  const targetRound = map[when]
-  if (!targetRound) return session
-  if (roundNumber < targetRound) return session
   return { ...session, incidentDetectedAt: now }
 }
 
@@ -988,6 +1049,7 @@ export async function endSessionForced(input: { reason?: string } = {}): Promise
   if (!session) return { ok: false, error: "No active session." }
   if (session.status === 'ended') return { ok: true }
   let updated: SessionState = { ...session, status: 'ended' as const }
+  updated = expireOpenRegulatoryObligations(updated)
   updated = pushTimeline(updated, 'session_ended', { forced: true, reason: input.reason ?? '' })
   await dbSetSession(updated)
   broadcastState(updated)
@@ -1017,10 +1079,11 @@ export function describeNextAction(session: SessionState): NextActionDescriptor 
     // Guard: cannot leave DECISION while a required role hasn't submitted.
     const missing = missingDecisionRoles(session)
     if (missing.length > 0) {
+      const roleLabels = missing.map(r => ROLE_META[r]?.label ?? r).join(', ')
       return {
         action: 'blocked',
-        labelNL: 'Wacht op ontbrekende inzendingen',
-        blockedReason: `Nog geen inzending van: ${missing.join(', ')}`,
+        labelNL: `Nog wachten op ${missing.length} beslissing${missing.length === 1 ? '' : 'en'}`,
+        blockedReason: `Nog geen inzending van: ${roleLabels}`,
       }
     }
   }
@@ -1042,6 +1105,9 @@ export function describeNextAction(session: SessionState): NextActionDescriptor 
 
 // Which roles are expected to submit for this round's decision but haven't yet?
 // Used by describeNextAction and by setPhase to block DECISION→REVIEW transitions.
+// Phase 4 — counts each (participantId, role) pair the participant owns as an
+// independent SLA so a solo participant with 6 inherited roles is expected to
+// submit 6 decisions before REVIEW opens.
 function missingDecisionRoles(session: SessionState): Role[] {
   if (!session.graph || !session.graphState) return []
   const nodeById = new Map(session.graph.nodes.map(n => [n.id, n]))
@@ -1062,24 +1128,25 @@ function missingDecisionRoles(session: SessionState): Role[] {
   if (!dist) return []
   const overrides = session.roleAssignmentOverrides ?? {}
   const rolesRequired = new Set<Role>()
+  const optionIds = new Set<string>()
   for (const opt of dd.options) {
     if (opt.allowedRole) rolesRequired.add(opt.allowedRole)
+    optionIds.add(opt.id)
   }
-  const submitted = new Set<string>(
-    (session.submittedDecisions ?? [])
-      .filter(d => d.roundIndex === session.currentRound)
-      .map(d => `${d.participantId}::${d.actionId}`),
-  )
   const missing: Role[] = []
   for (const entry of dist.entries) {
     const roles = effectiveRolesForParticipant(entry, overrides[entry.participantId])
     for (const r of roles) {
       if (!rolesRequired.has(r)) continue
-      // Has this participant submitted anything for this decision?
-      const hasAny = (session.submittedDecisions ?? []).some(d =>
-        d.participantId === entry.participantId && d.roundIndex === session.currentRound,
+      // For this (participant, role) pair: has ANY submission been made this
+      // round against this node's option set that carries this role?
+      const submittedForRole = (session.submittedDecisions ?? []).some(d =>
+        d.participantId === entry.participantId
+        && d.roundIndex === session.currentRound
+        && d.role === r
+        && optionIds.has(d.actionId),
       )
-      if (!hasAny) missing.push(r)
+      if (!submittedForRole) missing.push(r)
     }
   }
   return [...new Set(missing)]
@@ -1127,7 +1194,7 @@ export async function pushInject(input: { roundIndex: number; injectId: string }
 
   let updated: SessionState = { ...session, pushedInjects }
   updated = pushTimeline(updated, didAdvance ? "inject_advanced" : "inject_pushed", { roundIndex: input.roundIndex, inject })
-  updated = evalInjectTriggeredPrompts(updated, inject)
+  updated = maybeOpenRegulatoryObligationFromInject(updated, inject)
   await dbSetSession(updated)
   broadcastState(updated)
   emit("push_inject", { inject, roundIndex: input.roundIndex })
@@ -1174,7 +1241,8 @@ export async function setPhase(phase: RoundPhase, opts: { force?: boolean; reaso
     if (currentPhase === 'decision' && phase === 'review' && !opts.force) {
       const missing = missingDecisionRoles(s)
       if (missing.length > 0) {
-        return { error: `Nog geen inzending van: ${missing.join(', ')}. Klik "Fase forceren" om toch door te gaan.` }
+        const roleLabels = missing.map(r => ROLE_META[r]?.label ?? r).join(', ')
+        return { error: `Nog wachten op ${missing.length} beslissing${missing.length === 1 ? '' : 'en'}: ${roleLabels}. Klik "Fase forceren" om toch door te gaan.` }
       }
     }
 
@@ -1369,12 +1437,17 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
   // DecisionNode in de graph (option-ids zijn uniek, dus dit is veilig en
   // ondersteunt het peek-ahead scenario waarin het huidige node nog de round is).
   let action: RoleAction | undefined = round.roleActions?.find(a => a.id === input.actionId)
+  // Phase 3 — also capture the raw DecisionNode option so downstream side-effects
+  // (capabilityFlag, retainerActivation snapshot) can read authoring fields that
+  // the RoleAction adapter above does not expose.
+  let decisionOption: DecisionNodeData['options'][number] | undefined
   if (!action && session.graph) {
     for (const node of session.graph.nodes) {
       if (node.type !== 'decision') continue
       const dd = node.data as DecisionNodeData
       const opt = dd.options.find(o => o.id === input.actionId)
       if (!opt) continue
+      decisionOption = opt
       action = {
         id: opt.id,
         label: opt.label,
@@ -1501,6 +1574,28 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
     governanceFlags: [...existingFlags, ...newFlags],
   }
 
+  // Phase 3 — capability side-effects. If the submitted DecisionNode option
+  // carries a capabilityFlag, merge it into session.flags. For the well-known
+  // RETAINER_ACTIVATED_FLAG also snapshot the timing on session.retainerActivation
+  // (first activation wins; later re-submissions do not overwrite).
+  if (decisionOption?.capabilityFlag) {
+    const flag = decisionOption.capabilityFlag
+    updated = {
+      ...updated,
+      flags: { ...(updated.flags ?? {}), [flag]: true },
+    }
+    if (flag === RETAINER_ACTIVATED_FLAG && !updated.retainerActivation) {
+      updated = {
+        ...updated,
+        retainerActivation: {
+          activatedAtRound: updated.currentRound + 1,
+          activatedByParticipantId: input.participantId,
+          activatedAtTs: Date.now(),
+        },
+      }
+    }
+  }
+
   // Event-mode: if every group has submitted for this round, finalize the
   // decision atomically (DECISION → REVIEW via finalizeDecision-equivalent).
   if (updated.mode === 'event' && updated.graph && updated.roundPhase === 'decision') {
@@ -1577,22 +1672,6 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
         }
       }
     }
-  }
-
-  // Meldplicht prompt trigger: decision touches notification_duty.
-  if (action.supervisionAreas?.includes('notification_duty')) {
-    const label = `${action.label}`.toLowerCase()
-    const inferredType: NotificationType = /vroegtijdig|24u|24 uur|waarschuwing/.test(label)
-      ? 'ncsc_24h'
-      : /avg|ap|persoonsgeg|datalek/.test(label)
-        ? 'ap_72h'
-        : 'ncsc_72h'
-    updated = spawnMeldplichtPrompt(updated, {
-      type: inferredType,
-      trigger: 'decision_taken',
-      sourceId: action.id,
-      summary: `Besluit: ${action.label}`,
-    })
   }
 
   await dbSetSession(updated)
@@ -2254,225 +2333,166 @@ export async function deleteScenarioGraph(id: string): Promise<void> {
   await dbDeleteScenarioGraph(id)
 }
 
-export async function upsertNotificationDraft(input: {
-  participantId: string
-  type: NotificationType
-  draftId?: string
-  content: NotificationDraft["content"]
-}): Promise<{ ok: boolean; error?: string; draftId?: string }> {
-  const session = await dbGetSession()
-  if (!session) return { ok: false, error: "No active session." }
-  const list = session.notifications ?? []
-  const existing = input.draftId
-    ? list.find(n => n.id === input.draftId)
-    : list.find(n => n.type === input.type && !n.submittedAt)
-  const draft: NotificationDraft = existing
-    ? { ...existing, content: input.content }
-    : {
-        id: genId("note"),
-        type: input.type,
-        createdBy: input.participantId,
-        createdAt: Date.now(),
-        content: input.content,
-      }
-  const updated: SessionState = {
-    ...session,
-    notifications: existing
-      ? list.map(n => (n.id === existing.id ? draft : n))
-      : [...list, draft],
-  }
-  await dbSetSession(updated)
-  broadcastState(updated)
-  return { ok: true, draftId: draft.id }
+// ─── Regulatory notification (Phase 2, data-driven) ───────────
+//
+// One implementation per concern. An inject with `triggersRegulatoryNotification`
+// auto-opens the 'initial' milestone. Filing 'initial' immediately opens
+// 'closing' (30-day clock starts at that moment). On session end, still-open
+// milestones past their deadline are marked 'expired'. Scoring wires up via
+// graph-adapter::sessionToEvents.
+
+function exerciseHoursSince(anchorMs: number | undefined, now: number): number {
+  if (!anchorMs) return 0
+  const diffMs = Math.max(0, now - anchorMs)
+  return diffMs / (60 * 60 * 1000)
 }
 
-export async function submitNotification(input: {
-  participantId: string
-  draftId: string
-}): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
-  if (!session) return { ok: false, error: "No active session." }
-  const list = session.notifications ?? []
-  const draft = list.find(n => n.id === input.draftId)
-  if (!draft) return { ok: false, error: "Melding niet gevonden." }
-  if (draft.submittedAt) return { ok: true }
+function maybeOpenRegulatoryObligationFromInject(session: SessionState, inject: Inject): SessionState {
+  const regime = session.regulatoryRegime
+  if (!regime) return session
+  if (!inject.triggersRegulatoryNotification) return session
+  const initial = regime.milestones.find(m => m.id === 'initial')
+  if (!initial) return session
+  const list = session.regulatoryObligations ?? []
+  // Idempotent — if an initial obligation already exists (open OR filed OR expired),
+  // don't reopen it. This lets multiple injects carry the flag safely.
+  if (list.some(o => o.milestoneId === 'initial')) return session
   const now = Date.now()
-  const chaserKey = `chaser_${draft.type}_fired`
-  const beforeChaser = !(session.flags?.[chaserKey])
-  const anchor = session.incidentDetectedAt ?? session.startedAt ?? draft.createdAt
-  const deadline = anchor + notificationDeadlineMs(draft.type)
-  const onTime = now <= deadline
-  const submitted: NotificationDraft = {
-    ...draft,
-    submittedAt: now,
-    score: { completeness: draftCompleteness(draft), onTime, submittedBeforeChaser: beforeChaser },
-  }
-  const prompts = session.meldplichtPrompts ?? []
-  const closedPrompts = prompts.map(p =>
-    (p.type === draft.type && (p.status === 'open' || p.status === 'drafted')) ? { ...p, status: 'submitted' as const } : p,
-  )
-  const updated: SessionState = {
-    ...session,
-    notifications: list.map(n => (n.id === draft.id ? submitted : n)),
-    meldplichtPrompts: closedPrompts,
-  }
-  await dbSetSession(updated)
-  broadcastState(updated)
-  return { ok: true }
-}
-
-function notificationDeadlineMs(type: NotificationType): number {
-  const H = 60 * 60 * 1000
-  switch (type) {
-    case 'ncsc_24h': return 24 * H
-    case 'ncsc_72h': return 72 * H
-    case 'ap_72h':   return 72 * H
-    case 'ncsc_final': return 30 * 24 * H
-  }
-}
-
-function draftCompleteness(draft: NotificationDraft): number {
-  const c = draft.content
-  const fields = [c.suspectMalicious, c.crossBorderImpact, c.responsibleContact, c.initialImpactAssessment, c.iocs, c.mitigations]
-  const filled = fields.filter(f => (f?.trim().length ?? 0) >= 20).length
-  return filled / fields.length
-}
-
-// ─── Meldplicht prompt spawning ───────────────────────────────
-
-function spawnMeldplichtPrompt(
-  session: SessionState,
-  input: {
-    type: NotificationType
-    trigger: MeldplichtPromptTrigger
-    sourceId?: string
-    summary: string
-    now?: number
-  },
-): SessionState {
-  const meldplicht = session.graph?.meldplicht
-  if (meldplicht && !meldplicht.enabled) return session
-  const enabledFor = (t: NotificationType): boolean => {
-    if (!meldplicht) return true
-    if (t === 'ncsc_24h') return meldplicht.ncsc24hEnabled
-    if (t === 'ncsc_72h') return meldplicht.ncsc72hEnabled
-    if (t === 'ncsc_final') return meldplicht.ncscFinalEnabled
-    if (t === 'ap_72h') return meldplicht.apEnabled
-    return true
-  }
-  if (!enabledFor(input.type)) return session
-  const roundNumber = (session.currentRound ?? 0) + 1
-  const existing = session.meldplichtPrompts ?? []
-  // Dedupe: one prompt per (type, roundNumber) unless the previous is closed (submitted or dismissed).
-  const dupe = existing.find(p => p.type === input.type && p.roundNumber === roundNumber && (p.status === 'open' || p.status === 'drafted'))
-  if (dupe) return session
-  const now = input.now ?? Date.now()
-  const prompt: MeldplichtPrompt = {
-    id: genId("mp"),
-    type: input.type,
-    roundNumber,
-    triggeredAt: now,
-    triggerReason: {
-      kind: input.trigger,
-      sourceId: input.sourceId,
-      summary: input.summary,
-    },
+  const anchor = session.incidentDetectedAt ?? session.startedAt ?? session.createdAt
+  const obligation: RegulatoryObligationState = {
+    regimeId: regime.id,
+    milestoneId: initial.id,
     status: 'open',
+    openedAtRound: (session.currentRound ?? 0) + 1,
+    openedAtHour: exerciseHoursSince(anchor, now),
   }
-  return { ...session, meldplichtPrompts: [...existing, prompt] }
-}
-
-function evalInjectTriggeredPrompts(session: SessionState, inject: Inject): SessionState {
-  let next = session
-  const areas = inject.supervisionAreas ?? []
-  if (inject.nis2Relevant && areas.includes('notification_duty')) {
-    next = spawnMeldplichtPrompt(next, {
-      type: 'ncsc_24h',
-      trigger: 'inject_flagged',
-      sourceId: inject.id,
-      summary: `Aanleiding: ${inject.title}`,
-    })
-    const looksLikeAvg = inject.type === 'regulatory'
-      || /avg|persoonsgeg|datalek|autoriteit persoonsgegevens|ap /i.test(`${inject.title} ${inject.content}`)
-    if (looksLikeAvg) {
-      next = spawnMeldplichtPrompt(next, {
-        type: 'ap_72h',
-        trigger: 'inject_flagged',
-        sourceId: inject.id,
-        summary: `Aanleiding: ${inject.title}`,
-      })
-    }
-  }
+  let next: SessionState = { ...session, regulatoryObligations: [...list, obligation] }
+  next = pushTimeline(next, 'regulatory_obligation_opened', {
+    regimeId: regime.id,
+    milestoneId: initial.id,
+    sourceInjectId: inject.id,
+  })
+  emit('regulatory_obligation_opened', { regimeId: regime.id, milestoneId: initial.id })
   return next
 }
 
-function evalChaserTriggeredPrompts(session: SessionState, chaser: Inject): SessionState {
-  const areas = chaser.supervisionAreas ?? []
-  if (!areas.includes('notification_duty')) return session
-  const inferredType: NotificationType = /vroegtijdige|24u|24 uur|ncsc-csirt/i.test(`${chaser.title} ${chaser.content}`)
-    ? 'ncsc_24h'
-    : /ap |autoriteit persoonsgegevens|avg/i.test(`${chaser.title} ${chaser.content}`)
-      ? 'ap_72h'
-      : 'ncsc_72h'
-  return spawnMeldplichtPrompt(session, {
-    type: inferredType,
-    trigger: 'chaser_fired',
-    sourceId: chaser.id,
-    summary: `Chaser: ${chaser.title}`,
-  })
-}
-
-export async function dismissMeldplichtPrompt(input: { promptId: string }): Promise<{ ok: boolean }> {
-  const session = await dbGetSession()
-  if (!session) return { ok: false }
-  const list = session.meldplichtPrompts ?? []
-  const updated: SessionState = {
-    ...session,
-    meldplichtPrompts: list.map(p => p.id === input.promptId ? { ...p, status: 'dismissed' } : p),
-  }
-  await dbSetSession(updated)
-  broadcastState(updated)
-  return { ok: true }
-}
-
-export async function triggerMeldplichtManual(input: { type: NotificationType; summary?: string }): Promise<{ ok: boolean; error?: string }> {
+export async function fileRegulatoryObligation(input: {
+  participantId: string
+  milestoneId: string
+  freeText?: string
+  keyPoints?: string
+}): Promise<{ ok: boolean; error?: string; obligation?: RegulatoryObligationState }> {
   const session = await dbGetSession()
   if (!session) return { ok: false, error: "No active session." }
-  const updated = spawnMeldplichtPrompt(session, {
-    type: input.type,
-    trigger: 'facilitator_manual',
-    summary: input.summary ?? 'Facilitator vraagt om meldplicht-moment',
+  const regime = session.regulatoryRegime
+  if (!regime) return { ok: false, error: "Geen regulatory regime actief in deze sessie." }
+  const participant = session.participants.find(p => p.id === input.participantId)
+  if (!participant || !participant.role) return { ok: false, error: "Deelnemer heeft geen rol." }
+  const milestone = regime.milestones.find(m => m.id === input.milestoneId)
+  if (!milestone) return { ok: false, error: "Milestone niet gevonden." }
+
+  const list = session.regulatoryObligations ?? []
+  const idx = list.findIndex(o => o.milestoneId === input.milestoneId && o.status === 'open')
+  if (idx < 0) return { ok: false, error: "Er is geen open melding voor dit milestone." }
+
+  const now = Date.now()
+  const anchor = session.incidentDetectedAt ?? session.startedAt ?? session.createdAt
+  const hourNow = exerciseHoursSince(anchor, now)
+  const filed: RegulatoryObligationState = {
+    ...list[idx],
+    status: 'filed',
+    filedAtRound: (session.currentRound ?? 0) + 1,
+    filedAtHour: hourNow,
+    filedBy: participant.id,
+    filedByRole: participant.role,
+    freeText: input.freeText,
+    keyPoints: input.keyPoints,
+  }
+  let nextList = list.map((o, i) => (i === idx ? filed : o))
+
+  // Cascade: filing 'initial' immediately opens 'closing' — the 30-day clock
+  // starts at the moment of filing, per NIS2 art. 23 lid 4c.
+  if (input.milestoneId === 'initial') {
+    const closing = regime.milestones.find(m => m.id === 'closing')
+    if (closing && !nextList.some(o => o.milestoneId === closing.id)) {
+      nextList = [
+        ...nextList,
+        {
+          regimeId: regime.id,
+          milestoneId: closing.id,
+          status: 'open',
+          openedAtRound: (session.currentRound ?? 0) + 1,
+          openedAtHour: hourNow,
+        },
+      ]
+    }
+  }
+
+  let updated: SessionState = { ...session, regulatoryObligations: nextList }
+  updated = pushTimeline(updated, 'regulatory_obligation_filed', {
+    regimeId: regime.id,
+    milestoneId: milestone.id,
+    filedBy: participant.id,
+    filedByRole: participant.role,
   })
-  if (updated === session) return { ok: true }
   await dbSetSession(updated)
   broadcastState(updated)
-  return { ok: true }
+  emit('regulatory_obligation_filed', { regimeId: regime.id, milestoneId: milestone.id })
+  return { ok: true, obligation: filed }
+}
+
+// Called from endSessionForced — mark any still-open milestones past their
+// deadline as 'expired'. Untouched if still within the window.
+function expireOpenRegulatoryObligations(session: SessionState): SessionState {
+  const regime = session.regulatoryRegime
+  if (!regime) return session
+  const list = session.regulatoryObligations ?? []
+  if (list.length === 0) return session
+  const now = Date.now()
+  const anchor = session.incidentDetectedAt ?? session.startedAt ?? session.createdAt
+  const currentHour = exerciseHoursSince(anchor, now)
+  let changed = false
+  let next = session
+  const nextList = list.map(o => {
+    if (o.status !== 'open') return o
+    const ms = regime.milestones.find(m => m.id === o.milestoneId)
+    if (!ms) return o
+    const deadlineHour = o.openedAtHour + ms.deadlineHours
+    if (currentHour < deadlineHour) return o
+    changed = true
+    next = pushTimeline(next, 'regulatory_obligation_expired', {
+      regimeId: regime.id,
+      milestoneId: o.milestoneId,
+    })
+    return {
+      ...o,
+      status: 'expired' as const,
+      expiredAtRound: (session.currentRound ?? 0) + 1,
+    }
+  })
+  if (!changed) return session
+  return { ...next, regulatoryObligations: nextList }
+}
+
+// Judge whether a filed obligation was on-time or late relative to its
+// deadline. Used by scoring + reveal UI.
+export function classifyRegulatoryTiming(
+  o: RegulatoryObligationState,
+  regime: RegulatoryRegime,
+): 'on_time' | 'late' | 'omitted' {
+  if (o.status === 'expired') return 'omitted'
+  if (o.status !== 'filed') return 'omitted'
+  const ms = regime.milestones.find(m => m.id === o.milestoneId)
+  if (!ms) return 'late'
+  const filedHour = o.filedAtHour ?? Number.POSITIVE_INFINITY
+  const deadlineHour = o.openedAtHour + ms.deadlineHours
+  return filedHour <= deadlineHour ? 'on_time' : 'late'
 }
 
 export async function setSessionFlag(key: string, value: boolean): Promise<{ ok: boolean }> {
   const session = await dbGetSession()
   if (!session) return { ok: false }
   const updated: SessionState = { ...session, flags: { ...(session.flags ?? {}), [key]: value } }
-  await dbSetSession(updated)
-  broadcastState(updated)
-  return { ok: true }
-}
-
-export async function updateRetainerActivation(input: {
-  participantId: string
-  patch: Partial<RetainerActivationState>
-}): Promise<{ ok: boolean }> {
-  const session = await dbGetSession()
-  if (!session) return { ok: false }
-  const now = Date.now()
-  const merged: RetainerActivationState = {
-    ...(session.retainerState ?? { updatedAt: now }),
-    ...input.patch,
-    updatedAt: now,
-  }
-  const flags = { ...(session.flags ?? {}) }
-  if (merged.dialedAt) flags[RETAINER_ACTIVATED_FLAG] = true
-  const updated: SessionState = { ...session, retainerState: merged, flags }
   await dbSetSession(updated)
   broadcastState(updated)
   return { ok: true }

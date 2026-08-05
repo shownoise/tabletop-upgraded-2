@@ -48,7 +48,7 @@ import type {
   ScenarioGraph,
   StartNodeData,
 } from "@/lib/graph/types"
-import { EYE_SECURITY_RETAINER, DEFAULT_MELDPLICHT, DEFAULT_FEATURES } from "@/lib/graph/types"
+import { EYE_SECURITY_RETAINER, DEFAULT_FEATURES } from "@/lib/graph/types"
 import { validateGraph } from "@/lib/graph/validate"
 import type { ScenarioType } from "@/lib/types"
 
@@ -86,7 +86,6 @@ function initialGraph(): ScenarioGraph {
     // Retainer is always Eye Security (v2). Author cannot edit; engine reads this everywhere.
     irRetainerName: EYE_SECURITY_RETAINER.name,
     irRetainerProfile: EYE_SECURITY_RETAINER,
-    meldplicht: DEFAULT_MELDPLICHT,
     features: DEFAULT_FEATURES,
   }
 }
@@ -195,10 +194,10 @@ function fromFlowEdges(edges: Edge[]): GraphEdge[] {
 function InnerCanvas() {
   const router = useRouter()
   const initial = useMemo(() => initialGraph(), [])
-  const [graphMeta, setGraphMeta] = useState<Pick<ScenarioGraph, "id" | "name" | "version" | "scenarioType" | "createdAt" | "irRetainerName" | "irPlaybook" | "meldplicht" | "irRetainerProfile" | "features">>(
+  const [graphMeta, setGraphMeta] = useState<Pick<ScenarioGraph, "id" | "name" | "version" | "scenarioType" | "createdAt" | "irRetainerName" | "irPlaybook" | "irRetainerProfile" | "features">>(
     {
       id: initial.id, name: initial.name, version: initial.version, scenarioType: initial.scenarioType, createdAt: initial.createdAt,
-      irRetainerName: initial.irRetainerName, irRetainerProfile: initial.irRetainerProfile, meldplicht: initial.meldplicht, features: initial.features,
+      irRetainerName: initial.irRetainerName, irRetainerProfile: initial.irRetainerProfile, features: initial.features,
     },
   )
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(toFlowNodes(initial))
@@ -424,7 +423,6 @@ function InnerCanvas() {
       id: g.id, name: g.name, version: g.version, scenarioType: g.scenarioType, createdAt: g.createdAt,
       irRetainerName: EYE_SECURITY_RETAINER.name,
       irPlaybook: g.irPlaybook,
-      meldplicht: g.meldplicht ?? DEFAULT_MELDPLICHT,
       irRetainerProfile: EYE_SECURITY_RETAINER,
       features: g.features ?? DEFAULT_FEATURES,
     })

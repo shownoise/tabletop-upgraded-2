@@ -13,7 +13,6 @@ import type { ScenarioGraph } from "@/lib/graph/types"
 
 interface DryRunResult {
   totalPoints: number
-  processAggregate: number | null
   scoringVersion: string
   outcomes: Array<{ round: number; points: number; normalized: number }>
   rolCoverage: number
@@ -59,7 +58,6 @@ export function DryRunDialog({
       })
       setResult({
         totalPoints: output.totalPoints,
-        processAggregate: output.processAggregate,
         scoringVersion: output.scoringVersion,
         outcomes: output.outcomes.map(o => ({ round: o.round, points: o.points, normalized: o.normalized })),
         rolCoverage: output.roleResolution.rolCoverage,
@@ -106,9 +104,8 @@ export function DryRunDialog({
 
           {result && (
             <div className="space-y-3 border rounded p-3 bg-muted/30">
-              <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="grid grid-cols-3 gap-2 text-center">
                 <div><div className="text-[9px] font-mono text-muted-foreground uppercase">Punten totaal</div><div className="text-xl font-bold text-primary">{result.totalPoints}</div></div>
-                <div><div className="text-[9px] font-mono text-muted-foreground uppercase">Proces (√)</div><div className="text-xl font-bold">{result.processAggregate?.toFixed(2) ?? "—"}</div></div>
                 <div><div className="text-[9px] font-mono text-muted-foreground uppercase">RolCoverage</div><div className="text-xl font-bold">{(result.rolCoverage * 100).toFixed(0)}%</div></div>
                 <div><div className="text-[9px] font-mono text-muted-foreground uppercase">Owners</div><div className="text-xl font-bold">{result.distinctOwners}</div></div>
               </div>

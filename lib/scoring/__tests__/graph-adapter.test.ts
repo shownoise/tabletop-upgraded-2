@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { graphToScenarioSpec, sessionToEvents, sessionToScoringInput } from '../graph-adapter'
 import { scoreExercise } from '../score-exercise'
-import { simpleStoryExample as meldplichtPressureExample } from '@/lib/graph/examples-simple-story'
+import { schoolverenigingScenario as meldplichtPressureExample } from '@/lib/graph/examples-schoolvereniging'
 import type { SessionState } from '@/lib/types'
 
 describe('graph-adapter — bridge tussen ScenarioGraph en scoring input', () => {
@@ -92,25 +92,33 @@ describe('graph-adapter — bridge tussen ScenarioGraph en scoring input', () =>
     expect(submit && submit.kind === 'decision_submitted' && submit.by).toBe('LEGAL_DPO')
   })
 
-  it('sessionToEvents: notifications worden external_party_activated', () => {
+  it('sessionToEvents: filed regulatory obligation → external_party_activated', async () => {
+    const { NL_AVG_NIS2_REGIME } = await import('@/lib/regulatory/regimes')
     const session: Partial<SessionState> = {
       startedAt: 1_000_000, createdAt: 0, timeline: [], submittedDecisions: [], participants: [],
-      notifications: [{
-        id: 'n1', type: 'ncsc_24h', createdBy: 'p1', createdAt: 100,
-        submittedAt: 5000, content: {},
+      incidentDetectedAt: 1_000_000,
+      regulatoryRegime: NL_AVG_NIS2_REGIME,
+      regulatoryObligations: [{
+        regimeId: NL_AVG_NIS2_REGIME.id,
+        milestoneId: 'initial',
+        status: 'filed',
+        openedAtRound: 1,
+        openedAtHour: 0,
+        filedAtRound: 1,
+        filedAtHour: 2,
       }],
     }
     const events = sessionToEvents(session as SessionState)
     const ext = events.find(e => e.kind === 'external_party_activated')
     expect(ext).toBeDefined()
-    expect(ext && ext.kind === 'external_party_activated' && ext.partyId).toBe('ncsc_24h')
+    expect(ext && ext.kind === 'external_party_activated' && ext.partyId).toBe(`regulatory:${NL_AVG_NIS2_REGIME.id}:initial`)
   })
 
   it('sessionToEvents: retainer activation wordt external_party_activated', () => {
     const session: Partial<SessionState> = {
       startedAt: 1_000_000, createdAt: 0, timeline: [], submittedDecisions: [], participants: [],
-      retainerState: {
-        dialedAt: 3000, chosenActivator: 'CISO', chosenActivatorAuthorized: true, updatedAt: 3000,
+      retainerActivation: {
+        activatedAtTs: 3000, activatedAtRound: 1, activatedByParticipantId: 'p1',
       },
     }
     const events = sessionToEvents(session as SessionState)

@@ -21,29 +21,8 @@ describe('reference-case — Deel A §9', () => {
     expect(result.totalPoints).toBeLessThanOrEqual(REFERENCE_EXPECTED.maxTotalPoints)
   })
 
-  it('processAggregate binnen verwachte bandbreedte', () => {
-    expect(result.processAggregate).not.toBeNull()
-    expect(result.processAggregate!).toBeGreaterThanOrEqual(REFERENCE_EXPECTED.minProcess)
-    expect(result.processAggregate!).toBeLessThanOrEqual(REFERENCE_EXPECTED.maxProcess)
-  })
-
-  it('BESLUIT, ADAPT, EXTERN zijn measured (data aanwezig)', () => {
-    for (const dim of REFERENCE_EXPECTED.expectDimensionsMeasured) {
-      expect(result.dimensions[dim].value).not.toBeNull()
-    }
-  })
-
-  it('calibration is berekend (confidence-data aanwezig in referentie-events)', () => {
-    expect(result.calibration).not.toBeNull()
-  })
-
   it('4 outcomes met unieke rondenummers', () => {
     expect(result.outcomes).toHaveLength(4)
     expect(new Set(result.outcomes.map(o => o.round)).size).toBe(4)
-  })
-
-  it('mode = ASSESSMENT — MANDAAT is meetbaar en wordt gerapporteerd', () => {
-    // Referentie-team heeft 6+ rollen → distinctOwners ≥ 3 → MANDAAT niet-null.
-    expect(result.dimensions.MANDAAT.value).not.toBeNull()
   })
 })

@@ -1,4 +1,5 @@
 import type { ScenarioGraph } from "./types"
+import { RETAINER_ACTIVATED_FLAG } from "./types"
 import { planToGraph, type WizardPlan } from "./wizard-plan"
 
 // OPERATIE POLDER-STORM — starter scenario for Eye Security's tabletop trainings.
@@ -66,15 +67,6 @@ const plan: WizardPlan = {
           targetTeam: "technical_it",
         },
       ],
-      meldingMoment: {
-        id: "r1-melding-retainer",
-        allowedRoles: ["ceo", "ciso", "it_manager"],
-        recipient: "ir_retainer",
-        helper: "Bij twijfel: Eye Security bellen. SLA eerste contact 15 min.",
-        types: [
-          { id: "activate-retainer", label: "Eye Security-retainer activeren", triggersInjectId: "r1-retainer-response" },
-        ],
-      },
       roleActions: [
         {
           id: "r1-ceo-authorize", label: "Autoriseer noodmaatregelen",
@@ -340,6 +332,25 @@ const plan: WizardPlan = {
           content: "Iemand in het OR-groepschatje: 'Ik heb gehoord dat de directie al €800k heeft betaald. Waarom horen wij dat niet? Zit ons pensioen ook in de leak?'",
           reliability: "misleading",
           senderName: "OR-lid (leaked)", timestamp: "11:44",
+        },
+        // Capability-gated: alleen zichtbaar als de retainer eerder is
+        // geactiveerd. Verschaft harde forensische input voor de AP-melding.
+        {
+          id: "r3-eye-security-forensics",
+          type: "technical", channel: "email", urgency: "high",
+          title: "Eye Security IR — Forensisch tussenrapport",
+          content:
+            "Van: Marc de Vries (Eye Security IR) — 11:50\n\n" +
+            "Omdat jullie ons in ronde 1 geactiveerd hebben, kunnen we nu iets delen wat teams zonder retainer op dit moment nog NIET hebben:\n\n" +
+            "1) EXFIL-METHODE bevestigd: rclone → Mega.nz over vier nachten. Twee IPs uit onze eerdere threat-intel matchen; één account bij Mega hebben we via takedown-verzoek al bevroren.\n\n" +
+            "2) ATTRIBUTIE: TTPs matchen met BlackCat/ALPHV-affiliate 'Sphynx'. We volgen deze actor sinds januari — 30 blocklist-IPs, 14 domains en 2 wallets die jullie SOC nu al kan blokkeren.\n\n" +
+            "3) FORENSISCH BEWIJS: memory-dumps van FS-PROD-01 zijn cryptografisch gehashed en offsite opgeslagen. Rechtsgeldig voor politie én verzekeraar.\n\n" +
+            "4) SCOPE-BEVESTIGING: geen tweede aanvaller, geen slapende persistence. Herstel bouwt op een schone baseline.\n\n" +
+            "Neem dit tussenrapport op als bijlage bij de AVG-melding — het maakt jullie positie richting AP aanzienlijk sterker.",
+          senderName: "Eye Security IR", timestamp: "11:50",
+          reliability: "fact",
+          deliverySeconds: 300,
+          requiresCapability: RETAINER_ACTIVATED_FLAG,
         },
       ],
       meldingMoment: {
@@ -702,6 +713,21 @@ const plan: WizardPlan = {
       prompt: "Na R1 — containment-koers kiezen",
       perRole: true,
       options: [
+        // Retainer-activatie is een aparte optie die de sessie-brede capability
+        // 'retainer_activated' zet. Zodra ingezet in ronde 1 (of later) verschijnt
+        // de optie niet meer in vervolgpresentaties; de forensische chaser-inject
+        // in latere rondes wordt alleen zichtbaar voor teams die op tijd waren.
+        {
+          label: "Eye Security-retainer activeren",
+          allowedRole: "ciso",
+          outcomeVector: { CONT: 1, FOR: 2, BC: 0, JUR: 0, VER: 1, KOS: -1 },
+          qualityRank: "best",
+          facilitatorCommentary: "Retainer op tijd inschakelen = forensische ondersteuning meteen beschikbaar.",
+          lessonLearned: "Vroeg activeren opent forensische capaciteit die anders ontbreekt.",
+          capabilityFlag: RETAINER_ACTIVATED_FLAG,
+          consumesOptionAfterUse: true,
+          leadsTo: "round:1",
+        },
         {
           label: "Isolatie van FS-PROD-01 (via netwerk)",
           allowedRole: "ciso",

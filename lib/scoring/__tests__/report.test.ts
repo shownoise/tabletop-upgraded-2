@@ -26,26 +26,16 @@ describe('AssessmentReport (Deel B §6)', () => {
     }
   })
 
-  it('zeven procesdimensies met dataQuality', () => {
-    expect(report.processDimensions).toHaveLength(7)
-    for (const d of report.processDimensions) {
-      expect(d.key).toBeTruthy()
-      expect(d.label).toBeTruthy()
-      expect(['measured', 'observation', 'null']).toContain(d.dataQuality)
-    }
-  })
-
   it('spider heeft alle 6 uitkomstdimensies', () => {
     expect(Object.keys(report.spider.team)).toHaveLength(6)
   })
 
-  it('markdown-render bevat kop, uitkomst-tabel, dimensies, spider, rolresolutie', () => {
+  it('markdown-render bevat kop, uitkomst-tabel, spider, rolresolutie', () => {
     const md = renderAssessmentMarkdown(report)
     expect(md).toContain('# Debriefrapport')
     expect(md).toContain('Scoring-versie')
     expect(md).toContain('Rolcoverage')
     expect(md).toContain('## Uitkomst per ronde')
-    expect(md).toContain('## Procesdimensies')
     expect(md).toContain('## Spider')
     expect(md).toContain('## Rolresolutie')
   })

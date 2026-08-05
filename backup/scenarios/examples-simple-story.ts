@@ -1,5 +1,5 @@
 import type { ScenarioGraph, DecisionNodeData, InjectNodeData, RoundNodeData, OutcomeNodeData } from "./types"
-import { EYE_SECURITY_RETAINER } from "./types"
+import { EYE_SECURITY_RETAINER, RETAINER_ACTIVATED_FLAG } from "./types"
 import type { Role } from "@/lib/types"
 
 // Ransomware Crisis — realistische 7-ronde showcase.
@@ -18,6 +18,10 @@ export function simpleStoryExample(): ScenarioGraph {
     vec: Partial<Record<"CONT"|"FOR"|"BC"|"JUR"|"VER"|"KOS", number>>
     note: string
     quality?: "best" | "good" | "poor" | "wrong"
+    // Phase 3 — capability plumbing on selected options.
+    capabilityFlag?: string
+    consumesOptionAfterUse?: boolean
+    requiresCapability?: string
   }
   function decisionData(prompt: string, opts: OptSpec[]): DecisionNodeData {
     return {
@@ -33,6 +37,9 @@ export function simpleStoryExample(): ScenarioGraph {
           CONT: o.vec.CONT ?? 0, FOR: o.vec.FOR ?? 0, BC: o.vec.BC ?? 0,
           JUR: o.vec.JUR ?? 0, VER: o.vec.VER ?? 0, KOS: o.vec.KOS ?? 0,
         },
+        capabilityFlag: o.capabilityFlag,
+        consumesOptionAfterUse: o.consumesOptionAfterUse,
+        requiresCapability: o.requiresCapability,
       })),
     }
   }
@@ -50,6 +57,8 @@ export function simpleStoryExample(): ScenarioGraph {
       importance: cfg.importance ?? "info",
       visibility: cfg.visibility, targetRoles: cfg.targetRoles,
       correctRoute: cfg.correctRoute, deliverySeconds: cfg.deliverySeconds,
+      triggersRegulatoryNotification: cfg.triggersRegulatoryNotification,
+      requiresCapability: cfg.requiresCapability,
     }
   }
   function outcomeData(cfg: Omit<OutcomeNodeData, "kind">): OutcomeNodeData {
@@ -67,7 +76,7 @@ export function simpleStoryExample(): ScenarioGraph {
     inj[key] = id("inj")
     return { key, id: inj[key] }
   })
-  const r1i = injIds(1, 3), r2i = injIds(2, 4), r3i = injIds(3, 3), r4i = injIds(4, 3)
+  const r1i = injIds(1, 3), r2i = injIds(2, 4), r3i = injIds(3, 3), r4i = injIds(4, 4)
   const r5i = injIds(5, 3), r6i = injIds(6, 3), r7i = injIds(7, 2)
 
   const nodes: ScenarioGraph["nodes"] = [
@@ -122,7 +131,8 @@ export function simpleStoryExample(): ScenarioGraph {
       [
         { role: "ciso", label: "Eye Security activeren — 24/7 retainer, meteen containment",
           vec: { CONT: 2, FOR: 2, VER: 1, KOS: -1 }, quality: "best",
-          note: "24/7-retainer is er om 03:00 gebeld te worden. Snelheid + bewijsbehoud in één beweging." },
+          note: "24/7-retainer is er om 03:00 gebeld te worden. Snelheid + bewijsbehoud in één beweging.",
+          capabilityFlag: RETAINER_ACTIVATED_FLAG, consumesOptionAfterUse: true },
         { role: "ciso", label: "Wachten tot 08:00, eerst intern IT-team laten kijken",
           vec: { CONT: -2, FOR: -1, JUR: -1 }, quality: "poor",
           note: "5 uur wachten in pre-encryption reconnaissance venster = aanvaller wint. Elke uur telt." },
@@ -160,7 +170,7 @@ export function simpleStoryExample(): ScenarioGraph {
         "  • Uitgestuurd via rclone naar Mega.nz over 4 nachten (72u–24u geleden)\n" +
         "  • Data-samples in memory-dumps geïdentificeerd: SQL-dumps klant-DB, HR-CSV export, scan van fileshare 'Contracten\\Klanten\\Top20'\n\n" +
         "AANBEVELING:\n" +
-        "  • Meldplicht is niet meer optioneel. AVG-schade bewezen.\n" +
+        "  • Op basis van de omvang hierboven wordt de melding aan de AP nu verplicht — te doen binnen 24 uur (NIS2) / 72 uur (AVG art. 33).\n" +
         "  • Ransomware-payload nog niet gedetoneerd — containment NU is prioriteit.\n" +
         "  • Alle DC's moeten worden geïsoleerd + admin-credentials gereset (golden ticket risico).\n" +
         "  • Wij adviseren dringend: schakel forensische partner voor rechtsgeldigheid van bewijs.",
@@ -168,6 +178,7 @@ export function simpleStoryExample(): ScenarioGraph {
       senderName: "Eye Security IR Team", timestamp: "09:15",
       importance: "crucial", targetRoles: ["ciso"], visibility: "exclusive",
       deliverySeconds: 0,
+      triggersRegulatoryNotification: true,
     })},
     { id: r2i[1].id, type: "inject", position: { x: 1220, y: 440 }, data: injectData({
       title: "Legal — Meldplicht-analyse (spoed)",
@@ -386,6 +397,23 @@ export function simpleStoryExample(): ScenarioGraph {
       importance: "crucial", targetRoles: ["legal"], visibility: "exclusive",
       deliverySeconds: 400,
     })},
+    // Capability-gated inject — verschijnt alleen als de IR-retainer in een
+    // eerdere ronde is geactiveerd. Zonder retainer geen forensisch briefing.
+    { id: r4i[3].id, type: "inject", position: { x: 3420, y: 440 }, data: injectData({
+      title: "Eye Security IR — Forensisch tussenrapport (alleen bij actieve retainer)",
+      content:
+        "Van: Marc de Vries (Eye Security IR Lead) — 09:20\n\n" +
+        "Omdat jullie ons zondagnacht direct geactiveerd hebben, kunnen we nu een tussenrapport delen dat andere teams zonder retainer op dit moment NIET hebben:\n\n" +
+        "1) EXFILTRATIE-METHODE bevestigd: rclone via Mega.nz over 4 nachten. Twee IPs waarvoor wij takedown-verzoek hebben ingediend — Mega heeft binnen 6u gereageerd, één account is bevroren. Wij hebben lijst van file-hashes die in de 412 GB zaten.\n\n" +
+        "2) ATTRIBUTIE: TTPs matchen met BlackCat/ALPHV-affiliate 'Sphynx'. Onze threat-intel afdeling volgt deze actor sinds januari — we hebben eerdere IOCs die jullie SOC nu kan blokkeren op firewalls (30 IPs, 14 domains, 2 wallet-adressen).\n\n" +
+        "3) FORENSISCH BEWIJS: memory dumps van de 3 initial-hosts zijn cryptografisch gehashed en offsite opgeslagen. Rechtsgeldig voor eventuele strafzaak. Politie kan hier morgen op inhaken.\n\n" +
+        "4) SCOPE-BEVESTIGING: geen tweede aanvaller in het netwerk, geen slapende persistence buiten wat we al hebben gecleared. Jullie clean-room bouwen op een schone baseline.\n\n" +
+        "Dit soort snelheid + diepte kregen jullie omdat de retainer op tijd getriggerd is. Zonder die stap hadden we nu pas ingegroeid in de logs.",
+      type: "technical", channel: "email", urgency: "high",
+      senderName: "Marc de Vries — Eye Security IR", timestamp: "09:20",
+      importance: "crucial", deliverySeconds: 100,
+      requiresCapability: RETAINER_ACTIVATED_FLAG,
+    })},
     { id: dec[3], type: "decision", position: { x: 3420, y: 220 }, data: decisionData(
       "Stakeholders bedienen — wie doet wat?",
       [
@@ -470,6 +498,12 @@ export function simpleStoryExample(): ScenarioGraph {
         { role: "ciso", label: "Clean-room + goodwill-betaling voor tijd — 4 dagen bouwen",
           vec: { CONT: 2, FOR: 2, BC: -1, KOS: -1 }, quality: "best",
           note: "Langste hersteltijd maar zekerheid + forensisch bewijs volledig. Referentie-aanpak." },
+        // Capability-gated: alleen zichtbaar als de retainer in een eerdere ronde
+        // is geactiveerd. Een team zonder retainer kan deze koers niet kiezen.
+        { role: "ciso", label: "Clean-room parallel met Eye Security IR-teams — 2.5 dag",
+          vec: { CONT: 2, FOR: 2, BC: 0, KOS: -1 }, quality: "best",
+          note: "Retainer-team bouwt mee: 30% sneller dan solo clean-room, met forensische chain-of-custody behouden.",
+          requiresCapability: RETAINER_ACTIVATED_FLAG },
         { role: "ciso", label: "Gefaseerd — snel kritiek terug, geleidelijk de rest",
           vec: { CONT: 0, FOR: 0, BC: 1, KOS: 0 }, quality: "good",
           note: "Sneller operationeel maar risico dat aanvaller nog terugkomt. Compromis." },

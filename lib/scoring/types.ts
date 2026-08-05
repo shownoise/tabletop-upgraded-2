@@ -1,7 +1,7 @@
-import type { Domain, OutcomeDimension, ProcessDimension } from './constants'
+import type { Domain, OutcomeDimension } from './constants'
 
 // Re-export dimensiona types voor consumers die vanuit types.ts importeren.
-export type { Domain, OutcomeDimension, ProcessDimension } from './constants'
+export type { Domain, OutcomeDimension } from './constants'
 
 // De scoring-package is puur. Alle types hier zijn zelf-standig en niet
 // afhankelijk van `lib/graph/types.ts` of `lib/types.ts` — het is de
@@ -54,7 +54,7 @@ export interface InjectSpec {
   correctRoute?: RoleId
   // Deel A §3.1 — 'facilitator' = ad-hoc gepusht; ruis voor D-berekening als imp=info.
   origin: 'scenario' | 'facilitator'
-  // Voor MANDAAT §7.2 — welk domein raakt deze inject bij escalatie? Optioneel.
+  // Optioneel: welk domein raakt deze inject bij escalatie.
   relatedDomain?: Domain
 }
 
@@ -84,8 +84,6 @@ export interface ScenarioSpec {
   decisionPoints: DecisionPointSpec[]
   injects: InjectSpec[]
   externalParties?: ExternalPartySpec[]
-  // Deel A §7.8 — override gewichten van PROCES-aggregatie.
-  processWeights?: Partial<Record<ProcessDimension, number>>
   // Deel B §1.1 — override fallback-ketens per domein.
   domainOwnership?: Partial<Record<Domain, RoleId[]>>
   // Deel B §1.6 — minimum distinctOwners waaronder required=false beslispunten vervallen.
@@ -108,17 +106,9 @@ export interface Roster {
 export type ExerciseEvent =
   | { kind: 'session_start'; t: number }
   | { kind: 'round_phase_changed'; t: number; round: number; toPhase: 'briefing' | 'overleg' | 'keuze' | 'lock' | 'review' }
-  | { kind: 'inject_received'; t: number; round: number; injectId: string; recipient: RoleId }
-  | { kind: 'inject_shared'; t: number; round: number; injectId: string; sharedBy: RoleId }
   | { kind: 'decision_submitted'; t: number; round: number; decisionPointId: string; optionId: string; by: RoleId; groupId?: string; confidence?: number; cosignedBy?: RoleId[]; assumptions?: AssumptionTag[]; premises?: PremiseTag[] }
   | { kind: 'decision_revised'; t: number; round: number; decisionPointId: string; optionId: string; by: RoleId; groupId?: string; triggeredByInjectId?: string }
   | { kind: 'external_party_activated'; t: number; partyId: string; actionable: 0 | 0.5 | 1 }
-  | { kind: 'escalation_fired'; t: number; decisionPointId: string; escalatedBy: RoleId }
-  | { kind: 'handoff_recorded'; t: number; quality: number /* 0..1 */ }
-  | { kind: 'roster_snapshot'; t: number; hoursWorkedByRole: Record<RoleId, number>; taskShareByRole: Record<RoleId, number>; hasRoster: boolean; rosterCreatedBeforeHour: number | null }
-  | { kind: 'facilitator_slider'; t: number; round: number; dimension: ProcessDimension; value: 1 | 2 | 3 | 4 | 5 }
-  | { kind: 'facilitator_q_j'; t: number; partyId: string; value: 0 | 0.5 | 1 }
-  | { kind: 'facilitator_handoff_quality'; t: number; value: number /* 0..1 */ }
 
 export interface AssumptionTag {
   text: string
@@ -141,16 +131,6 @@ export interface ExerciseInput {
 
 // ── Output ─────────────────────────────────────────────────────────────
 
-export type DataQuality = 'measured' | 'observation' | 'null'
-
-export interface DimensionScore {
-  value: number | null   // 0..5, of null bij ontbrekende data
-  dataQuality: DataQuality
-  reason?: string        // gevuld wanneer value=null, of wanneer observation ≠ measured
-  // Sub-termen — nuttig voor debrief, zonder deze in de aggregate te laten meelopen.
-  detail?: Record<string, number | null>
-}
-
 export interface RoundOutcome {
   round: number
   // Deel A §5 — gemiddelde uitkomst over de 6 dims, genormaliseerd op −1..+1.
@@ -159,6 +139,10 @@ export interface RoundOutcome {
   perDimension: Record<OutcomeDimension, number>
   // Deel B §5.1 — punten 0..100 = round(100 · (normalized+1) / 2).
   points: number
+  // True zodra minstens één beslispunt in deze ronde een echte inzending had.
+  // Zonder inzendingen valt de round terug op NO_DECISION_FALLBACK_VECTOR en
+  // moet de UI dat expliciet als "nog niet gemeten" tonen, niet als score 0.
+  hasSubmissions: boolean
 }
 
 export interface ScoringOutput {
@@ -172,9 +156,6 @@ export interface ScoringOutput {
   }
   outcomes: RoundOutcome[]
   totalPoints: number
-  dimensions: Record<ProcessDimension, DimensionScore>
-  processAggregate: number | null   // Deel A §7.8 — geometrisch gewogen gemiddelde over meetbare dims.
-  calibration?: number | null       // Deel B §7.2 — als confidence data bestaat.
   // Debrief-haakjes: welke required=false beslispunten zijn overgeslagen door team-drempel.
   droppedOptionalDecisions: string[]
 }

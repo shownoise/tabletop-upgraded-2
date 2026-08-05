@@ -46,7 +46,7 @@ describe('adaptive routing — 3/5/9 rosters (Fase 2)', () => {
       expect(Object.values(roleResolution.effectiveOwners).every(r => r !== 'NPC')).toBe(true)
     })
 
-    it('distinctOwners ≥ 6 → MANDAAT en DELEN meetbaar', () => {
+    it('distinctOwners ≥ 6 bij volledig team', () => {
       expect(roleResolution.distinctOwners).toBeGreaterThanOrEqual(6)
     })
   })
@@ -66,12 +66,14 @@ describe('adaptive routing — 3/5/9 rosters (Fase 2)', () => {
       expect(routed).toEqual(['ceo'])
     })
 
-    it('inject naar system_admin → onbezet → FORENSIEK-fallback → SECURITY_LEAD (ciso)', () => {
+    it('inject naar it_manager → aanwezig → direct geleverd', () => {
+      // system_admin is samengevoegd met it_manager (zie CHANGELOG). Nu it_manager
+      // in het team zit, hoeft er niet doorgerouteerd te worden.
       const routed = resolveInjectRecipientsAdaptive({
         inject: inject('forensic-log', { targetRoles: ['it_manager'] }),
         presentRoles: present, teamRoles, roleResolution,
       })
-      expect(routed).toEqual(['ciso'])
+      expect(routed).toEqual(['it_manager'])
     })
 
     it('inject naar ops_manager → onbezet → BEDRIJFSPROCES-fallback → CRISIS_LEAD (ceo)', () => {
@@ -139,7 +141,7 @@ describe('adaptive routing — 3/5/9 rosters (Fase 2)', () => {
       expect(routed).toEqual(['it_manager'])
     })
 
-    it('distinctOwners = 3 → MANDAAT wél meetbaar (op de grens)', () => {
+    it('distinctOwners = 3 (op de grens)', () => {
       expect(roleResolution.distinctOwners).toBe(3)
     })
   })

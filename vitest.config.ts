@@ -11,6 +11,7 @@ export default defineConfig({
     include: [
       'lib/scoring/__tests__/**/*.test.ts',
       'lib/__tests__/**/*.test.ts',
+      'lib/graph/__tests__/**/*.test.ts',
       'app/api/__tests__/**/*.test.ts',
     ],
     environment: 'node',

@@ -8,7 +8,6 @@ import type {
   ScenarioType,
   ChoiceQuality,
   IrRetainerProfile,
-  NotificationType,
   MeldingMoment,
 } from "@/lib/types"
 import type { SupervisionArea } from "@/lib/engine/supervision"
@@ -67,6 +66,9 @@ export interface RoundNodeData {
   // Phase D — melding-moments open during this round. A participant can file one
   // per moment; the engine spawns the corresponding follow-up inject.
   meldingMoments?: MeldingMoment[]
+  // 2-3 Dutch review questions surfaced during REVIEW phase — tied to specific
+  // outcome axes for this round. Optional; falls back to generic review UI.
+  reviewPrompts?: string[]
 }
 
 export interface InjectNodeData extends Omit<Inject, "id"> {
@@ -84,6 +86,11 @@ export interface InjectNodeData extends Omit<Inject, "id"> {
   //   'exclusive': alleen `targetRoles` zien 'm — anderen zien niets tot een deel-actie.
   //   Vergt bezette targetRoles; anders val terug op fallback via adaptive-routing.
   visibility?: 'shared' | 'exclusive'
+  // Capability-gated visibility. Inject is hidden from participants until the
+  // named flag is present-and-true on session.flags. Enables authored downstream
+  // consequence for options that set a capability (e.g. retainer_activated →
+  // forensic-findings inject).
+  requiresCapability?: string
 }
 
 export type DynamicFillToken = 'sector' | 'companySize' | 'crownJewels' | 'criticalSystems' | 'irRetainerName'
@@ -130,6 +137,19 @@ export interface DecisionNodeData {
     outcomeVector?: OutcomeVector
     // Deel B §7.1 — implicit "no decision" option.
     implicit?: boolean
+    // Session-level capability set when this option is submitted anywhere.
+    // Read by chasers (via ChaserCondition.kind='flag') and by inject/option
+    // visibility filters (see requiresCapability). Well-known values live as
+    // constants in this file (e.g. RETAINER_ACTIVATED_FLAG).
+    capabilityFlag?: string
+    // Consume this option once submitted anywhere in the session. Future
+    // presentations of the same DecisionNode omit this option from the visible
+    // set; the historical record keeps the submission intact.
+    consumesOptionAfterUse?: boolean
+    // Option is hidden from participants until this capability flag is present
+    // on session.flags. Enables option-tiers that only unlock after prior
+    // capability-setting decisions.
+    requiresCapability?: string
   }>
   // Soft-decision: als false, blokkeert deze decision de graph-flow niet.
   // Facilitator kan Volgende ronde klikken zonder dat er is gekozen.
@@ -142,8 +162,9 @@ export interface DecisionNodeData {
 }
 
 export interface ChaserCondition {
-  kind: 'notification_missing' | 'decision_not_taken' | 'flag'
-  type?: NotificationType
+  kind: 'regulatory_obligation_open' | 'decision_not_taken' | 'flag'
+  // For 'regulatory_obligation_open': the milestone id (e.g. 'initial' | 'closing').
+  milestoneId?: string
   roleActionId?: string
   key?: string
   value?: boolean
@@ -210,60 +231,11 @@ export interface GraphEdge {
   label?: string
 }
 
-export type MeldplichtProfile = 'personal_data_only' | 'critical_service_only' | 'both'
-
-export interface MeldplichtConfig {
-  enabled: boolean
-  incidentDetectedAt: 'start' | 'round_1' | 'round_2' | 'round_3'
-  ncsc24hEnabled: boolean
-  ncsc72hEnabled: boolean
-  ncscFinalEnabled: boolean
-  apEnabled: boolean
-  chasersEnabled: boolean
-  incidentProfile?: MeldplichtProfile
-}
-
-export const DEFAULT_MELDPLICHT: MeldplichtConfig = {
-  enabled: true,
-  incidentDetectedAt: 'round_1',
-  ncsc24hEnabled: true,
-  ncsc72hEnabled: true,
-  ncscFinalEnabled: false,
-  apEnabled: true,
-  chasersEnabled: true,
-  incidentProfile: 'both',
-}
-
-// Derive the individual toggle booleans from an incidentProfile choice.
-// Author picks a profile; engine reads the derived booleans.
-export function meldplichtFromProfile(profile: MeldplichtProfile, base: Partial<MeldplichtConfig> = {}): MeldplichtConfig {
-  const derived: Omit<MeldplichtConfig, 'incidentDetectedAt' | 'enabled' | 'incidentProfile'> = profile === 'personal_data_only'
-    ? { apEnabled: true, ncsc24hEnabled: false, ncsc72hEnabled: false, ncscFinalEnabled: false, chasersEnabled: true }
-    : profile === 'critical_service_only'
-      ? { apEnabled: false, ncsc24hEnabled: true, ncsc72hEnabled: true, ncscFinalEnabled: true, chasersEnabled: true }
-      : { apEnabled: true, ncsc24hEnabled: true, ncsc72hEnabled: true, ncscFinalEnabled: true, chasersEnabled: true }
-  return {
-    enabled: base.enabled ?? true,
-    incidentDetectedAt: base.incidentDetectedAt ?? 'round_1',
-    incidentProfile: profile,
-    ...derived,
-  }
-}
-
 // Retainer is always Eye Security in this app (v2). Kept as a data constant so
 // the engine, coverage checks, and templates all read from one source.
 export const EYE_SECURITY_RETAINER: IrRetainerProfile = {
   name: "Eye Security",
   activationNumber: "+31 (0)88 6600 700",
-  authorizedActivators: ["CISO", "IT Manager", "CEO"],
-  slaMinutesToFirstContact: 15,
-  handoffChecklist: [
-    "Incident samenvatting (wat, waar, wanneer)",
-    "Getroffen systemen en gebruikers",
-    "Reeds genomen containment-stappen",
-    "Beschikbare logs en toegangen voor forensics",
-    "Contactpersoon 24/7",
-  ],
   scopeIncludes: ["Forensics", "Containment support", "Coordinatie NCSC/AP-meldingen", "Communicatie-advies"],
   scopeExcludes: ["Losgeld-onderhandeling zonder schriftelijke opdracht", "Herstel via derde partij"],
 }
@@ -297,7 +269,6 @@ export interface ScenarioGraph {
   // Crisis playbook / IR plan — verschijnt rechts bij elke participant tijdens de sessie.
   // Bevat opzettelijk zowel bruikbare als misleidende info (BOB-training: pas op wat je gelooft).
   irPlaybook?: string
-  meldplicht?: MeldplichtConfig
   irRetainerProfile?: IrRetainerProfile
   features?: GraphFeatures
 }
