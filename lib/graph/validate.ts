@@ -2,6 +2,7 @@ import type { DecisionNodeData, GraphNode, InjectNodeData, RoundNodeData, Scenar
 import type { Role } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import { computeCoverage } from "@/lib/engine/supervision"
+import { collectSetupInjectsForDecision, buildRoundIndexMap } from "./setup-injects"
 
 export interface GraphIssue {
   severity: "error" | "warning"
@@ -150,6 +151,14 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
     if (!d.content?.trim()) {
       issues.push({ severity: "warning", nodeId: inj.id, message: "Inject has no content." })
     }
+    // Phase 2 — classification is data-only maar wordt verwacht op elke inject.
+    if (!d.classification) {
+      issues.push({
+        severity: "warning",
+        nodeId: inj.id,
+        message: `Inject "${d.title ?? inj.id.slice(0, 8)}" heeft geen type informatie — kies feit, aanname of fabel.`,
+      })
+    }
   }
 
   if (roundNodes.length === 0) {
@@ -262,6 +271,26 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
     }
   }
 
+  // ── Setup-inject → decision link (Phase 1) ──────────────────
+  // Every DecisionNode should have at least one inject with
+  // setsUpDecisionNodeId === decisionId in the same or immediately preceding
+  // round. Missing = warning (auteur mag toch publiceren; het is een gap in de
+  // storyline, geen technisch defect).
+  const roundMap = buildRoundIndexMap(graph)
+  for (const n of graph.nodes) {
+    if (n.type !== "decision") continue
+    const setups = collectSetupInjectsForDecision(graph, n.id, roundMap)
+    if (setups.length === 0) {
+      const dd = n.data as DecisionNodeData
+      const prompt = dd.prompt?.trim() || n.id.slice(0, 8)
+      issues.push({
+        severity: "warning",
+        nodeId: n.id,
+        message: `Beslissing "${prompt}" heeft geen setup-inject in dezelfde of vorige ronde — deelnemers kunnen deze keuze niet aan zien komen.`,
+      })
+    }
+  }
+
   // ── Melding-moment integrity (Phase D) ──────────────────────
   for (const round of roundNodes) {
     const rd = round.data as RoundNodeData
@@ -294,7 +323,66 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
     }
   }
 
+  // Phase 3 — playbook-gap warnings. A gap the author claimed the role has
+  // should be referenced somewhere in the exercise (inject content, decision
+  // option lessonLearned, or round situation update). Case-insensitive
+  // substring match on the shortest content-bearing word (>=4 chars) in the
+  // gap phrase. If nothing matches, warn — the author claimed a gap without
+  // exercising it.
+  const briefings = graph.roleBriefings
+  if (briefings) {
+    const haystack = collectExerciseCorpus(graph).toLowerCase()
+    for (const [role, briefing] of Object.entries(briefings)) {
+      if (!briefing) continue
+      for (const gap of briefing.playbookGaps ?? []) {
+        if (!gap.trim()) continue
+        const gapLower = gap.toLowerCase()
+        // Use every content word ≥4 chars as an OR-match set. If none appears
+        // in the corpus, we consider the gap unreferenced.
+        const words = gapLower.split(/[^a-zàáäâèéëêìíïîòóöôùúüû0-9]+/i).filter(w => w.length >= 4)
+        if (words.length === 0) continue
+        const anyMatch = words.some(w => haystack.includes(w))
+        if (!anyMatch) {
+          const roleLabel = ROLE_META[role as Role]?.label ?? role
+          issues.push({
+            severity: "warning",
+            message: `Playbook-gap voor rol "${roleLabel}" ("${gap}") komt nergens terug in injects, lessen of situatie-updates. Ofwel de scenariocontent oefent deze gap niet, ofwel de gap moet anders geformuleerd.`,
+          })
+        }
+      }
+    }
+  }
+
   return issues
+}
+
+function collectExerciseCorpus(graph: ScenarioGraph): string {
+  const parts: string[] = []
+  for (const n of graph.nodes) {
+    if (n.type === "inject") {
+      const d = n.data as InjectNodeData
+      if (d.title) parts.push(d.title)
+      if (d.content) parts.push(d.content)
+    } else if (n.type === "round") {
+      const d = n.data as RoundNodeData
+      if (d.situation_update) parts.push(d.situation_update)
+      if (d.facilitatorNotes) {
+        parts.push(d.facilitatorNotes.discussionGoal ?? "")
+        parts.push(...(d.facilitatorNotes.keyQuestions ?? []))
+        parts.push(...(d.facilitatorNotes.hints ?? []))
+        parts.push(...(d.facilitatorNotes.expectedDecisions ?? []))
+        parts.push(...(d.facilitatorNotes.redFlags ?? []))
+      }
+    } else if (n.type === "decision") {
+      const d = n.data as DecisionNodeData
+      for (const o of d.options) {
+        if (o.label) parts.push(o.label)
+        if (o.lessonLearned) parts.push(o.lessonLearned)
+        if (o.facilitatorCommentary) parts.push(o.facilitatorCommentary)
+      }
+    }
+  }
+  return parts.join(" \n ")
 }
 
 function labelFor(type: string): string {

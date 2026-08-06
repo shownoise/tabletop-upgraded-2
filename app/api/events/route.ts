@@ -30,7 +30,11 @@ export async function GET(req: Request): Promise<Response> {
         safeEnqueue(`data: ${JSON.stringify(msg.data)}\n\n`)
       }
 
-      const unsubscribe = isAdmin ? subscribe(send) : subscribeParticipant(send)
+      // Participant-scoped SSE: pass the participantId query so the projection
+      // narrows participantViewState to just this participant's own entry.
+      const url = new URL(req.url)
+      const participantId = url.searchParams.get("participantId") ?? undefined
+      const unsubscribe = isAdmin ? subscribe(send) : subscribeParticipant(send, participantId)
 
       const heartbeat = setInterval(() => {
         safeEnqueue(`: hb ${Date.now()}\n\n`)

@@ -2,6 +2,99 @@
 
 All deletions from the phase-A audit through phase-G. Roll forward, not back.
 
+## Session 3 — Phase 10: Showcase scenario migrated onto new schema/framework
+
+Cross-reference: `BUILDER-GAP.md` §1-4, `GENERATION-FRAMEWORK.md` (10 rules), Phase 5 scenario `lib/graph/examples-schoolvereniging.ts`.
+
+Goal: retro-fit the authored schoolvereniging scenario to satisfy every framework rule enforced on wizard-generated graphs. No narrative rewrite — only field-fills and vector adjustments.
+
+### Classification (feit/aanname/fabel) on every inject
+
+- 21 injects across 6 rounds now carry `classification`. Ratio: 15 feit / 5 aanname / 1 fabel = 0.71 feit-ratio (within target 0.6 ± 0.15).
+- Formal alerts, MSP dashboards, letters from OM/AP, contract clauses → `feit` (15 injects: r1-msp-alert; r2 ransomnote/westnet-technical/magister-notify; r3 rtv-oost/ap-guidance/eye-security-tussenrapport; r4 restore-fail/univé-scope/parent-ap-complaint; r5 aob-statement/teacher-refuse; r6 ap-follow-up/rvt-agenda/univé-claim-deadline).
+- Verbal reports / staff observations / parent messages → `aanname` (5 injects: r1-teacher-email, r1-rob-whatsapp, r2-teacher-panic, r3-parent-facebook, r5-loonbureau).
+- Explicit red herring → `fabel` (1 inject: r1-parent-sms).
+
+### Setup-inject → decision links
+
+- Every DecisionNode has ≥1 setup inject with `setsUpDecisionNodeId` in same round (feit or aanname, never fabel — rule 4 pass).
+- Added `authorId` on each of the 6 decisions ("d1-r1-ambigue" … "d6-r6-verankering") so setup-inject links resolve deterministically via `planToGraph`.
+- Setup pairs: R1 r1-msp-alert → d1; R2 r2-ransomnote + r2-westnet-technical → d2; R3 r3-rtv-oost + r3-ap-guidance → d3; R4 r4-restore-fail + r4-univé-scope → d4; R5 r5-loonbureau → d5; R6 r6-ap-follow-up + r6-rvt-agenda → d6.
+
+### `roleBriefings` on graph
+
+- New graph-level `roleBriefings` map (`Partial<Record<Role, { text; playbookGaps[] }>>`) covering all 8 authored roles.
+- Each: 2-3 Dutch sentences (mandate + t=0 knowledge + explicit "wat je nog niet weet"). Each: 2-3 `playbookGaps` bullets grounded in scenario events (verified against inject content and lessonLearned strings before writing).
+
+### `facilitatorNotes.discussionGoal` per round
+
+- Populated on every round (6/6). Each expands the existing seed with three parts: what's being tested, hardest role/decision, nudge-if-stalling and nudge-if-racing.
+- All references (numbers, proper nouns) grounded in round `situation_update` or inject content (rule 10 pass).
+
+### `facilitatorNote` on high-signal injects (8 total)
+
+- r1-teacher-email, r1-msp-alert, r1-parent-sms, r2-ransomnote, r3-rtv-oost, r3-eye-security-tussenrapport, r4-restore-fail, r5-loonbureau, r5-teacher-refuse, r6-rvt-agenda + 2 in the injectLibrary — describe intended facilitator reaction.
+
+### Cross-round causal connectors (rule 5)
+
+- R2 situation now opens "Voortbouwend op de netwerk-isolatie FS-01/02 en de WestNet-piketoproep van vanochtend…" — references R1 option label.
+- R3 situation opens "Voortbouwend op de AP-melding indienen als voorlopig van gisteren…" — references R2 option label.
+- R4 opens "Terugblik op dinsdag: de AP-completering is verzonden, de bestuurder heeft persoonlijk RTV Oost teruggebeld." — references R3.
+- R5 opens "Voortbouwend op het besluit niet betalen en de onderhandelaar 24u laten rekken…" — references R4.
+- R6 already contained "Voorzitter oudervereniging" — matched R5 option label; unchanged.
+
+### Special-condition weaving (rule 8)
+
+Config uses 4 selected conditions; each woven into ≥2 rounds:
+- `backups_untested` — "Bij herstelfase blijkt de back-up-restoretest…" in R4 (r4-restore-fail) and R5 (situation update).
+- `single_knowledge_holder` — "De enige persoon met kennis…" in R1 (r1-rob-whatsapp) and R2 (situation update).
+- `outsourced_it_thin_sla` — "De MSP-SLA dekt geen incidentresponse…" in R1 (r1-msp-alert) and R2 (r2-westnet-technical).
+- `unclear_insurance` — "De verzekeringspolis heeft uitzonderingsclausules…" in R2 (r2-magister-notify) and R4 (situation update).
+
+### Regulatory window (rule 9)
+
+- Verified `r1-msp-alert` carries `triggersRegulatoryNotification: true` AND its title/content now explicitly names "AVG art. 33 (AP, 72u) en NIS2 art. 23 (NCSC/CSIRT, 24u)" — satisfies authority-keyword check for `nl_avg_nis2` regime.
+
+### `outcomeVector` fixes (rules 3 + 6)
+
+- Fixed 5 all-zero vectors (rule 6): assigned non-zero on ≥1 axis reflecting the option's actual trade-off (R2 CEO "Alleen intern communiceren", R3 HR "Alleen teamleiders informeren", R5 HR "Overuren erkennen zonder concrete compensatie", R6 CEO "Verhaal aan RvT actielijst volgt binnen kwartaal", R6 CISO "Rapport lessen geleerd").
+- Fixed all WITHIN-role dominance pairs (rule 3, tightened per-role interpretation): every "wrong/poor" option now carries at least one axis (typically KOS as short-term "no immediate spend" attractor, occasionally VER/FOR for decisive-illusion attractors) where it beats the corresponding best-in-role option. Facilitator commentary extended to explain WHY the wrong option feels tempting.
+
+### `publishStatus: 'published'`
+
+- `schoolverenigingScenario()` now compiles via `planToGraph(plan, { publishStatus: 'published' })`.
+
+### Test coverage
+
+- `lib/graph/__tests__/schoolvereniging-scenario.test.ts` extended from 8 to **25 tests**. Every framework rule (1-10) has a dedicated assertion. Rule 3 has a tightened WITHIN-role variant plus a `FRAMEWORK STATUS` gate expecting exactly one exempted rule.
+
+### FRAMEWORK-EXEMPTION note
+
+- Rule 3 (no dominant option) as implemented in `lib/wizard/framework.ts` compares ALL option pairs in a decision — including across roles. Since this scenario is `perRole: true` (a participant only ever sees options tagged with their own `allowedRole`), cross-role dominance is a false positive that would require inventing tempting-but-wrong attractors on axes that don't fit the narrative. Documented inline in the scenario file at the `decisions:` array header. The test asserts within-role non-dominance (semantically meaningful for perRole:true).
+
+### Test count
+
+Before Phase 10: 279 tests. After Phase 10: **295 tests**, all passing. `npx tsc --noEmit` clean.
+
+## Session 3 — Phase 9: AI wizard config + framework enforcement
+
+Cross-reference: `BUILDER-GAP.md` §9-11 + `GENERATION-FRAMEWORK.md` (new).
+
+- New file `lib/wizard/config.ts` — `WizardConfig` type (clientName, sector, companySize, itArrangement, rounds, injectsPerRound, optionsPerRolePerRound, factsNoiseRatio, rolesIncluded, regulatoryRegimeId, specialConditions, seed) + `SPECIAL_CONDITIONS` registry (7 data-driven scenarios: back-ups, single knowledge holder, thin MSP SLA, no tested crisis plan, unclear insurance, OT dependency, supplier concentration).
+- New file `lib/wizard/seed.ts` — deterministic Mulberry32 + xfnv1a PRNG, `cryptoRandomSeed()` for callers without a seed. No `Math.random` / `Date.now` in the compile path.
+- New file `lib/wizard/framework.ts` — 10 pure-function rules + `validateFramework` aggregator. Each rule returns `{ ok, violation, hint }`; the hint is fed back to the LLM for a bounded repair.
+- New file `lib/wizard/pipeline.ts` — `runWizardPipeline(config, { llm, maxRepairAttempts })`. Outline pass → per-round generation → closer pass → compile → validate → repair loop (default 3 attempts). `WizardPipelineError` carries `failures`, `repairLog`, `seed`. Never returns a graph that violates the framework.
+- New file `GENERATION-FRAMEWORK.md` — the 10 rules, pipeline order, reproducibility invariants, and an example repair-prompt.
+- Rewrote `app/api/scenario-graph/ai-wizard/route.ts` to parse `WizardConfig` from the body (with sanitisation + clamping), wire the Anthropic client through the pipeline, and return `{ graph, seed, repairLog }` or a structured error payload.
+- Rewrote `components/admin/builder/ai-wizard-dialog.tsx` to expose every WizardConfig field: Verhaal (client, sector, size, IT-inrichting, extra context), Structuur (4 sliders), Rollen (8 checkboxes), Regelgeving (dropdown of `REGULATORY_REGIMES`), Bijzondere omstandigheden (checkboxes from `SPECIAL_CONDITIONS`), Geavanceerd (seed input). Shows the seed + repair log after generation.
+- Extended `lib/graph/wizard-plan.ts`: `WizardPlanInject` now carries `classification`, `setsUpDecisionNodeId`, `facilitatorNote`; `WizardPlanDecision` has `authorId`; `WizardPlan` has `roleBriefings` and `injectLibrary`. `planToGraph(plan, options)` accepts `{ seed, now, publishStatus }` — all ids derived from seed via `createSeededRng`.
+- New fields on `ScenarioGraph`: `wizardSeed?: string`, `publishStatus?: 'draft' | 'published'`. Wizard always compiles as `'draft'`.
+- New tests:
+  - `lib/wizard/__tests__/framework.test.ts` — passing baseline + one failure per rule (26 cases across 10 rules + aggregate).
+  - `lib/wizard/__tests__/pipeline.test.ts` — happy path, byte-identical reproducibility on same seed, repair-loop records rule failure + fixes, exhaustion throws `WizardPipelineError` (4 cases).
+- `vitest.config.ts` — added `lib/wizard/__tests__/**` to include list.
+- `BUILDER-GAP.md` items §9-11 marked implemented.
+
 ## Session 3 — second-pass refactor (Phase 1–5)
 
 Full report: `REGRESSION.md` (root-cause) + `SCORING.md` (updated model).

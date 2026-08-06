@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ROLE_META } from "@/lib/types"
+import { ROLE_META, ROLE_ORDER } from "@/lib/types"
 import type {
   ExerciseConfig, IrRetainerProfile, SimulationMode, AiIntensity, SpecialsMode,
   ITMaturity, SecurityCapability, TeamStructure,
@@ -78,8 +78,8 @@ const DURATION_MINUTES: Record<string, number> = {
   "Half day":   240,
 }
 
-const ALL_ROLES = Object.keys(ROLE_META) as Role[]
-const CRISIS_ROLES = ALL_ROLES.filter(r => ROLE_META[r].team === "crisis_management")
+const ALL_ROLES: readonly Role[] = ROLE_ORDER
+const CRISIS_ROLES: readonly Role[] = ALL_ROLES.filter(r => ROLE_META[r].team === "crisis_management")
 
 const defaults: ExerciseConfig = {
   sector: "Financial Services",
@@ -96,7 +96,7 @@ const defaults: ExerciseConfig = {
   timerPerRound: 15,
   difficulty: "intermediate",
   existingPlans: [],
-  selectedRoles: CRISIS_ROLES,
+  selectedRoles: [...CRISIS_ROLES],
   goalId: "decision_making",
 }
 
@@ -232,9 +232,9 @@ export function SetupForm() {
 
   function handleTeamStructureChange(ts: TeamStructure) {
     update("teamStructure", ts)
-    if (ts === "crisis_only") update("selectedRoles", CRISIS_ROLES)
+    if (ts === "crisis_only") update("selectedRoles", [...CRISIS_ROLES])
     else if (ts === "it_only") update("selectedRoles", ALL_ROLES.filter(r => ROLE_META[r].team === "technical_it"))
-    else update("selectedRoles", ALL_ROLES)
+    else update("selectedRoles", [...ALL_ROLES])
   }
 
   function toggleRole(role: Role) {

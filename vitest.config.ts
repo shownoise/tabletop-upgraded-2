@@ -12,6 +12,7 @@ export default defineConfig({
       'lib/scoring/__tests__/**/*.test.ts',
       'lib/__tests__/**/*.test.ts',
       'lib/graph/__tests__/**/*.test.ts',
+      'lib/wizard/__tests__/**/*.test.ts',
       'app/api/__tests__/**/*.test.ts',
     ],
     environment: 'node',

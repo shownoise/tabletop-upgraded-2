@@ -27,7 +27,13 @@ export function useSessionStream(): SessionStream {
   const lastSeenRef = useRef<number>(Date.now())
 
   useEffect(() => {
-    const es = new EventSource("/api/events")
+    // Phase 6 — attach participantId (if any) so the SSE + poll projections
+    // can narrow participantViewState to this participant's own subtree.
+    const participantId = (typeof window !== "undefined")
+      ? window.localStorage.getItem("ctt:participantId") ?? undefined
+      : undefined
+    const qs = participantId ? `?participantId=${encodeURIComponent(participantId)}` : ""
+    const es = new EventSource(`/api/events${qs}`)
 
     const handleState = (ev: MessageEvent) => {
       try {
@@ -64,7 +70,7 @@ export function useSessionStream(): SessionStream {
     let pollFailureCount = 0
     const poll = setInterval(async () => {
       try {
-        const res = await fetch("/api/session/state", { cache: "no-store" })
+        const res = await fetch(`/api/session/state${qs}`, { cache: "no-store" })
         if (res.status === 401) {
           setExpired(true)
           setConnected(false)

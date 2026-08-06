@@ -14,12 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import type { ScenarioGraph } from "@/lib/graph/types"
+import type { PremadeInject, RoleBriefing, ScenarioGraph } from "@/lib/graph/types"
 import type { GraphIssue } from "@/lib/graph/validate"
-import type { ScenarioType } from "@/lib/types"
+import type { Role, ScenarioType } from "@/lib/types"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { PreviewDialog } from "./preview-dialog"
 import { DryRunDialog } from "./dry-run-dialog"
+import { RoleBriefingsPanel } from "./role-briefings-panel"
+import { InjectLibraryPanel } from "./inject-library-panel"
 
 interface Props {
   graph: ScenarioGraph
@@ -31,6 +33,8 @@ interface Props {
   onNew: () => void
   onValidate: () => GraphIssue[]
   onPublish: () => Promise<void>
+  onRoleBriefingsChange?: (next: Partial<Record<Role, RoleBriefing>>) => void
+  onInjectLibraryChange?: (next: PremadeInject[]) => void
   saving?: boolean
 }
 
@@ -51,6 +55,8 @@ export function Toolbar({
   onNew,
   onValidate,
   onPublish,
+  onRoleBriefingsChange,
+  onInjectLibraryChange,
   saving,
 }: Props) {
   const [loadOpen, setLoadOpen] = useState(false)
@@ -58,6 +64,8 @@ export function Toolbar({
   const [aiWizardOpen, setAiWizardOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [dryRunOpen, setDryRunOpen] = useState(false)
+  const [rolesOpen, setRolesOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const [loadable, setLoadable] = useState<ScenarioGraph[] | null>(null)
   const [issues, setIssues] = useState<GraphIssue[] | null>(null)
   const [publishing, setPublishing] = useState(false)
@@ -120,6 +128,8 @@ export function Toolbar({
         <Button size="sm" variant="ghost" onClick={handleNew} title="Nieuw leeg canvas">Nieuw</Button>
         <Button size="sm" variant="ghost" onClick={() => setTemplatesOpen(true)} title="Kant-en-klare voorbeeldscenario's">Voorbeelden</Button>
         <Button size="sm" variant="ghost" onClick={openLoad} title="Laad opgeslagen scenario">Laden</Button>
+        <Button size="sm" variant="ghost" onClick={() => setRolesOpen(true)} title="Bewerk per-rol opening briefings en playbook-gaps">Rollen</Button>
+        <Button size="sm" variant="ghost" onClick={() => setLibraryOpen(true)} title="Beheer ad-hoc ruis-injects die de facilitator tijdens de discussie kan afvuren">Ruis-bibliotheek</Button>
       </div>
 
       {/* Actions group — validate / preview / persist */}
@@ -169,6 +179,22 @@ export function Toolbar({
       <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} graph={graph} />
       <DryRunDialog open={dryRunOpen} onOpenChange={setDryRunOpen} graph={graph} />
       <AiWizardDialog open={aiWizardOpen} onOpenChange={setAiWizardOpen} onGenerated={onLoad} />
+      {onRoleBriefingsChange && (
+        <RoleBriefingsPanel
+          open={rolesOpen}
+          onOpenChange={setRolesOpen}
+          briefings={graph.roleBriefings ?? {}}
+          onChange={onRoleBriefingsChange}
+        />
+      )}
+      {onInjectLibraryChange && (
+        <InjectLibraryPanel
+          open={libraryOpen}
+          onOpenChange={setLibraryOpen}
+          library={graph.injectLibrary ?? []}
+          onChange={onInjectLibraryChange}
+        />
+      )}
 
       <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
         <DialogContent className="max-w-lg">

@@ -5,7 +5,7 @@ import { Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { ROLE_META } from "@/lib/types"
+import { ROLE_META, ROLE_ORDER } from "@/lib/types"
 import type { Role } from "@/lib/types"
 import type { ScenarioGraph } from "@/lib/graph/types"
 import { previewRoundForRole, listRoundNodes } from "@/lib/graph/preview"
@@ -16,7 +16,7 @@ interface Props {
   graph: ScenarioGraph
 }
 
-const ALL_ROLES = Object.keys(ROLE_META) as Role[]
+const ALL_ROLES: readonly Role[] = ROLE_ORDER
 
 export function PreviewDialog({ open, onOpenChange, graph }: Props) {
   const rounds = useMemo(() => listRoundNodes(graph), [graph])

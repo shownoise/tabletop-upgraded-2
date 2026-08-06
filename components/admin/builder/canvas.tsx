@@ -194,10 +194,12 @@ function fromFlowEdges(edges: Edge[]): GraphEdge[] {
 function InnerCanvas() {
   const router = useRouter()
   const initial = useMemo(() => initialGraph(), [])
-  const [graphMeta, setGraphMeta] = useState<Pick<ScenarioGraph, "id" | "name" | "version" | "scenarioType" | "createdAt" | "irRetainerName" | "irPlaybook" | "irRetainerProfile" | "features">>(
+  const [graphMeta, setGraphMeta] = useState<Pick<ScenarioGraph, "id" | "name" | "version" | "scenarioType" | "createdAt" | "irRetainerName" | "irPlaybook" | "irRetainerProfile" | "features" | "roleBriefings" | "injectLibrary">>(
     {
       id: initial.id, name: initial.name, version: initial.version, scenarioType: initial.scenarioType, createdAt: initial.createdAt,
       irRetainerName: initial.irRetainerName, irRetainerProfile: initial.irRetainerProfile, features: initial.features,
+      roleBriefings: initial.roleBriefings,
+      injectLibrary: initial.injectLibrary,
     },
   )
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(toFlowNodes(initial))
@@ -425,6 +427,8 @@ function InnerCanvas() {
       irPlaybook: g.irPlaybook,
       irRetainerProfile: EYE_SECURITY_RETAINER,
       features: g.features ?? DEFAULT_FEATURES,
+      roleBriefings: g.roleBriefings,
+      injectLibrary: g.injectLibrary,
     })
     setNodes(toFlowNodes(g))
     setEdges(toFlowEdges(g))
@@ -562,6 +566,8 @@ function InnerCanvas() {
         onNew={handleNew}
         onValidate={handleValidate}
         onPublish={handlePublish}
+        onRoleBriefingsChange={rb => setGraphMeta(g => ({ ...g, roleBriefings: rb }))}
+        onInjectLibraryChange={lib => setGraphMeta(g => ({ ...g, injectLibrary: lib }))}
         saving={saving}
       />
       {status && (
@@ -642,11 +648,13 @@ function InnerCanvas() {
             node={selectedNode}
             graphId={graphMeta.id}
             features={graphMeta.features}
+            graph={buildGraph()}
             onChange={handleNodeDataChange}
             onAddInject={handleAddInject}
             onDelete={handleDelete}
             onDuplicate={handleDuplicate}
             onSaveGraph={persistGraph}
+            onSelectNode={setSelectedId}
           />
         </aside>
       </div>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Mail, MessageSquare, MessageCircle, AlertTriangle, Phone,
-  Newspaper, Shield, Smartphone, FileText, ShieldAlert,
+  Newspaper, Shield, Smartphone, FileText, ShieldAlert, EyeOff, Check,
 } from "lucide-react"
 import type { FactCheckTag, PushedInject, InjectChannel, InjectType, SessionState, Urgency } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
@@ -124,6 +124,12 @@ function Shell({
         {showTeamBadge && (
           <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-tt-accent/30 px-1 py-px text-tt-accent">
             {inject.targetTeam === "technical_it" ? "IT" : "CRISIS"}
+          </span>
+        )}
+        {inject.classification && (
+          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-tt-border px-1 py-px text-tt-dim"
+                title="Type informatie zoals aangemerkt door de auteur">
+            {inject.classification}
           </span>
         )}
         <span className="font-mono text-[10px] text-tt-dim truncate flex-1 min-w-0">
@@ -537,7 +543,15 @@ export function InjectFeed({
     [participants],
   )
 
-  const filtered = pushed.filter((p) => {
+  // Phase 6 — read this participant's view state from the session projection.
+  const myView = participantId
+    ? session?.participantViewState?.[participantId]
+    : undefined
+  const hiddenIds = new Set(myView?.hidden ?? [])
+  const handledIds = new Set(myView?.handled ?? [])
+  const classFilter = myView?.filters?.classification ?? []
+
+  const visibleByRole = pushed.filter((p) => {
     if (p.pushedAt > now) return false
     if (myRoleLabel && isSelfReferential(p.inject.senderName, myRoleLabel)) return false
     if (!participantRole) return true
@@ -551,10 +565,17 @@ export function InjectFeed({
       : resolveInjectRecipients({ inject: p.inject, presentRoles, teamRoles })
     return recipients.includes(participantRole)
   })
-  void participantId
 
+  // Apply classification filter (if any active). Injects without classification
+  // stay visible only when the filter is empty.
+  const afterClassFilter = classFilter.length === 0
+    ? visibleByRole
+    : visibleByRole.filter(p => p.inject.classification && classFilter.includes(p.inject.classification))
 
-  const sorted = [...filtered].sort((a, b) => b.pushedAt - a.pushedAt)
+  // Split: hidden vs shown. Sort newest-first.
+  const shown = afterClassFilter.filter(p => !hiddenIds.has(p.inject.id))
+  const sorted = [...shown].sort((a, b) => b.pushedAt - a.pushedAt)
+  const hiddenCount = afterClassFilter.filter(p => hiddenIds.has(p.inject.id)).length
   const topRef = useRef<HTMLDivElement>(null)
 
   const prevCount = useRef(pushed.length)
@@ -570,9 +591,9 @@ export function InjectFeed({
     prevCount.current = pushed.length
   }, [pushed.length])
 
-  if (filtered.length === 0) {
+  if (shown.length === 0) {
     // Distinguish: injects exist but none match this role vs truly nothing pushed yet
-    const roleFiltered = pushed.length > 0 && filtered.length === 0
+    const roleFiltered = pushed.length > 0 && shown.length === 0
     return (
       <div className="flex flex-col items-center gap-4 border border-tt-border bg-tt-surface px-6 py-16 text-center">
         <div className="font-mono text-[10px] uppercase tracking-widest text-tt-dim">
@@ -593,6 +614,42 @@ export function InjectFeed({
     )
   }
 
+  const CLASSIFICATIONS: Array<'feit' | 'aanname' | 'fabel'> = ['feit', 'aanname', 'fabel']
+
+  async function toggleClassFilter(v: 'feit' | 'aanname' | 'fabel') {
+    if (!participantId) return
+    const next = classFilter.includes(v)
+      ? classFilter.filter(x => x !== v)
+      : [...classFilter, v]
+    try {
+      await api.updateMyView({
+        participantId,
+        patch: { filters: { classification: next } },
+      })
+    } catch { /* ignore */ }
+  }
+
+  async function markHandled(injectId: string) {
+    if (!participantId) return
+    try {
+      await api.updateMyView({ participantId, patch: { addHandled: injectId } })
+    } catch { /* ignore */ }
+  }
+
+  async function hideInject(injectId: string) {
+    if (!participantId) return
+    try {
+      await api.updateMyView({ participantId, patch: { addHidden: injectId } })
+    } catch { /* ignore */ }
+  }
+
+  async function showAllHidden() {
+    if (!participantId) return
+    try {
+      await api.updateMyView({ participantId, patch: { clearHidden: true } })
+    } catch { /* ignore */ }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between px-1" ref={topRef}>
@@ -603,6 +660,38 @@ export function InjectFeed({
           {sorted.length}
         </span>
       </div>
+      {participantId && (
+        <div className="flex flex-wrap items-center gap-2 px-1 text-[10px]">
+          <span className="font-mono uppercase tracking-widest text-tt-dim">Alleen tonen:</span>
+          {CLASSIFICATIONS.map(v => {
+            const on = classFilter.includes(v)
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => toggleClassFilter(v)}
+                className={`rounded-full border px-2 py-0.5 font-mono uppercase tracking-wider transition-colors ${
+                  on ? "border-tt-accent bg-tt-accent/10 text-tt-accent" : "border-tt-border text-tt-dim hover:border-tt-accent/40"
+                }`}
+              >
+                {v}
+              </button>
+            )
+          })}
+          {hiddenCount > 0 && (
+            <span className="ml-auto flex items-center gap-2 font-mono text-tt-dim">
+              {hiddenCount} verborgen
+              <button
+                type="button"
+                onClick={showAllHidden}
+                className="rounded border border-tt-border px-2 py-0.5 hover:border-tt-accent/40"
+              >
+                Toon alles
+              </button>
+            </span>
+          )}
+        </div>
+      )}
       <ol
         className="flex flex-col gap-4"
         role="log"
@@ -620,6 +709,9 @@ export function InjectFeed({
           const isFactCheckTarget = p.inject.reliability !== undefined
           const reviewPhase = session?.roundPhase === "review"
           const { totalTags, hasSplit, myTag } = computeTagStats(p.inject.id, session?.factChecks, participantId)
+          const isHandled = handledIds.has(p.inject.id)
+          // Unread = not marked handled and not hidden (hidden ones are already gone).
+          const isUnread = !isHandled
           return (
             <li
               key={`${p.inject.id}-${p.pushedAt}`}
@@ -639,9 +731,36 @@ export function InjectFeed({
                   {p.inject.urgency}
                   {isSurprise ? " · SURPRISE" : ""}
                 </span>
+                {isUnread && participantId && (
+                  <span className="size-1.5 rounded-full bg-tt-accent" aria-label="ongelezen" title="ongelezen" />
+                )}
                 <span className="ml-auto font-mono text-[9px] text-tt-dim">
                   {formatTime(p.pushedAt)}
                 </span>
+                {participantId && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => hideInject(p.inject.id)}
+                      title="Verbergen"
+                      className="rounded border border-tt-border p-0.5 text-tt-dim hover:border-tt-accent/40 hover:text-foreground"
+                    >
+                      <EyeOff className="size-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => markHandled(p.inject.id)}
+                      title="Afgehandeld"
+                      className={`rounded border p-0.5 ${
+                        isHandled
+                          ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-500"
+                          : "border-tt-border text-tt-dim hover:border-tt-accent/40 hover:text-foreground"
+                      }`}
+                    >
+                      <Check className="size-3" />
+                    </button>
+                  </div>
+                )}
               </div>
               <InjectCard
                 inject={p.inject}

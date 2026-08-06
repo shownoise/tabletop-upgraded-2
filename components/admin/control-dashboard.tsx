@@ -23,6 +23,8 @@ import { LiveOverviewPanel } from "./live-overview-panel"
 import { MeldingenPanel } from "./meldingen-panel"
 import { SupervisionReportView } from "./supervision-report"
 import { RevealPanel } from "./reveal-panel"
+import { RoundReviewNarrativePanel } from "./round-review-narrative-panel"
+import { PremadeInjectPanel } from "./premade-inject-panel"
 import { GroupProgress } from "./group-progress"
 import { EventModeHelp } from "./event-mode-help"
 import { buildTeamRoles } from "@/lib/team-roster"
@@ -32,6 +34,7 @@ import { LangToggle } from "@/components/lang-toggle"
 import { ThemeToggle } from "@/components/theme-toggle"
 import type { RoundPhase } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
+import { describeNextAction } from "@/lib/session-next-action"
 
 const PHASE_ORDER: RoundPhase[] = ["inject", "discussion", "decision", "review"]
 
@@ -111,9 +114,13 @@ export function ControlDashboard() {
   const escalationIndex = Math.min(Math.max(currentIndex, 0), 3)
 
   async function advancePhase() {
-    const idx = PHASE_ORDER.indexOf(currentPhase)
-    if (idx < PHASE_ORDER.length - 1) {
-      await run("phase", () => api.setPhase(PHASE_ORDER[idx + 1]))
+    if (!session) return
+    const na = describeNextAction(session)
+    if (na.action === "advance_phase") {
+      const idx = PHASE_ORDER.indexOf(currentPhase)
+      if (idx < PHASE_ORDER.length - 1) await run("phase", () => api.setPhase(PHASE_ORDER[idx + 1]))
+    } else if (na.action === "next_round" || na.action === "end_session") {
+      await run("next", () => api.nextRound())
     }
   }
 
@@ -335,13 +342,27 @@ export function ControlDashboard() {
                       Beslissing afsluiten
                     </Button>
                   )}
-                  <Button size="sm" onClick={() => run("next", () => api.nextRound())} disabled={working !== null} className="gap-1.5 font-mono uppercase tracking-wider">
-                    {currentIndex >= totalRounds - 1 ? (
-                      <><Square className="size-3.5" />{tr(lang, "endSession")}</>
-                    ) : (
-                      <>{tr(lang, "nextRound")}<ChevronRight className="size-3.5" /></>
-                    )}
-                  </Button>
+                  {(() => {
+                    const nextAction = describeNextAction(session)
+                    const isEnd = nextAction.action === "end_session"
+                    const isBlocked = nextAction.action === "blocked"
+                    return (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (nextAction.action === "advance_phase") return run("phase", () => api.setPhase(PHASE_ORDER[Math.min(PHASE_ORDER.indexOf(currentPhase) + 1, PHASE_ORDER.length - 1)]))
+                          if (nextAction.action === "next_round" || nextAction.action === "end_session") return run("next", () => api.nextRound())
+                        }}
+                        disabled={working !== null || isBlocked}
+                        className="gap-1.5 font-mono uppercase tracking-wider"
+                        title={nextAction.blockedReason ?? nextAction.labelNL}
+                      >
+                        {isEnd ? <Square className="size-3.5" /> : null}
+                        {nextAction.labelNL}
+                        {!isEnd && !isBlocked ? <ChevronRight className="size-3.5" /> : null}
+                      </Button>
+                    )
+                  })()}
                 </>
               )}
               {isEnded && (
@@ -383,7 +404,7 @@ export function ControlDashboard() {
                   size="sm"
                   variant="outline"
                   onClick={advancePhase}
-                  disabled={working !== null || currentPhase === "review"}
+                  disabled={working !== null || (session ? describeNextAction(session).action === "blocked" : false)}
                   className="gap-1.5 font-mono uppercase tracking-wider text-[10px]"
                 >
                   Volgende fase <PhaseArrow className="size-3" />
@@ -511,6 +532,9 @@ export function ControlDashboard() {
         {/* DISCUSSION-phase static hint — BOB as suggested working method, no engine state. */}
         {isActive && session.roundPhase === "discussion" && <DiscussionHelper />}
 
+        {/* Phase 5 — noise-inject library. Only visible during DISCUSSION. Never scored. */}
+        {isActive && session.roundPhase === "discussion" && <PremadeInjectPanel session={session} />}
+
         {/* Toezichthouder-rapport — beschikbaar zodra sessie loopt */}
         <ToezichthouderReportPanel />
 
@@ -591,6 +615,11 @@ export function ControlDashboard() {
             {/* Reveal (Deel B §5.2) — verschijnt tijdens lock/review */}
             {session.graph && isActive && (session.roundPhase === "review") && (
               <RevealPanel visible={true} currentRound={currentIndex + 1} />
+            )}
+
+            {/* Phase 7 — facilitator-only round-review narrative. Renders during REVIEW. */}
+            {isActive && session.roundPhase === "review" && (
+              <RoundReviewNarrativePanel session={session} roundIndex={currentIndex} />
             )}
 
             {/* Locked-at-start inject → recipient routing */}

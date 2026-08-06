@@ -2,6 +2,8 @@ import type {
   DecisionNodeData,
   InjectNodeData,
   OutcomeNodeData,
+  PremadeInject,
+  RoleBriefing,
   RoundNodeData,
   ScenarioGraph,
   OutcomeVector,
@@ -19,6 +21,7 @@ import type {
   ScenarioType,
   Urgency,
 } from "@/lib/types"
+import { createSeededRng, type SeededRng } from "@/lib/wizard/seed"
 
 // The AI returns a "plan" — a compact, LLM-friendly shape. planToGraph converts
 // it to a full ScenarioGraph with correct edges, coordinates, and defaults.
@@ -57,6 +60,12 @@ export interface WizardPlanInject {
   requiresCapability?: string
   // Phase 2 — opens the initial regulatory obligation on the session when fired.
   triggersRegulatoryNotification?: boolean
+  // Phase 9 — new fields exposed to the wizard so generated plans can express
+  // classification (feit/aanname/fabel), setsUpDecisionNodeId (author link to
+  // a decision), and facilitator-only notes.
+  classification?: 'feit' | 'aanname' | 'fabel'
+  setsUpDecisionNodeId?: string   // author-id of a decision in same/prev round
+  facilitatorNote?: string
 }
 
 export interface WizardPlanMeldingType {
@@ -88,6 +97,10 @@ export interface WizardPlanRound {
   openingPrompts?: string[]
   facilitatorPerspective?: string
   reviewPrompts?: string[]
+  // Phase 9 — author-picked stable decision id used to link setup injects to a
+  // decision that will be emitted in the same or next round. Optional — if
+  // absent, planToGraph generates ids per the seed.
+  decisionAuthorId?: string
 }
 
 // Per-round decision — participants pick one option that carries an explicit
@@ -96,6 +109,9 @@ export interface WizardPlanDecision {
   afterRoundIndex: number
   prompt: string
   perRole?: boolean
+  // Phase 9 — stable author-id so injects can link to this decision via
+  // setsUpDecisionNodeId. Optional — falls back to auto-generated id.
+  authorId?: string
   options: Array<{
     label: string
     linksToRoleActionId?: string
@@ -131,10 +147,11 @@ export interface WizardPlan {
   decisions?: WizardPlanDecision[]
   outcomes: WizardPlanOutcome[]
   irPlaybook?: string
-}
-
-function nid(prefix: string) {
-  return `${prefix}_${Math.random().toString(36).slice(2, 8)}`
+  // Phase 9 — per-role briefing + playbook gaps rendered at session start.
+  roleBriefings?: Partial<Record<Role, RoleBriefing>>
+  // Phase 9 — ad-hoc noise inject library the facilitator can drop during
+  // DISCUSSION. Scenario-scoped, never scored.
+  injectLibrary?: PremadeInject[]
 }
 
 function resolveTarget(
@@ -150,8 +167,22 @@ function resolveTarget(
   return null
 }
 
-export function planToGraph(plan: WizardPlan): ScenarioGraph {
-  const now = Date.now()
+export interface PlanToGraphOptions {
+  // Phase 9 — reproducibility. If provided, all ids derive from this seed.
+  seed?: string
+  // Phase 9 — timestamp injected for tests / deterministic serialisation. If
+  // omitted, Date.now() is used (only for non-reproducible callers).
+  now?: number
+  // Phase 9 — publish status attached to the compiled graph. The wizard
+  // always compiles as 'draft'; the builder may promote to 'published'.
+  publishStatus?: 'draft' | 'published'
+}
+
+export function planToGraph(plan: WizardPlan, options: PlanToGraphOptions = {}): ScenarioGraph {
+  const seed = options.seed ?? "unspecified"
+  const rng: SeededRng = createSeededRng(seed)
+  const nid = (prefix: string) => rng.nid(prefix)
+  const now = options.now ?? Date.now()
   const startId = nid("start")
 
   const roundNodeIds = plan.rounds.map(() => nid("round"))
@@ -166,6 +197,14 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
       if (inj.id) injectIdMap.set(inj.id, nid("inj"))
     }
   })
+
+  // Reserve decision-node ids up-front so inject.setsUpDecisionNodeId (which
+  // uses author-supplied ids) can be resolved to real node ids before any
+  // inject nodes are emitted.
+  const decisionIdMap = new Map<string, string>()  // author-id → real-node-id
+  for (const d of (plan.decisions ?? [])) {
+    if (d.authorId) decisionIdMap.set(d.authorId, nid("dec"))
+  }
 
   const nodes: ScenarioGraph["nodes"] = []
   const edges: ScenarioGraph["edges"] = []
@@ -235,6 +274,12 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
 
     ;(round.injects ?? []).forEach((inj, ii) => {
       const injectId = (inj.id && injectIdMap.get(inj.id)) || nid("inj")
+      // Phase 9 — resolve author-supplied setsUpDecisionNodeId (an author-id)
+      // to the real decision node id. If unknown, we keep the raw string so
+      // the framework rule can still flag the dangling reference for repair.
+      const resolvedSetup = inj.setsUpDecisionNodeId
+        ? (decisionIdMap.get(inj.setsUpDecisionNodeId) ?? inj.setsUpDecisionNodeId)
+        : undefined
       const data: InjectNodeData = {
         kind: "inject",
         type: inj.type,
@@ -253,6 +298,9 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
         deliverySeconds: inj.deliverySeconds,
         requiresCapability: inj.requiresCapability,
         triggersRegulatoryNotification: inj.triggersRegulatoryNotification,
+        classification: inj.classification,
+        setsUpDecisionNodeId: resolvedSetup,
+        facilitatorNote: inj.facilitatorNote,
       }
       nodes.push({
         id: injectId,
@@ -296,7 +344,7 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
   for (let i = 0; i < plan.rounds.length; i++) {
     const decision = decisionsByAfter.get(i)
     if (decision) {
-      const did = nid("dec")
+      const did = (decision.authorId && decisionIdMap.get(decision.authorId)) || nid("dec")
       const options = decision.options.map(opt => ({
         id: nid("opt"),
         label: opt.label,
@@ -362,5 +410,9 @@ export function planToGraph(plan: WizardPlan): ScenarioGraph {
     irRetainerProfile: EYE_SECURITY_RETAINER,
     irPlaybook: plan.irPlaybook,
     features: DEFAULT_FEATURES,
+    roleBriefings: plan.roleBriefings,
+    injectLibrary: plan.injectLibrary,
+    wizardSeed: options.seed,
+    publishStatus: options.publishStatus ?? 'draft',
   }
 }

@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { ROLE_META } from "@/lib/types"
+import { ROLE_META, ROLE_ORDER } from "@/lib/types"
 import type { ChoiceQuality, Role, RoleAction } from "@/lib/types"
 import { SUPERVISION_AREAS, type SupervisionArea } from "@/lib/engine/supervision"
 
-const ALL_ROLES = Object.keys(ROLE_META) as Role[]
+const ALL_ROLES: readonly Role[] = ROLE_ORDER
 
 const QUALITY_RANKS: Array<{ key: ChoiceQuality; label: string; className: string }> = [
   { key: 'best',  label: 'Best',      className: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40' },

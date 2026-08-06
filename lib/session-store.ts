@@ -34,6 +34,7 @@ import { computeAuthoredWorkload, distributeRoles, effectiveRolesForParticipant 
 import { plotInjectRoutes } from "./inject-routing"
 import { buildTeamRoles } from "./team-roster"
 import { computeRoundPhaseDurations, PHASE_ORDER, nextPhase } from "./engine/round-phases"
+import { describeNextAction as _describeNextAction, missingDecisionRoles } from "./session-next-action"
 
 // Migration: legacy `system_admin` role was merged into `it_manager`. Applied on
 // any scenario data flowing through the store so old graphs / templates keep working.
@@ -173,11 +174,19 @@ function expandRolesForJoinedParticipants(action: RoleAction, session: SessionSt
   return anyCovered ? action : { ...action, allowedRoles: [] }
 }
 
-export function toParticipantState(session: SessionState): SessionState {
+export function toParticipantState(session: SessionState, forParticipantId?: string): SessionState {
+  // Phase 4 — facilitator-only fields that must NEVER reach participants.
+  // Applied uniformly to every inject regardless of review-phase.
+  const stripFacilitatorOnlyFromInject = (inject: Inject): Inject => {
+    if (inject.facilitatorNote === undefined) return inject
+    const { facilitatorNote: _fn, ...rest } = inject
+    return rest
+  }
   const stripInjectGroundTruth = (inject: Inject, isReviewRound: boolean): Inject => {
-    if (isReviewRound) return inject
+    const noFacilitator = stripFacilitatorOnlyFromInject(inject)
+    if (isReviewRound) return noFacilitator
     // Ground truth (reliability tag, span annotations) is revealed only during REVIEW.
-    const { reliability: _r, groundTruthAnnotations: _g, ...safe } = inject
+    const { reliability: _r, groundTruthAnnotations: _g, ...safe } = noFacilitator
     const leak = safe as { reliability?: unknown; groundTruthAnnotations?: unknown }
     if (leak.reliability !== undefined || leak.groundTruthAnnotations !== undefined) {
       const msg = `[toParticipantState] ground-truth leak on inject ${safe.id}`
@@ -254,11 +263,44 @@ export function toParticipantState(session: SessionState): SessionState {
     specialEvents: session.specialEvents ?? [],
     documents: session.documents ?? [],
     // Hide the raw graph from participants; the engine-computed activeDecision
-    // is the only projection they need.
-    graph: undefined,
+    // is the only projection they need. Exception: expose only the
+    // participant-safe subtree (roleBriefings) so the opening-briefing
+    // component can read per-role mandates + playbook gaps.
+    graph: session.graph
+      ? ({
+          id: session.graph.id,
+          name: session.graph.name,
+          version: session.graph.version,
+          scenarioType: session.graph.scenarioType,
+          nodes: [],
+          edges: [],
+          createdAt: session.graph.createdAt,
+          updatedAt: session.graph.updatedAt,
+          roleBriefings: session.graph.roleBriefings,
+        } as SessionState["graph"])
+      : undefined,
     graphState: undefined,
     activeDecision: projectActiveDecision(session),
+    // Phase 6 — participant sees only their own view state entry (if forParticipantId
+    // is provided). When we don't know the caller, hide the collection entirely
+    // rather than leak other participants' hidden/handled sets.
+    participantViewState: filterParticipantViewState(session, forParticipantId),
   }
+}
+
+// Phase 6 — narrow the per-participant view state to the caller's own subtree.
+// When forParticipantId is given, return only that one entry (or empty). When
+// omitted (fallback caller doesn't know which participant), we return
+// undefined so nobody's private state leaks between clients.
+function filterParticipantViewState(
+  session: SessionState,
+  forParticipantId?: string,
+): SessionState["participantViewState"] {
+  const all = session.participantViewState
+  if (!all) return undefined
+  if (!forParticipantId) return undefined
+  const mine = all[forParticipantId]
+  return mine ? { [forParticipantId]: mine } : undefined
 }
 
 // Peek-ahead: als de current node een decision is, exposeer die. Anders,
@@ -375,14 +417,14 @@ export function subscribe(listener: Listener): () => void {
   return () => { listeners.delete(listener) }
 }
 
-export function subscribeParticipant(listener: Listener): () => void {
+export function subscribeParticipant(listener: Listener, participantId?: string): () => void {
   // Guard: if a broadcast arrives before the initial dbGetSession() resolves,
   // skip the db-fetch result to avoid the client receiving two conflicting states.
   let initialSent = false
   const wrapped: Listener = (msg) => {
     initialSent = true
     if (msg.type === "state" && msg.data.session) {
-      listener({ type: "state", data: { session: toParticipantState(msg.data.session) } })
+      listener({ type: "state", data: { session: toParticipantState(msg.data.session, participantId) } })
     } else {
       listener(msg)
     }
@@ -390,7 +432,7 @@ export function subscribeParticipant(listener: Listener): () => void {
   listeners.add(wrapped)
   dbGetSession().then(s => {
     if (initialSent) return
-    const safe = s ? toParticipantState(s) : null
+    const safe = s ? toParticipantState(s, participantId) : null
     wrapped({ type: "state", data: { session: safe } })
   })
   return () => { listeners.delete(wrapped) }
@@ -1057,100 +1099,8 @@ export async function endSessionForced(input: { reason?: string } = {}): Promise
   return { ok: true }
 }
 
-// Introspection helper for the facilitator UI: what's the next action label
-// from the current phase? Guarantees the dashboard never shows an ambiguous
-// "Volgende" button — the label always names what will happen.
-export interface NextActionDescriptor {
-  action: 'advance_phase' | 'next_round' | 'end_session' | 'blocked'
-  labelNL: string
-  blockedReason?: string
-}
-
-export function describeNextAction(session: SessionState): NextActionDescriptor {
-  const currentPhase = session.roundPhase ?? 'inject'
-  const totalRounds = session.scenario.rounds.length
-  const isLastRound = session.currentRound >= totalRounds - 1
-
-  if (currentPhase === 'review') {
-    if (isLastRound) return { action: 'end_session', labelNL: 'Sessie afronden' }
-    return { action: 'next_round', labelNL: `Start ronde ${session.currentRound + 2}` }
-  }
-  if (currentPhase === 'decision') {
-    // Guard: cannot leave DECISION while a required role hasn't submitted.
-    const missing = missingDecisionRoles(session)
-    if (missing.length > 0) {
-      const roleLabels = missing.map(r => ROLE_META[r]?.label ?? r).join(', ')
-      return {
-        action: 'blocked',
-        labelNL: `Nog wachten op ${missing.length} beslissing${missing.length === 1 ? '' : 'en'}`,
-        blockedReason: `Nog geen inzending van: ${roleLabels}`,
-      }
-    }
-  }
-  const next = nextPhase(currentPhase)
-  if (next === 'next_round') {
-    // Shouldn't happen — review case handled above. Defensive.
-    return isLastRound
-      ? { action: 'end_session', labelNL: 'Sessie afronden' }
-      : { action: 'next_round', labelNL: `Start ronde ${session.currentRound + 2}` }
-  }
-  const nextLabels: Record<RoundPhase, string> = {
-    inject: 'Volgende fase: Discussie',
-    discussion: 'Volgende fase: Beslissing',
-    decision: 'Volgende fase: Review',
-    review: 'Start volgende ronde',
-  }
-  return { action: 'advance_phase', labelNL: nextLabels[currentPhase] }
-}
-
-// Which roles are expected to submit for this round's decision but haven't yet?
-// Used by describeNextAction and by setPhase to block DECISION→REVIEW transitions.
-// Phase 4 — counts each (participantId, role) pair the participant owns as an
-// independent SLA so a solo participant with 6 inherited roles is expected to
-// submit 6 decisions before REVIEW opens.
-function missingDecisionRoles(session: SessionState): Role[] {
-  if (!session.graph || !session.graphState) return []
-  const nodeById = new Map(session.graph.nodes.map(n => [n.id, n]))
-  const current = nodeById.get(session.graphState.currentNodeId)
-  if (!current) return []
-  // Only guard perRole decisions — facilitator-driven decisions have no participant SLA.
-  const decisionNode = current.type === 'decision'
-    ? current
-    : session.graph.edges
-        .filter(e => e.source === current.id && e.type === 'sequence')
-        .map(e => nodeById.get(e.target))
-        .find(n => n?.type === 'decision')
-  if (!decisionNode) return []
-  const dd = decisionNode.data as DecisionNodeData
-  if (dd.perRole !== true) return []
-
-  const dist = session.roleDistribution
-  if (!dist) return []
-  const overrides = session.roleAssignmentOverrides ?? {}
-  const rolesRequired = new Set<Role>()
-  const optionIds = new Set<string>()
-  for (const opt of dd.options) {
-    if (opt.allowedRole) rolesRequired.add(opt.allowedRole)
-    optionIds.add(opt.id)
-  }
-  const missing: Role[] = []
-  for (const entry of dist.entries) {
-    const roles = effectiveRolesForParticipant(entry, overrides[entry.participantId])
-    for (const r of roles) {
-      if (!rolesRequired.has(r)) continue
-      // For this (participant, role) pair: has ANY submission been made this
-      // round against this node's option set that carries this role?
-      const submittedForRole = (session.submittedDecisions ?? []).some(d =>
-        d.participantId === entry.participantId
-        && d.roundIndex === session.currentRound
-        && d.role === r
-        && optionIds.has(d.actionId),
-      )
-      if (!submittedForRole) missing.push(r)
-    }
-  }
-  return [...new Set(missing)]
-}
+export { missingDecisionRoles, type NextActionDescriptor } from "./session-next-action"
+export const describeNextAction = _describeNextAction
 
 export async function goToPrevRound(): Promise<{ ok: boolean; error?: string }> {
   const session = await dbGetSession()
@@ -1202,24 +1152,39 @@ export async function pushInject(input: { roundIndex: number; injectId: string }
 }
 
 export async function pushSurpriseInject(input: {
-  title: string; content: string; type?: InjectType; urgency?: Urgency
+  title: string
+  content: string
+  type?: InjectType
+  urgency?: Urgency
+  // Phase 5 — optional metadata for library-fired noise injects. Backwards
+  // compatible: undefined behaves exactly as before.
+  channel?: import("./types").InjectChannel
+  senderName?: string
+  targetRoles?: Role[]
+  classification?: 'feit' | 'aanname' | 'fabel'
+  libraryId?: string
 }): Promise<{ ok: boolean; error?: string; inject?: Inject }> {
   const inject: Inject = {
     id: genId("surp"),
     type: input.type ?? "alert",
-    channel: "system_alert",
+    channel: input.channel ?? "system_alert",
     title: input.title.trim(),
     content: input.content.trim(),
     urgency: input.urgency ?? "critical",
     source: "Facilitator",
-    senderName: "Facilitator",
+    senderName: input.senderName?.trim() || "Facilitator",
     timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    ...(input.targetRoles && input.targetRoles.length > 0 ? { targetRoles: input.targetRoles } : {}),
+    ...(input.classification ? { classification: input.classification } : {}),
   }
 
   const result = await mutate(s => {
     const pushed = { inject, roundIndex: -1, pushedAt: Date.now() }
     let updated: SessionState = { ...s, pushedInjects: [...s.pushedInjects, pushed] }
-    updated = pushTimeline(updated, "surprise_inject", { inject })
+    updated = pushTimeline(updated, "surprise_inject", {
+      inject,
+      ...(input.libraryId ? { libraryId: input.libraryId } : {}),
+    })
     return updated
   })
   if (!result.ok) return { ok: false, error: result.error }
@@ -2507,4 +2472,54 @@ export async function updateSupervisionReportEdits(
   await dbSetSession(updated)
   broadcastState(updated)
   return { ok: true }
+}
+
+// ─── Phase 6 — participant view state (hide / handled / classification filter) ───
+
+export type ParticipantViewPatch = Partial<{
+  hidden: string[]
+  handled: string[]
+  filters: { classification?: Array<'feit' | 'aanname' | 'fabel'> }
+  // Append/remove semantics — the caller can send a single injectId to
+  // add or remove from `hidden` / `handled` without re-sending the whole set.
+  addHidden: string
+  removeHidden: string
+  addHandled: string
+  removeHandled: string
+  clearHidden: boolean
+}>
+
+export async function updateParticipantView(input: {
+  participantId: string
+  patch: ParticipantViewPatch
+}): Promise<{ ok: boolean; error?: string }> {
+  return mutate(session => {
+    const participant = session.participants.find(p => p.id === input.participantId)
+    if (!participant) return { error: "Participant not found." }
+    const all = session.participantViewState ?? {}
+    const current = all[input.participantId] ?? { hidden: [], handled: [] }
+    const next = { ...current }
+
+    if (Array.isArray(input.patch.hidden)) next.hidden = [...new Set(input.patch.hidden)]
+    if (Array.isArray(input.patch.handled)) next.handled = [...new Set(input.patch.handled)]
+    if (input.patch.filters !== undefined) next.filters = input.patch.filters
+    if (typeof input.patch.addHidden === 'string') {
+      next.hidden = [...new Set([...(next.hidden ?? []), input.patch.addHidden])]
+    }
+    if (typeof input.patch.removeHidden === 'string') {
+      next.hidden = (next.hidden ?? []).filter(id => id !== input.patch.removeHidden)
+    }
+    if (typeof input.patch.addHandled === 'string') {
+      next.handled = [...new Set([...(next.handled ?? []), input.patch.addHandled])]
+    }
+    if (typeof input.patch.removeHandled === 'string') {
+      next.handled = (next.handled ?? []).filter(id => id !== input.patch.removeHandled)
+    }
+    if (input.patch.clearHidden === true) next.hidden = []
+
+    return {
+      ...session,
+      participantViewState: { ...all, [input.participantId]: next },
+    }
+  })
 }

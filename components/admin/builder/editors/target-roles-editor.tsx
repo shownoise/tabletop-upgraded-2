@@ -1,9 +1,9 @@
 "use client"
 
-import { ROLE_META } from "@/lib/types"
+import { ROLE_META, ROLE_ORDER } from "@/lib/types"
 import type { Role } from "@/lib/types"
 
-const ALL_ROLES = Object.keys(ROLE_META) as Role[]
+const ALL_ROLES: readonly Role[] = ROLE_ORDER
 
 interface Props {
   value: Role[] | undefined

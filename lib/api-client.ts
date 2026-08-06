@@ -1,4 +1,4 @@
-import type { ExerciseConfig, FactCheckTag, FiledMelding, InjectType, MeldingType, RegulatoryObligationState, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, SupervisionReportEdits, Urgency } from "./types"
+import type { ExerciseConfig, FactCheckTag, FiledMelding, InjectChannel, InjectType, MeldingType, RegulatoryObligationState, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, SupervisionReportEdits, Urgency } from "./types"
 import type { SupervisionReport } from "./engine/supervision"
 
 async function post<T = unknown>(url: string, body?: unknown): Promise<T> {
@@ -49,7 +49,18 @@ export const api = {
   prevRound: () => post<{ ok: true }>("/api/session/prev-round"),
   pushInject: (input: { roundIndex: number; injectId: string }) =>
     post<{ ok: true }>("/api/session/push-inject", input),
-  surpriseInject: (input: { title: string; content: string; type?: InjectType; urgency?: Urgency }) =>
+  surpriseInject: (input: {
+    title: string
+    content: string
+    type?: InjectType
+    urgency?: Urgency
+    // Phase 5 — library-inject fields. All optional; omitted = classic behaviour.
+    channel?: InjectChannel
+    senderName?: string
+    targetRoles?: Role[]
+    classification?: 'feit' | 'aanname' | 'fabel'
+    libraryId?: string
+  }) =>
     post<{ ok: true }>("/api/session/surprise-inject", input),
   resetSession: () => post<{ ok: true }>("/api/session/reset"),
   setPhase: (phase: RoundPhase, opts?: { force?: boolean; reason?: string }) =>
@@ -102,4 +113,17 @@ export const api = {
     })
     return (await res.json()) as { ok: true }
   },
+  updateMyView: (input: {
+    participantId: string
+    patch: Partial<{
+      hidden: string[]
+      handled: string[]
+      filters: { classification?: Array<'feit' | 'aanname' | 'fabel'> }
+      addHidden: string
+      removeHidden: string
+      addHandled: string
+      removeHandled: string
+      clearHidden: boolean
+    }>
+  }) => post<{ ok: true }>("/api/session/participant-view", input),
 }

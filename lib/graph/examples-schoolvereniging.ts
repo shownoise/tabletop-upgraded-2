@@ -1,6 +1,7 @@
-import type { ScenarioGraph } from "./types"
+import type { PremadeInject, RoleBriefing, ScenarioGraph } from "./types"
 import { RETAINER_ACTIVATED_FLAG } from "./types"
 import { planToGraph, type WizardPlan } from "./wizard-plan"
+import type { Role } from "@/lib/types"
 
 // ONDERWIJSVERENIGING NOORD-OOST — Play-ransomware bij een MKB+ schoolbestuur.
 //
@@ -85,21 +86,26 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Erika van der Meer",
           timestamp: "09:12",
           reliability: "fact",
+          classification: "aanname",
           targetTeam: "all",
+          facilitatorNote: "Aanname — docentobservatie zonder technische bevestiging. Perfect om aan het MSP-signaal te knopen.",
         },
         {
           id: "r1-msp-alert",
           type: "alert", channel: "siem", urgency: "high",
-          title: "WestNet MSP-dashboard — Ongebruikelijke schrijfactiviteit FS-01",
+          title: "WestNet MSP-dashboard — Ongebruikelijke schrijfactiviteit FS-01 (AVG/NIS2-relevant)",
           content:
-            "MSP-dashboard notificatie (nog geen ticket). Bron: WestNet monitoring op fileserver FS-01. Vensterperiode: 08:38–08:45. Signaal: 4200 bestandsmodificaties in 7 minuten, waaronder uitbreiding .PLAY op ~1800 objecten in de shares /leerlingdossiers en /financien. Severity door WestNet automatisch op 'low' gezet omdat het patroon lijkt op geplande archivering. Doorzetten naar ticket vereist manuele actie van dienstdoende engineer.",
+            "MSP-dashboard notificatie (nog geen ticket). Bron: WestNet monitoring op fileserver FS-01. Vensterperiode: 08:38–08:45. Signaal: 4200 bestandsmodificaties in 7 minuten, waaronder uitbreiding .PLAY op ~1800 objecten in de shares /leerlingdossiers en /financien. Severity door WestNet automatisch op 'low' gezet omdat het patroon lijkt op geplande archivering. Doorzetten naar ticket vereist manuele actie van dienstdoende engineer. De MSP-SLA dekt geen ransomware-scope buiten kantooruren; opschaling naar piket kost tijd en geld. Bij bevestiging van datalek treden AVG art. 33 (AP, 72u) en NIS2 art. 23 (NCSC/CSIRT, 24u) in werking.",
           senderName: "WestNet ICT — Monitoring",
           source: "MSP dashboard",
           timestamp: "08:42",
           reliability: "fact",
+          classification: "feit",
           triggersRegulatoryNotification: true,
           nis2Relevant: true,
           targetTeam: "technical_it",
+          setsUpDecisionNodeId: "d1-r1-ambigue",
+          facilitatorNote: "Feit — de MSP-alert is de sleutel. Als het team dit niet aan de docentenmelding knoopt, blijft R1 hangen.",
         },
         {
           id: "r1-parent-sms",
@@ -110,17 +116,20 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Frontoffice locatie Zuid",
           timestamp: "09:22",
           reliability: "misleading",
+          classification: "fabel",
           targetTeam: "crisis_management",
+          facilitatorNote: "Fabel — expliciete red herring. Test of team dit als losstaande phishingcampagne herkent.",
         },
         {
           id: "r1-rob-whatsapp",
           type: "internal", channel: "whatsapp", urgency: "medium",
           title: "WhatsApp van Rob (vanuit Portugal)",
           content:
-            "Rob de Vries: 'Hey — kreeg net een mailtje van Erika dat Magister traag is. Ik zit nog aan het ontbijt hier in Faro. Kan iemand kijken of het gewoon een Magister-storing is? Ik zie op Magister-status geen melding maar dat betekent niets. Ik ben na 12:00 NL-tijd wat beter bereikbaar. Als het echt een dingetje is bel me op WhatsApp, gewone SMS werkt hier slecht.'",
+            "Rob de Vries: 'Hey — kreeg net een mailtje van Erika dat Magister traag is. Ik zit nog aan het ontbijt hier in Faro. Kan iemand kijken of het gewoon een Magister-storing is? Ik zie op Magister-status geen melding maar dat betekent niets. Ik ben na 12:00 NL-tijd wat beter bereikbaar. Als het echt een dingetje is bel me op WhatsApp, gewone SMS werkt hier slecht.' — Rob is de enige persoon met écht diepe kennis van het leerlingregistratiesysteem, en zit onbereikbaar op vakantie.",
           senderName: "Rob de Vries — IT-coordinator",
           timestamp: "09:28",
           reliability: "assumption",
+          classification: "aanname",
           deliverySeconds: 90,
           targetTeam: "technical_it",
         },
@@ -185,7 +194,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
       ],
       discussionGoal:
-        "Test of het team het MSP-signaal en het docenten-signaal aan elkaar knoopt en of het mandaat rond Rob's afwezigheid expliciet wordt gemaakt.",
+        "Deze ronde toetst of het team het MSP-dashboard koppelt aan de docentenmelding en of het mandaat rond de afwezigheid van Rob de Vries expliciet wordt vastgelegd. Wie stalt, mist de vroege containment; wie racet, riskeert een grove reflex zoals FS-01 uitzetten via de switch. Nudge bij stilstand: verwijs naar het MSP-dashboard van vanochtend. Nudge bij haast: check of iemand via WestNet handelt in plaats van de stekker eruit.",
       keyQuestions: [
         "Welke informatie is feit, welke aanname?",
         "Wie mag zonder Rob nu opdracht geven aan WestNet?",
@@ -217,7 +226,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       title: "R2 — Ransomnote in de finance-share",
       situation:
-        "Maandag 13:40. WestNet-engineer Kevin heeft na een piketoproep om 11:15 remote ingelogd. Bevestigd: Play-ransomware. Ongeveer 68% van de shares op FS-01 en FS-02 is versleteld, waaronder cijferadministratie voor rapportvergadering deze week, allergiegegevens leerlingzorg, en financiële reconciliatie voor lesgeldincasso. Op de share /financien staat een tekstbestand HELLO_PLAY.txt: ransomeis €680.000 in Monero binnen 72 uur, anders publicatie op de leaksite. Rob is inmiddels bereikbaar maar zit in Faro zonder werk-laptop. Er zijn signalen dat de aanvaller data heeft ge-exfiltreerd — WestNet ziet uitgaand verkeer van ~4 GB naar een onbekend IP in de nacht van zaterdag op zondag. Ouders beginnen te bellen omdat de website afwijkend traag doet.",
+        "Voortbouwend op de netwerk-isolatie FS-01/02 en de WestNet-piketoproep van vanochtend is het beeld nu bevestigd. Maandag 13:40. WestNet-engineer Kevin heeft na een piketoproep om 11:15 remote ingelogd. Bevestigd: Play-ransomware. Ongeveer 68% van de shares op FS-01 en FS-02 is versleteld, waaronder cijferadministratie voor rapportvergadering deze week, allergiegegevens leerlingzorg, en financiële reconciliatie voor lesgeldincasso. Op de share /financien staat een tekstbestand HELLO_PLAY.txt: ransomeis €680.000 in Monero binnen 72 uur, anders publicatie op de leaksite. Rob is inmiddels bereikbaar maar zit in Faro zonder werk-laptop — de enige persoon met kennis van de Magister-koppelingsdatabase is dus niet ter plaatse. Er zijn signalen dat de aanvaller data heeft ge-exfiltreerd — WestNet ziet uitgaand verkeer van ~4 GB naar een onbekend IP in de nacht van zaterdag op zondag. Ouders beginnen te bellen omdat de website afwijkend traag doet.",
       timerMinutes: 15,
       openingPrompts: [
         "Kunnen we vandaag nog een geloofwaardig bericht naar ouders sturen — en zo ja, wat?",
@@ -236,7 +245,10 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Play (ransomware group)",
           timestamp: "13:22",
           reliability: "fact",
+          classification: "feit",
           targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d2-r2-forensiek-comms",
+          facilitatorNote: "Feit — de ransomnote maakt het incident onmiskenbaar. Zet de losgeld-vs-restore-vraag scherp neer.",
         },
         {
           id: "r2-westnet-technical",
@@ -249,24 +261,27 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
             "2. Initial access-vermoeden: onbeheerd RDP-endpoint van een oud-medewerker (vertrokken juli), account niet gedeactiveerd.\n" +
             "3. Exfiltratie: uitgaande verbinding zaterdagnacht 03:12–05:41, ~4.1 GB richting hoster in Duitsland (bekende Play-infrastructuur).\n" +
             "4. Persistence: wij zien nog geen tweede kanaal maar sluiten het niet uit — full sweep vereist voordat we schoon melden.\n\n" +
-            "Wij adviseren: (a) alle domain-accounts een wachtwoord-reset, (b) FS-01/02 offline houden, (c) Eye Security IR-retainer activeren voor forensische lead. Dit valt buiten ons SLA — wij kunnen ondersteunen maar niet leiden.",
+            "Wij adviseren: (a) alle domain-accounts een wachtwoord-reset, (b) FS-01/02 offline houden, (c) Eye Security IR-retainer activeren voor forensische lead. De MSP-SLA dekt geen incidentresponse op dit niveau — wij kunnen ondersteunen maar niet leiden.",
           senderName: "Kevin Bosch — WestNet ICT",
           source: "WestNet ICT B.V.",
           timestamp: "13:35",
           reliability: "fact",
+          classification: "feit",
           nis2Relevant: true,
           targetTeam: "technical_it",
+          setsUpDecisionNodeId: "d2-r2-forensiek-comms",
         },
         {
           id: "r2-magister-notify",
           type: "regulatory", channel: "email", urgency: "high",
-          title: "Reminder: Magister-contract kent 48u breach-notification",
+          title: "Reminder: Magister-contract kent 48u breach-notification. De verzekeringspolis eist parallel activatie.",
           content:
-            "Interne notitie van bestuurssecretaris aan bestuur. Onderwerp: Magister-contract art. 14.3.\n\n" +
-            "Artikel 14.3 van ons Magister-contract (versie 2022) verplicht ons om Iddink Group (moederbedrijf Magister) binnen 48 uur na ontdekking van een datalek te informeren dat mogelijk hun platform of hun data raakt. Wij hebben dit nog nooit ingeroepen. Detectietijd volgens ons: vandaag 08:42, dus 48u-klok verstrijkt woensdag 08:42. Aandachtspunt: als de exfil-data leerlinggegevens uit Magister bevat, is dit contractueel én richting hen relevant.",
+            "Interne notitie van bestuurssecretaris aan bestuur. Onderwerp: Magister-contract art. 14.3 + Univé-clausule.\n\n" +
+            "Artikel 14.3 van ons Magister-contract (versie 2022) verplicht ons om Iddink Group (moederbedrijf Magister) binnen 48 uur na ontdekking van een datalek te informeren dat mogelijk hun platform of hun data raakt. Wij hebben dit nog nooit ingeroepen. Detectietijd volgens ons: vandaag 08:42, dus 48u-klok verstrijkt woensdag 08:42. Aandachtspunt: als de exfil-data leerlinggegevens uit Magister bevat, is dit contractueel én richting hen relevant. Aanvullend: de verzekeringspolis heeft uitsluitingsclausules — als wij pas na 24u melden bij Univé, kan een deel van de dekking vervallen; die polis is nooit precies gelezen.",
           senderName: "Marijke Vlietstra — bestuurssecretaris",
           timestamp: "13:52",
           reliability: "fact",
+          classification: "feit",
           targetTeam: "crisis_management",
         },
         {
@@ -278,6 +293,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Teamleider Marc Dijkstra — locatie Zuid",
           timestamp: "14:01",
           reliability: "fact",
+          classification: "aanname",
           targetTeam: "crisis_management",
         },
       ],
@@ -356,7 +372,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
       ],
       discussionGoal:
-        "Test of het team parallelle sporen kan aansturen: IR technisch, meldingen juridisch, communicatie intern én extern, verzekeraar financieel — zonder dat één spoor het andere blokkeert.",
+        "Deze ronde toetst of het team parallelle sporen kan aansturen: IR technisch, meldingen juridisch, communicatie intern én extern, verzekeraar financieel — zonder dat één spoor het andere blokkeert. De zwaarste keuze zit bij de bestuurder: comms-eerst of forensiek-eerst. Nudge bij stilstand: verwijs naar de ransomnote en de 48u-klok richting Iddink. Nudge bij haast: check of de MSP-SLA op tafel ligt voordat er tot betalen wordt besloten.",
       keyQuestions: [
         "Wat is het besluitmoment op losgeld — nu, morgen, of na herstel-inschatting?",
         "Halen we de 24u NIS2-melding richting NCSC?",
@@ -389,7 +405,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       title: "R3 — Regelklok tikt en de pers belt",
       situation:
-        "Dinsdag 10:30 — 26 uur na detectie. NIS2 early-warning had gisteren 08:42 al ingediend moeten zijn; als jullie dat gemist hebben is dat een formeel gebrek. AVG art. 33-klok verstrijkt donderdag 08:42. RTV Oost belt: journalist Sanne Bruijns wil vandaag om 14:00 op locatie een gesprek — 'we hebben van meerdere ouders begrepen dat er iets gaande is'. Magister-contract 48u-klok: nog 22 uur. Ouders posten in Facebook-groepen dat 'de school is gehackt'. Een oudervereniging-voorzitter mailt of hij vanmiddag geïnformeerd kan worden. Restore-test op eerste backup-set draait — Rob heeft vanuit Faro het commando gegeven via WestNet.",
+        "Voortbouwend op de AP-melding indienen als voorlopig van gisteren en de bestuurder belt-terug naar teams: Dinsdag 10:30 — 26 uur na detectie. NIS2 early-warning had gisteren 08:42 al ingediend moeten zijn; als jullie dat gemist hebben is dat een formeel gebrek. AVG art. 33-klok verstrijkt donderdag 08:42. RTV Oost belt: journalist Sanne Bruijns wil vandaag om 14:00 op locatie een gesprek — 'we hebben van meerdere ouders begrepen dat er iets gaande is'. Magister-contract 48u-klok: nog 22 uur. Ouders posten in Facebook-groepen dat 'de school is gehackt'. Een oudervereniging-voorzitter mailt of hij vanmiddag geïnformeerd kan worden. Restore-test op eerste backup-set draait — Rob heeft vanuit Faro het commando gegeven via WestNet.",
       timerMinutes: 15,
       openingPrompts: [
         "Als we de NIS2 24u-melding hebben gemist, hoe verantwoorden we dat richting NCSC?",
@@ -409,7 +425,10 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           source: "RTV Oost — regionale redactie",
           timestamp: "10:24",
           reliability: "fact",
+          classification: "feit",
           targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d3-r3-comms-meldingen",
+          facilitatorNote: "Feit — RTV Oost forceert een comms-besluit met deadline. Test of team 'geen commentaar' vermijdt.",
         },
         {
           id: "r3-parent-facebook",
@@ -420,24 +439,27 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Woordvoerder — monitoring",
           timestamp: "10:33",
           reliability: "assumption",
+          classification: "aanname",
           targetTeam: "crisis_management",
         },
         {
           id: "r3-ap-guidance",
           type: "regulatory", channel: "email", urgency: "high",
-          title: "AP-portaal — Ontvangstbevestiging + aanvullende vragen",
+          title: "AP-portaal — Ontvangstbevestiging + aanvullende vragen (AVG art. 33)",
           content:
             "Autoriteit Persoonsgegevens — Meldpunt Datalekken. Uw voorlopige melding met casuskenmerk AP-2024-11-04-XXXXX is in behandeling genomen. Aanvullende vragen om de melding te completeren binnen 72 uur na eerste indicatie:\n\n" +
             "1. Aantal betrokkenen (leerlingen, ouders, medewerkers) — gespecificeerd.\n" +
             "2. Type persoonsgegevens (art. 9 bijzondere gegevens? bsn?).\n" +
             "3. Mitigerende maatregelen genomen tot dusver.\n" +
             "4. Communicatiestrategie richting betrokkenen (art. 34 AVG).\n\n" +
-            "Verzuim tot volledige melding kan leiden tot handhavingstraject.",
+            "Verzuim tot volledige melding kan leiden tot handhavingstraject onder AVG.",
           senderName: "Autoriteit Persoonsgegevens",
           timestamp: "10:41",
           reliability: "fact",
+          classification: "feit",
           nis2Relevant: true,
           targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d3-r3-comms-meldingen",
         },
         {
           id: "r3-eye-security-tussenrapport",
@@ -456,9 +478,11 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           source: "Eye Security",
           timestamp: "11:15",
           reliability: "fact",
+          classification: "feit",
           deliverySeconds: 300,
           requiresCapability: RETAINER_ACTIVATED_FLAG,
           targetTeam: "crisis_management",
+          facilitatorNote: "Feit — alleen zichtbaar als het team in R2 de retainer heeft geactiveerd. Cross-round capability-check.",
         },
       ],
       meldingMoment: {
@@ -542,7 +566,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
       ],
       discussionGoal:
-        "Test of interne, externe, ouder- en regulatoire communicatie inhoudelijk consistent blijft, en of de meldingen ook feitelijk de deur uit gaan.",
+        "Deze ronde toetst of interne, externe, ouder- en regulatoire communicatie inhoudelijk consistent blijft, en of de meldingen ook feitelijk de deur uit gaan. De zwaarste keuze zit bij de bestuurder en het hoofd communicatie: bel je RTV Oost zelf, of laat je een woordvoerder gaan? Nudge bij stilstand: verwijs naar de 13:30-deadline van RTV Oost. Nudge bij haast: check of het team niet in 'geen commentaar' schiet.",
       keyQuestions: [
         "AP-completering: gaan alle vier vragen beantwoord vóór donderdag 08:42?",
         "Als NIS2 24u is gemist — hoe verwoorden we dat richting NCSC?",
@@ -575,7 +599,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       title: "R4 — Betalen, onderhandelen of weigeren",
       situation:
-        "Woensdag 09:00 — 48 uur na detectie. Ransom-deadline nog 24 uur. Univé-onderhandelaar meldt: aanvaller staat op €680k, realistisch haalbaar €340k met bewijs van deletion. Restore-test op de eerste cold-backup FAALT — Wasabi-object corrupt sinds september (niet gemerkt). Tweede backup-set draait nu; verwachte uitkomst 15:30. Univé vraagt schriftelijke incident-scope voordat zij eventuele betaling autoriseren; zonder scope geen dekking. Bestuur en Raad van Toezicht willen om 14:00 een videocall. RTV Oost heeft gisteravond uitgezonden — feitelijk maar streng ('kwetsbare gegevens van 4000 leerlingen mogelijk op straat'). Een parent posted op Facebook dat hij AP-klacht gaat indienen — hij heeft dat inmiddels ook daadwerkelijk gedaan.",
+        "Terugblik op dinsdag: de AP-completering is verzonden, de bestuurder heeft persoonlijk RTV Oost teruggebeld. Woensdag 09:00 — 48 uur na detectie. Ransom-deadline nog 24 uur. Univé-onderhandelaar meldt: aanvaller staat op €680k, realistisch haalbaar €340k met bewijs van deletion. Bij herstelfase blijkt de restore-test op de eerste cold-backup te FALEN — Wasabi-object corrupt sinds september (niet gemerkt). Tweede backup-set draait nu; verwachte uitkomst 15:30. Univé vraagt schriftelijke incident-scope voordat zij eventuele betaling autoriseren; zonder scope geen dekking, en de verzekeringspolis heeft uitzonderingsclausules die zich nu concreet manifesteren. Bestuur en Raad van Toezicht willen om 14:00 een videocall. RTV Oost heeft gisteravond uitgezonden — feitelijk maar streng ('kwetsbare gegevens van 4000 leerlingen mogelijk op straat'). Een parent posted op Facebook dat hij AP-klacht gaat indienen — hij heeft dat inmiddels ook daadwerkelijk gedaan.",
       timerMinutes: 15,
       openingPrompts: [
         "Op basis waarvan hakken wij de knoop door op wel/niet betalen?",
@@ -588,15 +612,18 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           id: "r4-restore-fail",
           type: "technical", channel: "email", urgency: "critical",
-          title: "IT — Eerste cold-restore FAALT",
+          title: "IT — Eerste cold-restore FAALT (bij herstelfase blijkt back-up-restoretest jaren geleden voor het laatst uitgevoerd)",
           content:
             "Van: Kevin Bosch (WestNet) + Rob de Vries (extern via WhatsApp-call).\n\n" +
-            "Restore-poging eerste backup-set (Wasabi cold, incrementeel sept–okt) gefaald. Manifest wijst naar object-hash mismatch op negen kernbestanden waaronder de Magister-koppelingsdatabase. Waarschijnlijke oorzaak: silent corruption sinds mid-september bij een failed rotation die niet gealarmeerd is. Tweede backup-set (Veeam maandelijkse full, oktober) draait nu terug op een schone VM. ETA volledige restore-test: 15:30 vandaag. Als deze ook faalt zitten wij op backup uit september — 6 weken werk kwijt, incl. cijfers Q1.\n\n" +
+            "Restore-poging eerste backup-set (Wasabi cold, incrementeel sept–okt) gefaald. Manifest wijst naar object-hash mismatch op negen kernbestanden waaronder de Magister-koppelingsdatabase. Waarschijnlijke oorzaak: silent corruption sinds mid-september bij een failed rotation die niet gealarmeerd is. Bij herstelfase blijkt de back-up-restoretest jaren geleden voor het laatst volledig gedraaid — een documented weakness in ons IR-plan. Tweede backup-set (Veeam maandelijkse full, oktober) draait nu terug op een schone VM. ETA volledige restore-test: 15:30 vandaag. Als deze ook faalt zitten wij op backup uit september — 6 weken werk kwijt, incl. cijfers Q1.\n\n" +
             "Belangrijk: dit maakt de losgeldkeuze zwaarder. Betalen levert theoretische decryptor, maar volledige integriteit ná decryptie is niet gegarandeerd — Play staat bekend om onvolledige tools.",
           senderName: "Kevin Bosch — WestNet ICT",
           timestamp: "09:12",
           reliability: "fact",
+          classification: "feit",
           targetTeam: "technical_it",
+          setsUpDecisionNodeId: "d4-r4-losgeld",
+          facilitatorNote: "Feit — de gefaalde restore verzwaart het losgeld-besluit. Zonder deze inject is het besluit theoretisch, met deze inject moet het team écht kiezen.",
         },
         {
           id: "r4-univé-scope",
@@ -613,7 +640,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Diana Rademakers — Univé Zakelijk",
           timestamp: "09:34",
           reliability: "fact",
+          classification: "feit",
           targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d4-r4-losgeld",
         },
         {
           id: "r4-parent-ap-complaint",
@@ -624,6 +653,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Autoriteit Persoonsgegevens",
           timestamp: "10:02",
           reliability: "fact",
+          classification: "feit",
           targetTeam: "crisis_management",
         },
       ],
@@ -693,7 +723,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
       ],
       discussionGoal:
-        "Test besluitvormingsproces onder échte ambiguïteit: elk pad heeft een serieuze downside. Focus op explicitering van criteria en van eigenaarschap.",
+        "Deze ronde toetst besluitvormingsproces onder échte ambiguïteit: elk pad heeft een serieuze downside. De gefaalde restore verzwaart de losgeld-vraag; Univé bindt met vier voorwaarden. De zwaarste keuze zit bij de bestuurder en de financieel verantwoordelijke. Nudge bij stilstand: verwijs naar de €340k-onderhandelde-som en de tweede restore-set die om 15:30 landt. Nudge bij haast: check of het besluit expliciete criteria heeft in plaats van onderbuik.",
       keyQuestions: [
         "Wat is jullie beslissingscriterium — is het BC, is het reputatie, is het budget?",
         "Welke uitkomst laat zich naar ouders én RvT verantwoorden?",
@@ -725,7 +755,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       title: "R5 — Herstel loopt en de keten komt terug",
       situation:
-        "Donderdag 09:00 — 72 uur na detectie. Restore-set 2 werkt gedeeltelijk: alle roosters en zorgdossiers terug (peildatum vorige week), cijfers Q1 gedeeltelijk terug. Magister heeft een alternatieve tenant beschikbaar gesteld — technisch klaar, maar docenten moeten hun cijfers handmatig opnieuw invoeren. LoonBureau Oost belt: zij hebben ontdekt dat een gedeeld service-account tussen hen en ons systeem in de exfil zit — hun eigen systemen zijn mogelijk ook gecompromitteerd via die weg. Vakbond AOb heeft een statement uitgegeven ('scholen worden systemisch te licht beveiligd') en noemt Onderwijsvereniging Noord-Oost als voorbeeld. Ouders vragen: 'kunnen mijn kinderen morgen wel of niet naar school?'",
+        "Voortbouwend op het besluit niet betalen en de onderhandelaar 24u laten rekken: Donderdag 09:00 — 72 uur na detectie. Restore-set 2 werkt gedeeltelijk: alle roosters en zorgdossiers terug (peildatum vorige week), cijfers Q1 gedeeltelijk terug. Bij herstelfase blijkt de tweede backup-set beter dan de eerste, maar niet foutloos — de restore-drill was voor het incident jaren niet volledig uitgevoerd. Magister heeft een alternatieve tenant beschikbaar gesteld — technisch klaar, maar docenten moeten hun cijfers handmatig opnieuw invoeren. LoonBureau Oost belt: zij hebben ontdekt dat een gedeeld service-account tussen hen en ons systeem in de exfil zit — hun eigen systemen zijn mogelijk ook gecompromitteerd via die weg. Vakbond AOb heeft een statement uitgegeven ('scholen worden systemisch te licht beveiligd') en noemt Onderwijsvereniging Noord-Oost als voorbeeld. Ouders vragen: 'kunnen mijn kinderen morgen wel of niet naar school?'",
       timerMinutes: 15,
       openingPrompts: [
         "Wat betekent de LoonBureau-melding voor onze scope- en communicatie-afhandeling?",
@@ -745,7 +775,10 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           source: "LoonBureau Oost B.V.",
           timestamp: "08:52",
           reliability: "fact",
+          classification: "aanname",
           targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d5-r5-ketenverbreding",
+          facilitatorNote: "Aanname — LoonBureau vermoedt eigen compromise. Zet de ketenverbredings-vraag scherp neer.",
         },
         {
           id: "r5-aob-statement",
@@ -757,6 +790,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           source: "persbericht",
           timestamp: "08:30",
           reliability: "fact",
+          classification: "feit",
           targetTeam: "crisis_management",
         },
         {
@@ -769,7 +803,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Marc Timmermans — PMR-voorzitter",
           timestamp: "09:14",
           reliability: "fact",
+          classification: "feit",
           targetTeam: "crisis_management",
+          facilitatorNote: "Feit — PMR-verzoek dwingt HR-rol tot concrete compensatie. Test hoe snel goodwill wordt geactiveerd.",
         },
       ],
       roleActions: [
@@ -832,7 +868,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
       ],
       discussionGoal:
-        "Test ketendenken en het vermogen om onder aanhoudende druk vaste routines vast te houden zonder in 'we zijn er bijna' te vervallen.",
+        "Deze ronde toetst ketendenken en het vermogen om onder aanhoudende druk vaste routines vast te houden zonder in 'we zijn er bijna' te vervallen. De zwaarste keuze zit bij de bestuurder rond LoonBureau en bij de personele lijn rond de PMR. Nudge bij stilstand: verwijs naar het verzoek van de PMR van vanmiddag en het AOb-statement. Nudge bij haast: check of iemand LoonBureau als 'niet ons probleem' afschuift — dat is precies de val.",
       keyQuestions: [
         "Hoe verweven we onze AP-melding met LoonBureau zonder conflict?",
         "Kan PMR-gesprek de docentmedewerking daadwerkelijk versterken?",
@@ -877,15 +913,17 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           id: "r6-ap-follow-up",
           type: "regulatory", channel: "email", urgency: "high",
-          title: "AP — Schriftelijke follow-up + aankondiging art. 32-inspectie",
+          title: "AP — Schriftelijke follow-up + aankondiging art. 32-inspectie (AVG-handhaving)",
           content:
             "Autoriteit Persoonsgegevens.\n\n" +
             "Onder verwijzing naar uw meldingen (initieel, aangevuld) en de door ons ontvangen klacht, verzoeken wij binnen 30 werkdagen een schriftelijke follow-up onder AVG art. 33. Op basis van de omvang (>4000 betrokkenen, art. 9-gegevens) en de ontvangen klacht bereidt de AP een vervolg-inspectie voor onder art. 32 (technische en organisatorische maatregelen). Wij zullen uiterlijk in het eerste kwartaal 2025 contact opnemen voor bezoekafspraken en documentenverzoek. Wij wijzen u nu al op de mogelijkheid van een bestuurlijke boete indien wij ernstige tekortkomingen vaststellen.",
           senderName: "Autoriteit Persoonsgegevens — afdeling handhaving",
           timestamp: "09:15",
           reliability: "fact",
+          classification: "feit",
           nis2Relevant: true,
           targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d6-r6-verankering",
         },
         {
           id: "r6-rvt-agenda",
@@ -897,7 +935,10 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Voorzitter RvT — mr. J. de Boer",
           timestamp: "09:33",
           reliability: "fact",
+          classification: "feit",
           targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d6-r6-verankering",
+          facilitatorNote: "Feit — RvT dwingt tot concreet post-mortem met eigenaar + deadline + budget. Zet de verankerings-vraag scherp neer.",
         },
         {
           id: "r6-univé-claim-deadline",
@@ -909,6 +950,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Diana Rademakers — Univé Zakelijk",
           timestamp: "10:12",
           reliability: "fact",
+          classification: "feit",
           targetTeam: "crisis_management",
         },
       ],
@@ -979,7 +1021,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
       ],
       discussionGoal:
-        "Test learning-embedding: worden concrete governance-besluiten schriftelijk vastgelegd met eigenaar, deadline en budget?",
+        "Deze ronde toetst learning-embedding: worden concrete governance-besluiten schriftelijk vastgelegd met eigenaar, deadline en budget? De zwaarste keuze zit bij de bestuurder rond het post-mortem voor de Raad van Toezicht, en bij de security-lijn rond het hardening-plan. Nudge bij stilstand: verwijs naar de RvT-vergadering woensdag 13 november en de art. 32-inspectie die in kwartaal 2025 volgt. Nudge bij haast: check of iemand 'we hebben het goed gedaan' als afsluiting gebruikt zonder concrete actielijst.",
       keyQuestions: [
         "Welke drie dingen liggen woensdag ter tekening bij de RvT?",
         "Wie is eigenaar van elke actie — met naam en datum?",
@@ -1017,6 +1059,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     // ── R1 decision ──
     {
       afterRoundIndex: 0,
+      authorId: "d1-r1-ambigue",
       prompt: "Na R1 — Ambigue signalen: koers bepalen zonder volle informatie",
       perRole: true,
       options: [
@@ -1042,7 +1085,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Zelf FS-01 uitzetten via de switch (stekker)",
           allowedRole: "ciso",
-          outcomeVector: { CONT: 2, FOR: -2, BC: -2, JUR: 0, VER: 0, KOS: -1 },
+          outcomeVector: { CONT: 2, FOR: -2, BC: -2, JUR: 0, VER: 0, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Snel maar bewijs kwijt en herstart-tijd langer dan netwerk-isolatie. Klassieke reflex.",
           lessonLearned: "Isoleren via netwerk behoudt vluchtige data.",
@@ -1068,7 +1111,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Zelf alles blijven aansturen tot beeld helder is",
           allowedRole: "ceo",
-          outcomeVector: { CONT: 0, FOR: -1, BC: -1, JUR: -1, VER: 1, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: -1, BC: -1, JUR: -1, VER: 1, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Bestuurder als single-point-of-decision werkt niet lang; delegatie voorkomt bottleneck.",
           lessonLearned: "Delegeren in crisis is regie, niet loslaten.",
@@ -1076,7 +1119,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Bel eerst RvT-voorzitter voor persoonlijk advies",
           allowedRole: "ceo",
-          outcomeVector: { CONT: -1, FOR: 0, BC: 0, JUR: 0, VER: 1, KOS: -1 },
+          outcomeVector: { CONT: -1, FOR: 0, BC: 0, JUR: 0, VER: 1, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Governance-reflex, maar timing kost een uur waarin containment stagneert.",
           lessonLearned: "RvT informeren = ja, wachten op advies = nee.",
@@ -1084,9 +1127,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Wacht op Rob's terugkeer voordat je iets tekent",
           allowedRole: "ceo",
-          outcomeVector: { CONT: -2, FOR: -1, BC: -1, JUR: -2, VER: 0, KOS: 0 },
+          outcomeVector: { CONT: -2, FOR: 1, BC: -1, JUR: -2, VER: 0, KOS: 1 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Wachten op één individu voor bestuurlijke keuze is precies waarom continuïteitsplannen bestaan.",
+          facilitatorCommentary: "Wachten op één individu voor bestuurlijke keuze is precies waarom continuïteitsplannen bestaan. Verleidelijk want Rob's terugkeer belooft complete kennis — maar tegen die tijd zijn andere sporen kapot.",
           lessonLearned: "Afhankelijkheid van één persoon = geen continuïteitsplan.",
         },
         // Legal
@@ -1101,7 +1144,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Wacht met klok starten tot bevestiging ransomware",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -1, KOS: 1 },
           qualityRank: "wrong",
           facilitatorCommentary: "Achteraf gerekende klok is een handhavingsrisico — AP kijkt altijd naar het vroegste indicatiemoment.",
           lessonLearned: "Later starten is nooit een voordeel bij AP-handhaving.",
@@ -1117,7 +1160,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Legal-workstream pauzeren tot IT bevestigt",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: -1, BC: 0, JUR: -1, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: -1, BC: 0, JUR: -1, VER: -1, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Legal in crisis loopt vóór IT, niet erachter; anders passeer je klok-deadlines.",
           lessonLearned: "Juridisch spoor loopt parallel, niet volgend.",
@@ -1134,7 +1177,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Alle 350 accounts een password-reset forceren",
           allowedRole: "it_manager",
-          outcomeVector: { CONT: 1, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: -1 },
+          outcomeVector: { CONT: 1, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Grof middel dat het onderwijs uur-lang platlegt — te vroeg zonder scope-inschatting.",
           lessonLearned: "Grote gebruikersimpact-maatregelen: pas na scope-check.",
@@ -1142,7 +1185,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Volledig herstellen uit backup, nu direct",
           allowedRole: "it_manager",
-          outcomeVector: { CONT: 0, FOR: -2, BC: -2, JUR: -1, VER: 0, KOS: -2 },
+          outcomeVector: { CONT: 0, FOR: -2, BC: -2, JUR: -1, VER: 1, KOS: -2 },
           qualityRank: "wrong",
           facilitatorCommentary: "Herstellen zonder scope + zonder eradication = binnen dagen weer terug bij af, mogelijk zelfde variant.",
           lessonLearned: "Restore vóór scope-check = terugloop-risico.",
@@ -1150,7 +1193,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Rob terugvliegen van vakantie",
           allowedRole: "it_manager",
-          outcomeVector: { CONT: -1, FOR: 0, BC: -1, JUR: 0, VER: 0, KOS: -2 },
+          outcomeVector: { CONT: -1, FOR: 0, BC: -1, JUR: 0, VER: 1, KOS: -2 },
           qualityRank: "poor",
           facilitatorCommentary: "Kost geld, kost uren, en Rob is alsnog niet ter plaatse in de eerste 12u. Ondersteuning organiseren is nuttiger dan reizen.",
           lessonLearned: "Fysieke aanwezigheid ≠ bruikbaarheid.",
@@ -1166,6 +1209,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     // ── R2 decision ──
     {
       afterRoundIndex: 1,
+      authorId: "d2-r2-forensiek-comms",
       prompt: "Na R2 — Bevestiging: kies je forensiek-first of communicatie-first?",
       perRole: true,
       options: [
@@ -1189,7 +1233,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Alleen intern communiceren, extern nog even niet",
           allowedRole: "ceo",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: -1, KOS: 0 },
           qualityRank: "good",
           facilitatorCommentary: "Middenweg — soms verdedigbaar in eerste 4 uur. Wordt kwetsbaar zodra ouders het via docenten opvangen.",
           lessonLearned: "Intern-only communiceren werkt maar heel kort.",
@@ -1197,10 +1241,10 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Betalen autoriseren zodat rapportvergadering doorgaat",
           allowedRole: "ceo",
-          outcomeVector: { CONT: -1, FOR: -1, BC: 1, JUR: -2, VER: -2, KOS: -2 },
+          outcomeVector: { CONT: -1, FOR: -1, BC: 1, JUR: -2, VER: -2, KOS: 1 },
           qualityRank: "wrong",
           facilitatorCommentary: "Snelheid boven proces = polis weg, dekking weg, reputatie weg. Klassieke MKB-misgreep.",
-          lessonLearned: "Betaalbesluit vraagt altijd verzekeraar + juridische check.",
+          lessonLearned: "Betaalbesluit vraagt altijd verzekeraar + juridische check. Kortstondig lijkt het geld het probleem op te lossen — daarna komt de dekking-schade.",
         },
         // CFO — cross-role: Univé-activatie ontsluit onderhandelaar en polislimit-check
         {
@@ -1215,15 +1259,15 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Univé pas informeren als betaling ter sprake komt",
           allowedRole: "cfo",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -1, KOS: -2 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -1, KOS: 1 },
           qualityRank: "wrong",
-          facilitatorCommentary: "24u-clausule geeft je geen keuze — wachten is polisdekking verspelen.",
+          facilitatorCommentary: "24u-clausule geeft je geen keuze — wachten is polisdekking verspelen. De 'aantrekkelijkheid' zit in geen telefoontje nu — de rekening komt later.",
           lessonLearned: "Polisclausules zijn deadlines, geen richtlijnen.",
         },
         {
           label: "Alleen interne kostenraming maken, extern niets",
           allowedRole: "cfo",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: 0, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: 0, KOS: 0 },
           qualityRank: "poor",
           facilitatorCommentary: "CFO-werkstroom in crisis is óók extern: verzekeraar, bank, RvT-financieel.",
           lessonLearned: "CFO doet extern zowel als intern in crisis.",
@@ -1231,7 +1275,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Cashreserve reserveren voor snelle betaling (backup-plan)",
           allowedRole: "cfo",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: -1, VER: -1, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: -1, VER: -1, KOS: 0 },
           qualityRank: "poor",
           facilitatorCommentary: "Verstandig als voorbereiding maar signaleren aan derden dat betaling optie is verhoogt drukt op besluitvormingsproces.",
           lessonLearned: "Voorbereiden ≠ voorpositioneren.",
@@ -1256,15 +1300,15 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Wachten met NCSC-melding — 24u zit er nog ruim in?",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: 0, KOS: 1 },
           qualityRank: "wrong",
-          facilitatorCommentary: "24u klok is klein voor onbekend incident; snelheid boven volledigheid, aanvullen mag later.",
+          facilitatorCommentary: "24u klok is klein voor onbekend incident; snelheid boven volledigheid, aanvullen mag later. Wachten kost geen telefoontje nu; de rekening komt met de NCSC-relatie.",
           lessonLearned: "NIS2 early-warning is 'wat we nu weten', niet 'volledig'.",
         },
         {
           label: "Vertrouwelijkheidsverklaringen alle betrokken partijen",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: -1, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: -1, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Nuttig maar niet urgent in R2 — bindt tijd die op meldingen nodig is.",
           lessonLearned: "Prioriteringsdiscipline in juridisch spoor.",
@@ -1290,9 +1334,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Zelf de lead nemen — WestNet en Eye Security parallel gebruiken",
           allowedRole: "ciso",
-          outcomeVector: { CONT: -1, FOR: -1, BC: -1, JUR: 0, VER: 0, KOS: -1 },
+          outcomeVector: { CONT: -1, FOR: -1, BC: -1, JUR: 0, VER: 1, KOS: 0 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Twee externe partijen aansturen zonder duidelijke lead = coördinatiechaos, dubbele rekeningen, gemiste stappen.",
+          facilitatorCommentary: "Twee externe partijen aansturen zonder duidelijke lead = coördinatiechaos, dubbele rekeningen, gemiste stappen. Verleidelijk voelt het als sterke leiding — dat is precies de val.",
           lessonLearned: "Één lead, altijd.",
         },
         {
@@ -1314,6 +1358,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     // ── R3 decision ──
     {
       afterRoundIndex: 2,
+      authorId: "d3-r3-comms-meldingen",
       prompt: "Na R3 — Communicatie- en meldingsregie: transparant of voorzichtig?",
       perRole: true,
       options: [
@@ -1337,15 +1382,15 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "'Geen commentaar' — regie via stilte",
           allowedRole: "head_of_comms",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: -2, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: -2, KOS: 1 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Stilte wordt uitgelegd als bevestiging én laat pers de invulling doen — bijna altijd de slechtste keuze.",
+          facilitatorCommentary: "Stilte wordt uitgelegd als bevestiging én laat pers de invulling doen — bijna altijd de slechtste keuze. Verleidelijk want kost niets nu.",
           lessonLearned: "Stilte is ook een boodschap, meestal de verkeerde.",
         },
         {
           label: "Preventief interview met sympathiek regionaal medium",
           allowedRole: "head_of_comms",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: 1, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: 1, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Kan werken maar riskeert dat andere media het als voorkeurstoegang zien — reputatie-neutraal maar juridisch kwetsbaar.",
           lessonLearned: "Alle media in principe gelijk behandelen.",
@@ -1362,7 +1407,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Bewuste keuze: melding aanvullen tot laatste moment (donderdag 08:42)",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 1, BC: 0, JUR: 1, VER: 0, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 1, BC: 1, JUR: 1, VER: 0, KOS: 0 },
           qualityRank: "good",
           facilitatorCommentary: "Meer feiten in de melding is beter — mits je écht klokvast blijft en verzending gepland is.",
           lessonLearned: "Uitstel = ok mits deadline gerespecteerd wordt.",
@@ -1370,7 +1415,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "NCSC-melding indienen ondanks verstreken 24u",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: 1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 1, BC: 0, JUR: 1, VER: 1, KOS: 0 },
           qualityRank: "good",
           facilitatorCommentary: "Te laat melden is minder erg dan niet melden; feitelijk uitleg voegt je positie waarde toe.",
           lessonLearned: "Alsnog melden na miss is standaardpraktijk, niet uitzondering.",
@@ -1378,9 +1423,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "NCSC-melding overslaan omdat 24u al voorbij is",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -1, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -1, KOS: 1 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Overslaan is een handhavingsopening en een reputatiesignaal richting NCSC waar je later mee te maken krijgt.",
+          facilitatorCommentary: "Overslaan is een handhavingsopening en een reputatiesignaal richting NCSC waar je later mee te maken krijgt. Verleidelijk want geen telefoontje nu.",
           lessonLearned: "Miss melden is altijd beter dan uitstellen.",
         },
         // Ops manager
@@ -1395,15 +1440,15 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Woensdag proberen terug naar Magister — nieuwe tenant",
           allowedRole: "ops_manager",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 0, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 0, KOS: 1 },
           qualityRank: "poor",
-          facilitatorCommentary: "Vroeg terugkeren riskeert een tweede storing en verwarring; noodrooster is ongemakkelijk maar zeker.",
+          facilitatorCommentary: "Vroeg terugkeren riskeert een tweede storing en verwarring; noodrooster is ongemakkelijk maar zeker. Verleidelijk want lijkt op normaal.",
           lessonLearned: "Vroegtijdig terugschakelen is een klassieke crisisfout.",
         },
         {
           label: "Toetsweek 46 doorschuiven naar week 48",
           allowedRole: "ops_manager",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: 0 },
           qualityRank: "good",
           facilitatorCommentary: "Realistisch, geeft docenten en leerlingen rust; verlengt de doorlooptijd van de crisis maar is verdedigbaar.",
           lessonLearned: "Onderwijskalender wijzigen is geen falen, is aanpassing.",
@@ -1411,9 +1456,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Toetsweek 46 gewoon doorlaten gaan",
           allowedRole: "ops_manager",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: 2 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Toetsen zonder betrouwbare cijferregistratie = ongeldige toetsafname + herzieningsroute die veel duurder is.",
+          facilitatorCommentary: "Toetsen zonder betrouwbare cijferregistratie = ongeldige toetsafname + herzieningsroute die veel duurder is. Verleidelijk want geen extra planning nu.",
           lessonLearned: "Onderwijsintegriteit weegt zwaarder dan schema.",
         },
         // HR
@@ -1428,7 +1473,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Alleen teamleiders informeren, zij briefen docenten",
           allowedRole: "hr_lead",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: 1 },
           qualityRank: "good",
           facilitatorCommentary: "Cascade werkt, mits teamleiders elk voldoende tijd nemen — controleer op dag 2.",
           lessonLearned: "Cascade-communicatie moet je actief bewaken.",
@@ -1436,15 +1481,15 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Op-de-vlakte-houden — 'niet verontrusten'",
           allowedRole: "hr_lead",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: -2, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: -2, KOS: 2 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Docenten die het via ouders horen, verliezen vertrouwen in het bestuur — precies verkeerde signaal.",
+          facilitatorCommentary: "Docenten die het via ouders horen, verliezen vertrouwen in het bestuur — precies verkeerde signaal. Verleidelijk want geen crisiscommunicatie-inzet nodig.",
           lessonLearned: "Onzekerheid onder personeel groeit sneller dan onder ouders.",
         },
         {
           label: "Docenten vrijaf geven zolang Magister uit is",
           allowedRole: "hr_lead",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: 2 },
           qualityRank: "poor",
           facilitatorCommentary: "Grof middel — leerlingen komen wel naar school en verwachten onderwijs.",
           lessonLearned: "Personele reactie past bij operationele werkelijkheid.",
@@ -1460,6 +1505,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     // ── R4 decision ──
     {
       afterRoundIndex: 3,
+      authorId: "d4-r4-losgeld",
       prompt: "Na R4 — Losgeld: betalen, onderhandelen, of weigeren?",
       perRole: true,
       options: [
@@ -1492,9 +1538,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "€340k betalen buiten Univé om — snelheid boven dekking",
           allowedRole: "ceo",
-          outcomeVector: { CONT: -1, FOR: -1, BC: 1, JUR: -2, VER: -2, KOS: -2 },
+          outcomeVector: { CONT: -1, FOR: -1, BC: 1, JUR: -2, VER: -2, KOS: 0 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Alle risico's aannemen zonder dekking = onbestuurbaar besluit voor een MKB+-schoolvereniging.",
+          facilitatorCommentary: "Alle risico's aannemen zonder dekking = onbestuurbaar besluit voor een MKB+-schoolvereniging. Verleidelijk want geen polis-administratie nu.",
           lessonLearned: "Buiten polis om is bijna altijd het slechtste pad.",
         },
         // CISO — coupling: forensiek voor Univé
@@ -1510,7 +1556,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Beperkte scope-verklaring — snelheid boven volledigheid",
           allowedRole: "ciso",
-          outcomeVector: { CONT: 0, FOR: -1, BC: 0, JUR: -1, VER: 0, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: -1, BC: 0, JUR: -1, VER: 0, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Univé kan claim beperken op basis van onvolledige documentatie — kortere termijn wint, langere termijn verliest.",
           lessonLearned: "Onvolledige documentatie is technisch schuld.",
@@ -1544,25 +1590,25 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Cashflow-buffer opzetten voor onvoorziene kosten",
           allowedRole: "cfo",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: 2 },
           qualityRank: "good",
-          facilitatorCommentary: "Voorzichtige financiële hygiëne — kost een klein rendement, wint bewegingsruimte.",
+          facilitatorCommentary: "Voorzichtige financiële hygiëne — wint bewegingsruimte, reserveert maar besteedt niet.",
           lessonLearned: "Cash-planning in crisis is discipline.",
         },
         {
           label: "Snelle betaling voorbereiden — 'voor de zekerheid'",
           allowedRole: "cfo",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: -1, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: 1, KOS: 2 },
           qualityRank: "poor",
-          facilitatorCommentary: "Voorbereiding is prima, signaal aan CEO 'we kunnen morgen betalen' zet besluitproces onder verkeerde druk.",
+          facilitatorCommentary: "Voorbereiding is prima, signaal aan CEO 'we kunnen morgen betalen' zet besluitproces onder verkeerde druk. Verleidelijk want geeft schijn van executie-klaar.",
           lessonLearned: "Voorbereiden ≠ voorstellen.",
         },
         {
           label: "Univé-onderhandelaar buiten spel zetten — zelf onderhandelen",
           allowedRole: "cfo",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: -2, VER: -1, KOS: -2 },
+          outcomeVector: { CONT: 1, FOR: 0, BC: -1, JUR: -2, VER: -1, KOS: -2 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Zelf onderhandelen tegen gedreven ransomware-actor = polisdekking weg + slechtere uitkomst dan professionals.",
+          facilitatorCommentary: "Zelf onderhandelen tegen gedreven ransomware-actor = polisdekking weg + slechtere uitkomst dan professionals. Verleidelijk want directe controle-illusie.",
           lessonLearned: "Onderhandelen is een specialisme dat je niet improviseert.",
         },
         // Legal
@@ -1585,7 +1631,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "AP-klachtreactie uitstellen tot na losgeld-besluit",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: -1, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Parallelle sporen moeten parallel lopen; uitstel geeft signaal 'wij nemen klacht niet serieus'.",
           lessonLearned: "Parallel werken is discipline.",
@@ -1593,7 +1639,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Juridisch: 'wij betalen niet' zonder proces vastleggen",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: -1, VER: 1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: -1, VER: 1, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Principebesluit zonder procesvastlegging = later kritiek 'jullie hebben niet eens overwogen' — beter is beslisproces documenteren.",
           lessonLearned: "Verantwoording = beslisproces documenteren.",
@@ -1609,6 +1655,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     // ── R5 decision ──
     {
       afterRoundIndex: 4,
+      authorId: "d5-r5-ketenverbreding",
       prompt: "Na R5 — Ketenverbreding: LoonBureau, AOb, PMR-onrust",
       perRole: true,
       options: [
@@ -1633,7 +1680,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "LoonBureau doorverwijzen naar onze verzekeraar",
           allowedRole: "ceo",
-          outcomeVector: { CONT: -1, FOR: -1, BC: -1, JUR: -1, VER: -2, KOS: 0 },
+          outcomeVector: { CONT: -1, FOR: -1, BC: -1, JUR: -1, VER: -2, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Passief afhandelen = signaal 'wij nemen geen verantwoordelijkheid' — reputatie- en contractrisico.",
           lessonLearned: "Verantwoordelijkheid dragen ≠ juridisch schuld erkennen.",
@@ -1641,9 +1688,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "LoonBureau ontkennen betrokkenheid — 'apart incident'",
           allowedRole: "ceo",
-          outcomeVector: { CONT: -1, FOR: -2, BC: -1, JUR: -2, VER: -2, KOS: -1 },
+          outcomeVector: { CONT: -1, FOR: -2, BC: -1, JUR: -2, VER: -2, KOS: 2 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Feitelijk incorrect (Eye Security heeft koppeling bevestigd) én reputatie-destructief zodra het uitkomt.",
+          facilitatorCommentary: "Feitelijk incorrect (Eye Security heeft koppeling bevestigd) én reputatie-destructief zodra het uitkomt. Verleidelijk want kortste route.",
           lessonLearned: "Feit ontkennen is later dubbel duur.",
         },
         // HR
@@ -1659,15 +1706,15 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "PMR-gesprek verzetten naar volgende week",
           allowedRole: "hr_lead",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: -1, KOS: 2 },
           qualityRank: "poor",
-          facilitatorCommentary: "Uitstel voedt onzekerheid en verminder herinvoer-tempo; wordt duur.",
+          facilitatorCommentary: "Uitstel voedt onzekerheid en vermindert herinvoer-tempo; wordt duur. Verleidelijk want de HR-agenda blijft leeg vandaag.",
           lessonLearned: "In crisis werken PMR-relaties op snelheid.",
         },
         {
           label: "Overuren erkennen zonder concrete compensatie",
           allowedRole: "hr_lead",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 1, KOS: 1 },
           qualityRank: "good",
           facilitatorCommentary: "Symbolische erkenning zonder actie werkt kortdurend; wordt kwetsbaar na een week.",
           lessonLearned: "Erkenning zonder actie is een tijdelijk plaster.",
@@ -1675,16 +1722,16 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Overuren afdoen als 'ligt in normale werktijd'",
           allowedRole: "hr_lead",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -2, JUR: -1, VER: -2, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 1, BC: -2, JUR: -1, VER: -2, KOS: 2 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Verstoort docent-medewerking én creëert AOb-verhaal-2. Bekende MKB+-misstap.",
+          facilitatorCommentary: "Verstoort docent-medewerking én creëert AOb-verhaal-2. Bekende MKB+-misstap. Verleidelijk want geen HR-actie nu.",
           lessonLearned: "Personele kosten in crisis erkennen, altijd.",
         },
         // Head of comms
         {
           label: "AOb-statement inhoudelijk beantwoorden — feit erkennen waar terecht",
           allowedRole: "head_of_comms",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: 2, KOS: -1 },
+          outcomeVector: { CONT: 1, FOR: 0, BC: 0, JUR: 1, VER: 2, KOS: -1 },
           qualityRank: "best",
           facilitatorCommentary: "Erkennen wat terecht is + feit boven emotie waar niet terecht = geloofwaardig; positioneert jullie als volwassen partij.",
           lessonLearned: "Vakbond-statement is soms een uitgestoken hand.",
@@ -1692,7 +1739,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "AOb-statement negeren — reageert op zichzelf uit",
           allowedRole: "head_of_comms",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: -1, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Kan werken maar riskeert dat AOb via andere kanalen doorpakt; risico-tolerant maar niet strategisch.",
           lessonLearned: "Zwijgen is een risico-oordeel, geen strategie.",
@@ -1700,9 +1747,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "AOb defensief weerleggen — 'ongefundeerd'",
           allowedRole: "head_of_comms",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: -2, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: -2, KOS: 2 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Openlijk conflict met vakbond in crisis = verhaal wordt 'school valt vakbond aan' — bijna altijd verlies.",
+          facilitatorCommentary: "Openlijk conflict met vakbond in crisis = verhaal wordt 'school valt vakbond aan' — bijna altijd verlies. Verleidelijk want directe pushback.",
           lessonLearned: "Conflict-escalatie in crisis is bijna nooit strategisch.",
         },
         {
@@ -1725,23 +1772,23 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Half-half deze week — Magister waar mogelijk",
           allowedRole: "ops_manager",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 0, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 0, KOS: 2 },
           qualityRank: "poor",
-          facilitatorCommentary: "Twee sporen tegelijk = fouten, ontstemde docenten, inconsistente ouderdata.",
+          facilitatorCommentary: "Twee sporen tegelijk = fouten, ontstemde docenten, inconsistente ouderdata. Verleidelijk want klinkt als 'pragmatisch'.",
           lessonLearned: "Eenduidigheid boven schijnbare efficiëntie.",
         },
         {
           label: "Terug naar Magister zodra tenant werkt — donderdag al",
           allowedRole: "ops_manager",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -2, JUR: 0, VER: 1, KOS: 1 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Terugkeer forceren = tweede storing incalculeren + docenten kwaad krijgen op herinvoer met korte deadline.",
+          facilitatorCommentary: "Terugkeer forceren = tweede storing incalculeren + docenten kwaad krijgen op herinvoer met korte deadline. Verleidelijk want 'we zijn snel terug bij normaal'.",
           lessonLearned: "Vroeg terugschakelen is de klassieke crisisfout.",
         },
         {
           label: "Rapportvergadering donderdag doorschuiven naar week 47",
           allowedRole: "ops_manager",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 1, KOS: -1 },
           qualityRank: "best",
           facilitatorCommentary: "Formeel besluit vermijdt half-half en communiceert helderheid richting ouders.",
           lessonLearned: "Formele planningswijziging is besluit, geen falen.",
@@ -1757,6 +1804,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     // ── R6 decision ──
     {
       afterRoundIndex: 5,
+      authorId: "d6-r6-verankering",
       prompt: "Na R6 — Verankering: welke governance-verandering wordt schriftelijk?",
       perRole: true,
       options: [
@@ -1764,7 +1812,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Concreet governance-pakket met eigenaar, deadline en budget voor RvT",
           allowedRole: "ceo",
-          outcomeVector: { CONT: 1, FOR: 1, BC: 2, JUR: 2, VER: 2, KOS: 1 },
+          outcomeVector: { CONT: 1, FOR: 1, BC: 2, JUR: 2, VER: 2, KOS: -1 },
           qualityRank: "best",
           facilitatorCommentary: "Enige moment waarop RvT écht luistert naar IT-investering. Momentum benutten. Concreet = beklonken.",
           lessonLearned: "Post-crisis momentum is een raam van 6 weken.",
@@ -1773,7 +1821,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Verhaal aan RvT, actielijst 'volgt binnen kwartaal'",
           allowedRole: "ceo",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 1, VER: 0, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Zonder concrete deadlines verwatert het naar business-as-usual.",
           lessonLearned: "Vage acties = geen acties.",
@@ -1782,7 +1830,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Externe consultant vragen om governance-plan te schrijven",
           allowedRole: "ceo",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 1, VER: 0, KOS: -2 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 1, VER: 0, KOS: 0 },
           qualityRank: "good",
           facilitatorCommentary: "Extern kan versnellen, kost geld, wint kwaliteit. Belangrijk: bestuurlijk eigenaarschap houden.",
           lessonLearned: "Externe consultant = katalysator, niet eigenaar.",
@@ -1790,9 +1838,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "'We hebben het goed gedaan' — actielijst uitstellen",
           allowedRole: "ceo",
-          outcomeVector: { CONT: -1, FOR: -1, BC: -2, JUR: -2, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: -1, FOR: -1, BC: -2, JUR: -2, VER: -1, KOS: 2 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Grootste verliesrisico — volgende crisis is dezelfde crisis.",
+          facilitatorCommentary: "Grootste verliesrisico — volgende crisis is dezelfde crisis. Verleidelijk want geen extra werk nu.",
           lessonLearned: "Zonder verankering herhaalt het patroon zich.",
           leadsTo: "outcome:escalerend",
         },
@@ -1809,7 +1857,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Rapport 'lessen geleerd' zonder investeringsvoorstel",
           allowedRole: "ciso",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 1, BC: -1, JUR: 0, VER: 0, KOS: 1 },
           qualityRank: "poor",
           facilitatorCommentary: "Analyse zonder aankoop = plank-materiaal.",
           lessonLearned: "Rapport zonder acties is theater.",
@@ -1825,9 +1873,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Alles verplaatsen naar cloud — 'we lopen achter'",
           allowedRole: "ciso",
-          outcomeVector: { CONT: 0, FOR: -1, BC: -1, JUR: -1, VER: 0, KOS: -2 },
+          outcomeVector: { CONT: 0, FOR: -1, BC: -1, JUR: -1, VER: 1, KOS: 0 },
           qualityRank: "poor",
-          facilitatorCommentary: "Grote transformatie in crisis-nasleep = tweede crisis binnen half jaar. Fase eerst hardening, dan strategie.",
+          facilitatorCommentary: "Grote transformatie in crisis-nasleep = tweede crisis binnen half jaar. Fase eerst hardening, dan strategie. Verleidelijk want maakt indruk op RvT.",
           lessonLearned: "Herstel + hardening eerst, transformatie later.",
         },
         // IT-manager
@@ -1843,15 +1891,15 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "MSP wisselen naar een grotere partij (bijv. landelijk)",
           allowedRole: "it_manager",
-          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 0, KOS: -2 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 1, KOS: 1 },
           qualityRank: "poor",
-          facilitatorCommentary: "Migratie in nasleep = tweede risico. Behalve als WestNet aantoonbaar niet kán leveren; feit is nu dat ze ondersteunend waren tijdens crisis.",
+          facilitatorCommentary: "Migratie in nasleep = tweede risico. Behalve als WestNet aantoonbaar niet kán leveren; feit is nu dat ze ondersteunend waren tijdens crisis. Verleidelijk want geeft schijn van doortastendheid.",
           lessonLearned: "Emotie-gedreven leveranciers-wisseling is duur.",
         },
         {
           label: "IT-team uitbreiden — junior ICT-medewerker in dienst",
           allowedRole: "it_manager",
-          outcomeVector: { CONT: 1, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: -2 },
+          outcomeVector: { CONT: 1, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: 0 },
           qualityRank: "good",
           facilitatorCommentary: "Vermindert Rob's single-point-of-knowledge risico. Kost geld, wint continuïteit.",
           lessonLearned: "Single-point-of-knowledge is een organisatorisch risico.",
@@ -1859,9 +1907,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "Volledig laten zoals het is — MSP redt het wel",
           allowedRole: "it_manager",
-          outcomeVector: { CONT: -1, FOR: -1, BC: -2, JUR: -1, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: -1, FOR: -1, BC: -2, JUR: -1, VER: -1, KOS: 2 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Business-as-usual = volgende crisis identiek.",
+          facilitatorCommentary: "Business-as-usual = volgende crisis identiek. Verleidelijk want geen extra investering nodig.",
           lessonLearned: "Status-quo is een besluit met risico.",
         },
         // Legal
@@ -1877,15 +1925,15 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "AP-follow-up minimalistisch — geen extra info",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: -1, KOS: 0 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: -1, KOS: 1 },
           qualityRank: "poor",
-          facilitatorCommentary: "Minimale medewerking wekt indruk 'zij verbergen iets' — riskant voor art. 32-inspectie.",
+          facilitatorCommentary: "Minimale medewerking wekt indruk 'zij verbergen iets' — riskant voor art. 32-inspectie. Verleidelijk want minder juridisch tijdverlies.",
           lessonLearned: "Ruimhartige medewerking positioneert je goed.",
         },
         {
           label: "Extern advocatenkantoor inschakelen voor AP-traject",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: 0, KOS: -2 },
+          outcomeVector: { CONT: 1, FOR: 0, BC: 0, JUR: 1, VER: 0, KOS: -1 },
           qualityRank: "good",
           facilitatorCommentary: "Externe expertise voor gevoelig traject — kost geld, verstandig als eigen team beperkt in AP-praktijk is.",
           lessonLearned: "Externe expertise voor specialistisch handhavingstraject.",
@@ -1893,9 +1941,9 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         {
           label: "AP-vervolgtraject onderschatten — 'komt vanzelf wel goed'",
           allowedRole: "legal",
-          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -2, KOS: -1 },
+          outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -2, KOS: 2 },
           qualityRank: "wrong",
-          facilitatorCommentary: "Boete-risico op art. 32-tekortkoming voor essentiële entiteit is reëel; onderschatten wordt duur.",
+          facilitatorCommentary: "Boete-risico op art. 32-tekortkoming voor essentiële entiteit is reëel; onderschatten wordt duur. Verleidelijk want geen legal-inzet nu.",
           lessonLearned: "AP-vervolg is nooit routine.",
         },
         // Implicit
@@ -1941,6 +1989,171 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
   ],
 }
 
+// Phase 5 — 6 authored ruis-injects (2 feit, 2 aanname, 2 fabel) matching the
+// schoolvereniging world. Facilitator kan deze via het runtime-panel afvuren
+// tijdens de discussie. Puur context — nooit gescoord.
+const schoolverenigingInjectLibrary: PremadeInject[] = [
+  {
+    id: "plib_msp_second_system",
+    label: "MSP-status update — 2e systeem geïsoleerd",
+    channel: "system_alert",
+    urgency: "medium",
+    classification: "feit",
+    senderName: "WestNet ICT — SOC",
+    title: "MSP-update: tweede systeem preventief geïsoleerd",
+    content:
+      "Update WestNet ICT — 14:22. Naast FS-01 hebben we ook FS-02 (backup file server, locatie Oost) preventief van het netwerk gehaald na verdachte SMB-activiteit. Geen encryptie waargenomen op FS-02. Geen impact op leerlingregistratie op dit moment. Volgende update over ~30 minuten of eerder bij escalatie.",
+    facilitatorNote: "Feit — inzetten wanneer team te lang op R1-symptomen blijft hangen; MSP levert een concrete, controleerbare stap.",
+  },
+  {
+    id: "plib_om_aangifte",
+    label: "OM: aangifte in behandeling genomen",
+    channel: "email",
+    urgency: "medium",
+    classification: "feit",
+    senderName: "Openbaar Ministerie — Team Cybercrime",
+    title: "Bevestiging aangifte cyberincident",
+    content:
+      "Geachte bestuurder, wij bevestigen ontvangst van uw aangifte inzake het cyberincident (ref. OM-CYB-2024-1147). Uw zaak wordt in behandeling genomen door team Cybercrime Noord-Oost. Een contactpersoon zal binnen 5 werkdagen contact opnemen. In afwachting daarvan verzoeken wij u forensische data ongewijzigd te bewaren. Met vriendelijke groet.",
+    targetRoles: ["legal", "ceo"],
+    facilitatorNote: "Feit — externe bevestiging die juridische track legitimeert; helpt legal-rol te activeren als die achterblijft.",
+  },
+  {
+    id: "plib_hr_gerucht",
+    label: "HR-tip — collega X hoorde iets over ontslag",
+    channel: "whatsapp",
+    urgency: "low",
+    classification: "aanname",
+    senderName: "HR-medewerker (Sanne)",
+    title: "Tip vanuit HR — gerucht rondom personeelsgevolgen",
+    content:
+      "Hoi, sorry voor het late berichtje. Ik hoorde net van een collega dat er iemand heeft laten vallen dat 'ze denken dat mensen ontslagen gaan worden' vanwege de hack. Weet niet of dit hard is of gewoon paniek. Wilde het even doorgeven zodat je er van weet. Groet, Sanne",
+    targetRoles: ["hr_lead"],
+    facilitatorNote: "Aanname — test of HR-rol dit oppakt als signaal-om-te-checken i.p.v. als feit door te sturen.",
+  },
+  {
+    id: "plib_ouder_tiktok",
+    label: "Ouder belt — 'mijn zoon zei op TikTok...'",
+    channel: "phone",
+    urgency: "medium",
+    classification: "aanname",
+    senderName: "Ouder — mevr. Aksoy",
+    title: "Ouder belt bezorgd over TikTok-verhaal",
+    content:
+      "Mevr. Aksoy (ouder klas 3B): 'Mijn zoon Emir zei net dat er op TikTok een filmpje rondgaat waarin een leerling zegt dat álle cijfers gehackt zijn en dat kinderen niet kunnen overgaan. Klopt dat? Wat moet ik tegen hem zeggen?' — noteert nummer voor terugbellen.",
+    targetRoles: ["head_of_comms"],
+    facilitatorNote: "Aanname — bron is één ouder die één kind citeert; verleiding is om direct te reageren op onbevestigd signaal.",
+  },
+  {
+    id: "plib_linkedin_utrecht",
+    label: "Vage LinkedIn-post — 'grote hack scholen Utrecht'",
+    channel: "news",
+    urgency: "low",
+    classification: "fabel",
+    senderName: "LinkedIn — anonieme post",
+    title: "LinkedIn-gerucht over 'grote hack bij scholen in Utrecht'",
+    content:
+      "Screenshot van een LinkedIn-post door 'CyberWatchdog NL' (niet-geverifieerd account, 340 volgers): 'Bronnen melden een grote ransomware-aanval bij een schoolgroep in Utrecht — meerdere locaties platgelegd, ouderdata mogelijk buit. Meer info volgt.' — Onze vereniging zit in Noord-Oost, niet Utrecht. Geen link naar bron.",
+    targetRoles: ["head_of_comms"],
+    facilitatorNote: "Fabel — verkeerde regio, anoniem account. Test of team dit als niet-relevant kan classificeren of erin trapt.",
+  },
+  {
+    id: "plib_concierge_iemand_zei",
+    label: "WhatsApp conciërge — 'iemand zei dat...'",
+    channel: "whatsapp",
+    urgency: "low",
+    classification: "fabel",
+    senderName: "Conciërge Willem (loc. Noord)",
+    title: "WhatsApp — 'iemand zei dat de rectrix aftreedt'",
+    content:
+      "Ha, gehoord van een schoonmaker in gebouw B dat iemand op het parkeerterrein zei dat 'de rectrix vanavond zou aftreden'. Weet niet wie het zei maar wilde het even melden. Groetjes W.",
+    facilitatorNote: "Fabel — meta-gerucht (iemand zei dat iemand zei). Perfect voor BOB-training: hoe checken we bron?",
+  },
+]
+
+// Phase 10 — per-role opening briefings. Each role gets mandate + t=0 situatie +
+// wat ze nog NIET weten (rendered at session start). playbookGaps: dingen die
+// het IR-plan niet dekt en die dit scenario echt exerciseert.
+const schoolverenigingRoleBriefings: Partial<Record<Role, RoleBriefing>> = {
+  ceo: {
+    text:
+      "Jij bent bestuurder van Onderwijsvereniging Noord-Oost. Vandaag opent de eerste schooldag na de herfstvakantie. Je krijgt ambigue signalen dat 'Magister traag doet' — je weet nog niet dat er een Play-ransomware-encryptie loopt op FS-01/02 en dat er data is ge-exfiltreerd. Wat je vooral niet weet: de MSP-alert van 08:42 is de sleutel, en je IT-coördinator Rob de Vries zit in Portugal.",
+    playbookGaps: [
+      "Geen procedure voor crisismandaat wanneer de enige IT-kenner onbereikbaar is",
+      "Geen communicatiesjabloon voor ouders bij grootschalig datalek",
+      "Geen expliciete afspraak wie AP-vervolg-inspectie leidt",
+    ],
+  },
+  ciso: {
+    text:
+      "Jij bent CISO en coördineert de incidentrespons. Je weet dat WestNet monitoring een low-severity alert heeft geplaatst op FS-01, maar er is nog geen ticket. Wat je nog niet weet: het is ransomware met exfiltratie, en de MSP-SLA dekt geen incidentresponse op dit niveau. Je moet vandaag beslissen of je Eye Security al vroeg activeert — vóór volledige bevestiging.",
+    playbookGaps: [
+      "Geen contract met Eye Security-lead — retainer moet expliciet worden geactiveerd",
+      "Netwerk-isolatie procedure ligt bij MSP, niet intern",
+      "Geen forensische baseline vastgelegd van FS-01/02 vóór crisis",
+    ],
+  },
+  cfo: {
+    text:
+      "Jij bent CFO en bewaakt de financiële impact. Je hebt sinds 2022 een cyberpolis via Univé Zakelijk (polislimit €500.000) — maar de exacte uitsluitingsclausules zijn nooit precies gelezen. De 24u-melding aan Univé begint bij detectie, niet bij bevestiging. Wat je nog niet weet: de aanvaller vraagt €680k in Monero en de gefaalde restore in R4 zal de losgeld-vraag verzwaren.",
+    playbookGaps: [
+      "Univé-uitsluitingsclausules nooit geïnventariseerd",
+      "Geen cashflow-scenario voor 5 werkdagen zonder Magister-incasso",
+      "Geen procedure voor total-cost-of-incident-tracking",
+    ],
+  },
+  legal: {
+    text:
+      "Jij bent verantwoordelijk voor compliance. Je bewaakt de AVG art. 33 (72u AP-melding) en NIS2 art. 23 (24u NCSC-melding). Wat je nog niet expliciet weet: het Magister-contract heeft een 48u breach-clause (art. 14.3) die nog nooit is ingeroepen, en er is een AP-klacht van een betrokkene op komst.",
+    playbookGaps: [
+      "Meldplichtklok start moment: nooit formeel vastgelegd",
+      "Contractuele meldingsclausules richting leveranciers: niet geïnventariseerd",
+      "Geen sjabloon voor art. 32-inspectie verweer",
+    ],
+  },
+  head_of_comms: {
+    text:
+      "Jij regisseert interne en externe communicatie. Je weet dat ouders en docenten vandaag verwarrende signalen krijgen; je weet nog niet dat RTV Oost morgen een reactie eist vóór 13:30 en dat de AOb je later in de week publiek noemt. Bestuurder moet je snel briefen, want de eerstelijns communicators zijn de docenten — hun onzekerheid vergroot het externe verhaal.",
+    playbookGaps: [
+      "Geen media-training bestuur voor cybercrisis-specifiek",
+      "Geen communicatiesjabloon voor 4000 ouders in Magister-berichten + website",
+      "Geen protocol voor omgaan met vakbond-statement mid-crisis",
+    ],
+  },
+  hr_lead: {
+    text:
+      "Jij zorgt voor medewerkers, welzijn en de PMR-relatie. Docenten worden vandaag onzeker: klassenlijsten laden niet, geruchten razen door WhatsAppgroepen. Wat je nog niet weet: later deze week vraagt de PMR expliciet om compensatie voor cijfer-herinvoer (4–6 uur per docent) en zal je snelheid van reageren bepalen of docenten meebewegen of niet.",
+    playbookGaps: [
+      "Geen crisiscommunicatie-protocol voor docenten via teamleiders",
+      "Geen concrete compensatieregeling voor overuren in cybercrisis",
+      "Geen HR-verklaring naar OR/PMR als sjabloon paraat",
+    ],
+  },
+  ops_manager: {
+    text:
+      "Jij houdt primaire processen draaiend. Wat betekent 'FS-01 offline' operationeel? Roosters, cijferregistratie, leerlingzorgdossiers hangen ervan. Wat je nog niet weet: er komt een noodrooster op papier voor 5 werkdagen én een toetsweek-verschuiving.",
+    playbookGaps: [
+      "Geen papieren fallback-rooster voor 5 werkdagen paraat",
+      "Geen procedure voor toetsweek-verschuiving met formeel bestuursbesluit",
+      "Geen backup-mandaat voor teamleiders bij crisis",
+    ],
+  },
+  it_manager: {
+    text:
+      "Jij (of Rob's vervanging) bent verantwoordelijk voor de technische kant. Rob de Vries zit in Portugal — de enige persoon met écht diepe kennis van finance-koppeling en het leerlingregistratiesysteem. Wat je nog niet weet: de eerste cold-restore faalt woensdag, en de tweede backup-set landt gedeeltelijk. De back-up-restoretest was jaren geleden voor het laatst volledig gedraaid.",
+    playbookGaps: [
+      "Back-up-restore procedure onbekend voor Magister-cloud-tenant",
+      "Geen documentatie van FS-01/02 configuratie voor externe hulp",
+      "Single-point-of-knowledge risico bij Rob nooit formeel geagendeerd",
+    ],
+  },
+}
+
 export function schoolverenigingScenario(): ScenarioGraph {
-  return planToGraph(plan)
+  const g = planToGraph(plan, { publishStatus: 'published' })
+  return {
+    ...g,
+    injectLibrary: schoolverenigingInjectLibrary,
+    roleBriefings: schoolverenigingRoleBriefings,
+  }
 }

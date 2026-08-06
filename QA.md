@@ -2,6 +2,23 @@
 
 Walk this after every deploy. Every step names the specific bug it guards.
 
+## Third-pass acceptance (session 3+)
+
+- [ ] **Advance through every round without the "end session" button appearing early.** From REVIEW of any round N where N < total, the header button reads `Start ronde N+1`, not `Sessie afronden`. Click it — the graph state moves forward. This has been reported three times; the test `lib/__tests__/next-action.test.ts` guards it.
+- [ ] **Options rendered = options authored.** In the showcase, R1 authored 4 options per role for CEO/CISO/IT-manager/Legal — a participant sees 4. The test `lib/__tests__/no-option-cap.test.ts` guards it.
+- [ ] **Classification chip on every inject.** Feit / aanname / fabel appears low-key next to each inject header. No colour-coding stronger than muted-foreground.
+- [ ] **Opening briefing on session start.** Each participant sees their primary role's briefing + IR playbook gaps at t=0. Inherited-role briefings appear sequentially with the hand-off wording. Once dismissed, the briefing is retrievable from a collapsed panel mid-session.
+- [ ] **Facilitator sturing per round.** In the round card in the builder, "Facilitator sturing" textarea is populated. On the dashboard during that round, the facilitator sees the sturing text; participants never do. Payload test `lib/__tests__/facilitator-only-fields.test.ts` guards leaks.
+- [ ] **Premade inject library.** During DISCUSSION, a facilitator panel shows the 6 seeded noise-injects grouped by classification with a role filter. Firing one logs on the timeline with round + phase + timestamp. Scoring does not move. Test `lib/__tests__/inject-library.test.ts` guards scoring identity.
+- [ ] **Participant view controls.** Per-inject hide + set-aside ("afgehandeld") + classification filter. Hidden counter with "Toon alles" restore. Never affects scoring or other participants.
+- [ ] **Round-review scoring narrative — facilitator-only.** During REVIEW: a facilitator-only panel names each submitted decision in plain Dutch ("**Alice (CISO)** koos «Eye Security-retainer activeren». Dit gaf +2 op Forensiek en −2 op Kosten. ...") plus omissions (meldplicht not filed, retainer not activated, decisions skipped). Payload test guards participant leaks.
+- [ ] **Decision card at-a-glance.** In the builder, clicking a DecisionNode shows a summary block with role chips + coloured pill per role showing option count (green if ≥ 4, amber if 1-3, red if 0). Setup-inject link visible with warning if none exists. One-line collapsed rows expand-one-at-a-time.
+- [ ] **AI wizard config form.** All fields authorable: client name, sector, size, IT arrangement, rounds, injects/round, options/role/round, facts/noise slider, roles, regulatory regime, special conditions. Recorded seed shown after generation.
+- [ ] **AI wizard framework enforcement.** Generating a scenario that would violate any of the 10 rules in `GENERATION-FRAMEWORK.md` triggers repair attempts; if all attempts fail, the wizard returns an error rather than a broken graph.
+- [ ] **Showcase scenario passes every framework rule.** The test in `lib/graph/__tests__/schoolvereniging-scenario.test.ts::FRAMEWORK STATUS` asserts `validateFramework` returns zero failures. Every framework rule is satisfied by the authored showcase.
+
+---
+
 ## Setup
 
 1. `pnpm dev` — visit `http://localhost:3000`.

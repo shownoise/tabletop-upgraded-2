@@ -157,6 +157,23 @@ export const ROLE_META: Record<Role, RoleMeta> = {
 // warns and the coverage metric drops.
 export const MINIMUM_STAFFING: readonly Role[] = ['ceo', 'ciso', 'legal'] as const
 
+// Canonical role display order used everywhere in the builder and participant UI.
+// Reasoning: mirrors the natural "boardroom seating" that facilitators expect —
+// leadership first (CEO), then security & finance, then legal & comms, then HR
+// and operations, and finally the IT lead. Keeping one source of truth prevents
+// the mismatched orderings that participants noticed between the setup form,
+// the builder inspector and the play view.
+export const ROLE_ORDER: readonly Role[] = [
+  'ceo',
+  'ciso',
+  'cfo',
+  'legal',
+  'head_of_comms',
+  'hr_lead',
+  'ops_manager',
+  'it_manager',
+] as const
+
 export type SimulationMode = 'event' | 'training'
 
 // Canonical four-phase round model. Every round has these four phases in this order.
@@ -432,6 +449,9 @@ export interface Inject {
   deliverySeconds?: number
   // BOB-training: how reliable is this info? Ground truth — hidden from participants during play,
   // revealed in the review phase.
+  // @deprecated Phase 2 — legacy field kept for backwards compat with older
+  // scenario data. New scenarios use `classification` on InjectNodeData
+  // ('feit' | 'aanname' | 'fabel'). The builder no longer surfaces this.
   reliability?: InjectReliability
   // Optional per-span ground truth for annotation-level scoring (Phase D.11).
   groundTruthAnnotations?: InjectSpanAnnotation[]
@@ -443,6 +463,12 @@ export interface Inject {
   // Phase 3 — capability-gated visibility. Injects with this flag set are hidden
   // from participants until session.flags[requiresCapability] === true.
   requiresCapability?: string
+  // Phase 2 — auteur-geclassificeerd type informatie. Undefined tolerated
+  // for legacy data. New scenarios should always classify.
+  classification?: 'feit' | 'aanname' | 'fabel'
+  // Phase 4 — facilitator-only note about why this inject exists. Stripped
+  // from participant payload in toParticipantState.
+  facilitatorNote?: string
 }
 
 export interface FacilitatorNotes {
@@ -723,6 +749,13 @@ export interface SessionState {
   retainerActivation?: RetainerActivation
   // Auditor-edited fields on the supervision report (chains, lessons).
   supervisionReportEdits?: SupervisionReportEdits
+  // Phase 6 — per-participant view controls (hide / mark handled / classification filter).
+  // Server-persisted, view-only, no scoring signal.
+  participantViewState?: Record<string /* participantId */, {
+    hidden: string[]      // inject ids the participant has hidden
+    handled: string[]     // inject ids marked as afgehandeld
+    filters?: { classification?: Array<'feit' | 'aanname' | 'fabel'> }
+  }>
   // Slim projection of the current/peek-ahead DecisionNode for participants.
   activeDecision?: ActiveDecisionState
   // Deel B §1.2 — one-time role resolution at session_started. Immutable snapshot.

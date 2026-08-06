@@ -73,15 +73,29 @@ export function stepFromNode(
     nextId = outs[0]?.target ?? null
   } else if (current.type === "decision") {
     const dd = current.data as DecisionNodeData
-    // Soft decision: alleen scoring, geen branch. Volgt de sequence-edge
-    // naar de volgende ronde bij zowel decision_made als facilitator_next
-    // — zodat het spel niet blijft hangen als iemand nog geen keuze had.
+    // Three cases:
+    //   1. advancesGraph === false: soft scoring node, sequence forward on either trigger.
+    //   2. perRole: true: decision-collection point (every option's branch edge points to
+    //      the same next-round target). facilitator_next follows any outgoing edge — they
+    //      all converge. This was the third-report "cannot advance" bug: facilitator_next
+    //      on a per-role decision node was silently refused because the code required a
+    //      decision_made trigger with a matching sourceHandle, which no client sends for
+    //      a collection node.
+    //   3. Otherwise: hard facilitator-picks branching decision, requires decision_made
+    //      with a specific handle.
     if (dd.advancesGraph === false) {
       if (trigger.kind !== "decision_made" && trigger.kind !== "facilitator_next") {
         return { nextNodeId: currentNodeId, outputs: [] }
       }
       const seq = graph.edges.find(e => e.source === currentNodeId && (e.type === "sequence" || !e.sourceHandle))
       nextId = seq?.target ?? null
+    } else if (dd.perRole === true) {
+      if (trigger.kind !== "decision_made" && trigger.kind !== "facilitator_next") {
+        return { nextNodeId: currentNodeId, outputs: [] }
+      }
+      // Every branch edge from a per-role decision points to the same target — pick any.
+      const anyBranch = graph.edges.find(e => e.source === currentNodeId)
+      nextId = anyBranch?.target ?? null
     } else {
       if (trigger.kind !== "decision_made") return { nextNodeId: currentNodeId, outputs: [] }
       const chosen = graph.edges.find(e => e.source === currentNodeId && e.sourceHandle === trigger.handle)

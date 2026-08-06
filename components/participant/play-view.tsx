@@ -6,7 +6,7 @@ import type { ReactNode } from "react"
 import { ArrowLeft, CheckCircle, ChevronDown, FileText, Info, Loader2, ShieldAlert, Users } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
 import type { Inject, LiveEvent, Participant, Role, RoleDocument, SessionState, SpecialEvent, SubmittedDecision } from "@/lib/types"
-import { ROLE_META } from "@/lib/types"
+import { ROLE_META, ROLE_ORDER } from "@/lib/types"
 import { api } from "@/lib/api-client"
 import { getGoal } from "@/lib/goals/registry"
 import type { GoalId } from "@/lib/engine/types"
@@ -24,6 +24,7 @@ import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
 import { RegulatoryNotificationButton } from "./regulatory-notification-button"
 import { MeldingButton } from "./melding-button"
+import { OpeningBriefing } from "./opening-briefing"
 import { SpecialModal } from "./special-modal"
 import { PhaseTimer, PhaseSegments } from "./phase-timer"
 import { Empty } from "@/components/ui/empty"
@@ -302,9 +303,10 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
 
 // ─── Real-time role picker (lobby) ───────────────────────────
 
-const CRISIS_ROLES_ORDERED: Role[] = [
-  "ceo", "ciso", "cfo", "legal", "head_of_comms", "hr_lead", "ops_manager",
-]
+// Crisis-management seats only — excludes the IT lead, kept in the same
+// canonical order as ROLE_ORDER so the lobby, builder and setup form all
+// agree on how roles are listed.
+const CRISIS_ROLES_ORDERED: readonly Role[] = ROLE_ORDER.filter(r => r !== "it_manager")
 
 function RolePickerLobby({
   session,
@@ -340,12 +342,8 @@ function RolePickerLobby({
     }
   }
 
-  const ALL_ROLES_ORDERED: Role[] = [
-    "ceo", "ciso", "cfo", "legal", "head_of_comms", "hr_lead", "ops_manager",
-    "it_manager", "it_manager",
-  ]
-  const allowedRoles: Role[] = (session.config.selectedRoles?.length ?? 0) > 0
-    ? ALL_ROLES_ORDERED.filter(r => session.config.selectedRoles!.includes(r))
+  const allowedRoles: readonly Role[] = (session.config.selectedRoles?.length ?? 0) > 0
+    ? ROLE_ORDER.filter(r => session.config.selectedRoles!.includes(r))
     : CRISIS_ROLES_ORDERED
 
   return (
@@ -1185,6 +1183,12 @@ export function PlayView() {
                 roundStartedAt={session.roundStartedAt}
                 timerMinutes={currentRound.timerMinutes ?? 10}
               />
+            )}
+
+            {/* Opening briefing — per-role mandate + playbook gaps. Shown once at
+                session start; retrievable mid-session from the collapse panel. */}
+            {status === "active" && (
+              <OpeningBriefing session={session} participantId={participantId ?? undefined} />
             )}
 
             {/* Soft-decision ticket — shown when graph is on a Decision node */}

@@ -91,6 +91,18 @@ export interface InjectNodeData extends Omit<Inject, "id"> {
   // consequence for options that set a capability (e.g. retainer_activated →
   // forensic-findings inject).
   requiresCapability?: string
+  // Phase 2 — auteur-geclassificeerd type informatie. Feiten, aannames en
+  // fabels. Alleen data, geen scoring-hook (dit past). Feeds wizard noise
+  // ratio + participant filter (Phase 6).
+  classification?: 'feit' | 'aanname' | 'fabel'
+  // Phase 4 — één-regel facilitator-noot: waarom staat deze inject hier?
+  // Facilitator-only; toParticipantState strips this. Never scored.
+  facilitatorNote?: string
+  // Phase 1 — auteur koppelt deze inject aan de decision die 'ie voorbereidt.
+  // Framework-regel: elke decision moet minstens één setup-inject hebben in
+  // dezelfde of de direct voorafgaande ronde, anders komt de keuze 'uit het
+  // niets'. Alleen data — de builder toont de link, de validator waarschuwt.
+  setsUpDecisionNodeId?: string
 }
 
 export type DynamicFillToken = 'sector' | 'companySize' | 'crownJewels' | 'criticalSystems' | 'irRetainerName'
@@ -255,6 +267,27 @@ export const DEFAULT_FEATURES: GraphFeatures = {
   scoring: true,
 }
 
+export interface RoleBriefing {
+  text: string
+  playbookGaps?: string[]
+}
+
+// Phase 5 — premade "noise" injects the facilitator can drop into a live session
+// during DISCUSSION. Context-only: never scored, never a scenario event. Authored
+// inside the ScenarioGraph so scope stays scenario-local.
+export interface PremadeInject {
+  id: string
+  label: string
+  channel: InjectNodeData['channel']
+  urgency?: InjectNodeData['urgency']
+  classification?: 'feit' | 'aanname' | 'fabel'
+  senderName?: string
+  title: string
+  content: string
+  targetRoles?: Role[]
+  facilitatorNote?: string
+}
+
 export interface ScenarioGraph {
   id: string
   name: string
@@ -271,4 +304,26 @@ export interface ScenarioGraph {
   irPlaybook?: string
   irRetainerProfile?: IrRetainerProfile
   features?: GraphFeatures
+  // Phase 3 — per-role opening briefing (mandate + playbook gaps). Rendered
+  // once at session start (opening-briefing) and retrievable mid-session.
+  // Optional per role: missing entries fall back to ROLE_META.mandateSummary.
+  roleBriefings?: Partial<Record<Role, RoleBriefing>>
+  // Phase 5 — ad-hoc noise injects the facilitator can fire during DISCUSSION.
+  // Scenario-scoped, never scored — pure situational context.
+  injectLibrary?: PremadeInject[]
+  // Phase 1 — target aantal opties per rol per decision. Gebruikt door de
+  // builder om per-rol pills te kleuren (groen ≥ target, amber daaronder,
+  // rood bij 0). Undefined → default van 4 (Phase 9's wizard-config vult 'm).
+  expectedOptionsPerRole?: number
+  // Phase 9 — seed used by the wizard for reproducibility. Present when the
+  // graph was compiled by runWizardPipeline. Not consumed by the runtime.
+  wizardSeed?: string
+  // Phase 9 — publication status. The wizard writes 'draft' — never 'published'.
+  // The builder promotes to 'published' via a separate action.
+  publishStatus?: 'draft' | 'published'
 }
+
+// Phase 1 — default threshold for "genoeg opties per rol" pill coloring in the
+// builder. Exposed so validate.ts and the inspector can agree without the
+// value drifting between call sites.
+export const DEFAULT_EXPECTED_OPTIONS_PER_ROLE = 4
