@@ -19,6 +19,7 @@ import { GraphPathPanel } from "./graph-path-panel"
 import { InjectRoutePlan } from "./inject-route-plan"
 import { FactCheckPanel } from "./fact-check-panel"
 import { RegulatoryObligationsPanel } from "./regulatory-obligations-panel"
+import { LiveOverviewPanel } from "./live-overview-panel"
 import { MeldingenPanel } from "./meldingen-panel"
 import { SupervisionReportView } from "./supervision-report"
 import { RevealPanel } from "./reveal-panel"
@@ -224,6 +225,15 @@ export function ControlDashboard() {
               <Monitor className="size-3.5" />
               Groot scherm
             </Link>
+            <a
+              href="/admin/report/current"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
+              title="Rapport in nieuw tabblad"
+            >
+              <FileText className="size-3.5" /> Rapport ↗
+            </a>
             {isEnded && (
               <Link
                 href="/admin/report"
@@ -534,6 +544,9 @@ export function ControlDashboard() {
 
           {/* Sidebar: participants + timeline */}
           <aside className="flex flex-col gap-4">
+            {/* Live facilitator overview — dense single-glance panel, refreshes on every SSE tick */}
+            {isActive && <LiveOverviewPanel session={session} />}
+
             {/* Participants */}
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               <div className="border-b border-border px-4 py-2.5 flex items-center justify-between">

@@ -244,9 +244,9 @@ function DecisionForm({ data, onSave }: { data: DecisionNodeData; onSave: (d: De
     commit({ ...local, options: local.options.map((o, i) => i === idx ? { ...o, ...patch } : o) })
   }
 
-  function addOption() {
+  function addOption(role?: Role) {
     const id = `opt_${Math.random().toString(36).slice(2, 8)}`
-    commit({ ...local, options: [...local.options, { id, label: `Optie ${local.options.length + 1}` }] })
+    commit({ ...local, options: [...local.options, { id, label: ``, allowedRole: role }] })
   }
 
   function removeOption(idx: number) {
@@ -265,24 +265,118 @@ function DecisionForm({ data, onSave }: { data: DecisionNodeData; onSave: (d: De
         />
       </div>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <Label className="text-xs">Opties</Label>
-          <Button size="sm" variant="outline" onClick={addOption} className="h-7 gap-1 text-xs">
-            <Plus className="size-3" /> Optie
-          </Button>
-        </div>
-        <div className="space-y-3">
-          {local.options.map((opt, idx) => (
-            <OptionEditor
-              key={opt.id}
-              option={opt}
-              onChange={patch => updateOption(idx, patch)}
-              onRemove={() => removeOption(idx)}
-            />
-          ))}
-        </div>
+      <OptionsByRole
+        options={local.options}
+        onUpdate={updateOption}
+        onRemove={removeOption}
+        onAdd={addOption}
+      />
+    </div>
+  )
+}
+
+// Groups options by allowedRole so the author sees "one card per role" with
+// the role's options nested inside. Options without an allowedRole are
+// grouped under "— voor alle rollen —". Roles without any options only show
+// up via the "+ Rol toevoegen" dropdown.
+function OptionsByRole({
+  options,
+  onUpdate,
+  onRemove,
+  onAdd,
+}: {
+  options: DecisionNodeData["options"]
+  onUpdate: (idx: number, patch: Partial<DecisionNodeData["options"][number]>) => void
+  onRemove: (idx: number) => void
+  onAdd: (role?: Role) => void
+}) {
+  const roleBuckets = new Map<Role | "__any__", Array<{ opt: DecisionNodeData["options"][number]; idx: number }>>()
+  options.forEach((opt, idx) => {
+    const key = (opt.allowedRole ?? "__any__") as Role | "__any__"
+    const bucket = roleBuckets.get(key) ?? []
+    bucket.push({ opt, idx })
+    roleBuckets.set(key, bucket)
+  })
+
+  // Deterministic order: roles that already have options first (in ROLES order),
+  // then "any role" at the bottom.
+  const orderedRoles: Array<Role | "__any__"> = [
+    ...ROLES.filter(r => roleBuckets.has(r)),
+    ...(roleBuckets.has("__any__") ? (["__any__"] as const) : []),
+  ]
+
+  const rolesWithoutOptions = ROLES.filter(r => !roleBuckets.has(r))
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs">Opties per rol</Label>
       </div>
+
+      {orderedRoles.map(roleKey => {
+        const bucket = roleBuckets.get(roleKey) ?? []
+        const label = roleKey === "__any__" ? "Voor alle rollen" : ROLE_META[roleKey].label
+        return (
+          <div key={roleKey} className="rounded-lg border border-border bg-muted/20 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">{label}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {bucket.length} {bucket.length === 1 ? "optie" : "opties"}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onAdd(roleKey === "__any__" ? undefined : roleKey)}
+                className="h-7 gap-1 text-xs"
+              >
+                <Plus className="size-3" /> Optie
+              </Button>
+            </div>
+            <div className="flex flex-col gap-2">
+              {bucket.map(({ opt, idx }) => (
+                <OptionEditor
+                  key={opt.id}
+                  option={opt}
+                  onChange={patch => onUpdate(idx, patch)}
+                  onRemove={() => onRemove(idx)}
+                  otherRoles={ROLES}
+                />
+              ))}
+            </div>
+          </div>
+        )
+      })}
+
+      {rolesWithoutOptions.length > 0 && (
+        <div className="rounded-lg border border-dashed border-border bg-background p-2">
+          <Label className="text-[10px] text-muted-foreground">Rol toevoegen</Label>
+          <select
+            value=""
+            onChange={e => {
+              const v = e.target.value
+              if (!v) return
+              onAdd(v === "__any__" ? undefined : (v as Role))
+            }}
+            className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+          >
+            <option value="">— kies een rol om opties voor toe te voegen —</option>
+            {rolesWithoutOptions.map(r => (
+              <option key={r} value={r}>{ROLE_META[r].label}</option>
+            ))}
+            {!roleBuckets.has("__any__") && (
+              <option value="__any__">Voor alle rollen</option>
+            )}
+          </select>
+        </div>
+      )}
+
+      {orderedRoles.length === 0 && (
+        <div className="rounded border border-dashed border-border bg-background p-4 text-center text-xs text-muted-foreground">
+          Nog geen opties. Kies een rol hierboven om opties toe te voegen.
+        </div>
+      )}
     </div>
   )
 }
@@ -291,10 +385,12 @@ function OptionEditor({
   option,
   onChange,
   onRemove,
+  otherRoles,
 }: {
   option: DecisionNodeData["options"][number]
   onChange: (patch: Partial<DecisionNodeData["options"][number]>) => void
   onRemove: () => void
+  otherRoles: Role[]
 }) {
   const vec = option.outcomeVector ?? { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 }
   function setDim(dim: keyof OutcomeVector, v: number) {
@@ -304,28 +400,29 @@ function OptionEditor({
 
   return (
     <div className="flex flex-col gap-2 rounded border border-border bg-background p-3">
-      <div className="flex gap-2">
-        <Input
+      <div className="flex items-start gap-2">
+        <Textarea
+          rows={2}
           value={option.label}
           onChange={e => onChange({ label: e.target.value })}
-          placeholder="Wat zegt deze keuze?"
-          className="flex-1 h-8"
+          placeholder="Wat zegt deze keuze? (volledige zin)"
+          className="flex-1 text-xs resize-none min-h-[3rem]"
         />
-        <Button size="sm" variant="ghost" onClick={onRemove} className="h-8 text-destructive">
+        <Button size="sm" variant="ghost" onClick={onRemove} className="h-8 text-destructive shrink-0" title="Optie verwijderen">
           <Trash className="size-3" />
         </Button>
       </div>
 
-      {/* Rol-toewijzing — kritiek voor per-rol keuzes. Undefined = iedereen ziet deze optie. */}
+      {/* Rol-hertoewijzing beschikbaar zodat een auteur een optie kan verplaatsen naar een andere rol-groep. */}
       <div>
-        <Label className="text-[10px] text-muted-foreground">Voor welke rol?</Label>
+        <Label className="text-[10px] text-muted-foreground">Verplaatsen naar rol</Label>
         <select
           value={option.allowedRole ?? ""}
           onChange={e => onChange({ allowedRole: e.target.value ? (e.target.value as Role) : undefined })}
           className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
         >
           <option value="">— voor alle rollen —</option>
-          {ROLES.map(r => (
+          {otherRoles.map(r => (
             <option key={r} value={r}>{ROLE_META[r].label}</option>
           ))}
         </select>
@@ -355,11 +452,11 @@ function OptionEditor({
       <div>
         <Label className="text-[10px] text-muted-foreground">Debrief-noot</Label>
         <Textarea
-          rows={2}
+          rows={3}
           value={option.lessonLearned ?? ""}
           onChange={e => onChange({ lessonLearned: e.target.value || undefined })}
-          placeholder="Wat leren we hiervan? 1 zin."
-          className="text-xs resize-none"
+          placeholder="Wat leren we hiervan? Kort maar concreet."
+          className="text-xs resize-none min-h-[4rem]"
         />
       </div>
     </div>
