@@ -1,95 +1,73 @@
-<!-- dgc-policy-v11 -->
-# Dual-Graph Context Policy
+# Werkafspraken
 
-This project uses a local dual-graph MCP server for efficient context retrieval.
+## Context
 
-## MANDATORY: Always follow this order
+Crisis-simulatie / tabletop app, gebouwd via vibecoding door een niet-developer.
+De codebase gaat over naar externe developers. Zij doen: meertaligheid, database
+en sessie-opslag, realtime laag, presenter view. Ik doe: scenario-inhoud, prompt,
+scoringsregels, teksten, rapportontwerp.
 
-1. **Call `graph_continue` first** — before any file exploration, grep, or code reading.
+## Git-discipline — hardste regel
 
-2. **If `graph_continue` returns `needs_project=true`**: call `graph_scan` with the
-   current project directory (`pwd`). Do NOT ask the user.
+- Nooit committen of pushen naar `main`. Nooit.
+- Elke klus krijgt zijn eigen branch. De prompt vertelt je de naam.
+- Eén onderwerp per commit, met een boodschap waaruit blijkt wat en waarom.
+- Aan het eind van een klus: push de branch en maak een PR. Merge NIET zelf.
+- Voor je begint: controleer dat je op de juiste branch staat en meld dat.
 
-3. **If `graph_continue` returns `skip=true`**: project has fewer than 5 files.
-   Do NOT do broad or recursive exploration. Read only specific files if their names
-   are mentioned, or ask the user what to work on.
+## Harde regels
 
-4. **Read `recommended_files`** using `graph_read` — **one call per file**.
-   - `graph_read` accepts a single `file` parameter (string). Call it separately for each
-     recommended file. Do NOT pass an array or batch multiple files into one call.
-   - `recommended_files` may contain `file::symbol` entries (e.g. `src/auth.ts::handleLogin`).
-     Pass them verbatim to `graph_read(file: "src/auth.ts::handleLogin")` — it reads only
-     that symbol's lines, not the full file.
-   - Example: if `recommended_files` is `["src/auth.ts::handleLogin", "src/db.ts"]`,
-     call `graph_read(file: "src/auth.ts::handleLogin")` and `graph_read(file: "src/db.ts")`
-     as two separate calls (they can be parallel).
+1. Mijn beschrijvingen zijn HYPOTHESES. Ik weet vaak niet meer wat waar zit.
+   Zegt de code iets anders, dan heeft de code voorrang en meld je dat expliciet.
+2. Verwijder nooit iets op naam, locatie of beschrijving. Alleen op aantoonbare
+   afwezigheid van gebruik, met bewijs: bestandspad, regelnummer, aanroeper.
+3. Bij twijfel niet verwijderen. Eén concrete vraag met opties, dan stoppen.
+4. Ga niet mee in een aanname om behulpzaam te zijn. "Je hebt gelijk, ik voeg ze
+   samen" is het slechtste antwoord als het niet klopt.
+5. Recent toegevoegde code is waarschijnlijk mijn nieuwe werk en juist NIET wat
+   weg moet. Check git log/blame voor je iets oud noemt.
+6. Raakt een wijziging opgeslagen scenario-data, dan meld je dat vóór je begint.
 
-5. **Check `confidence` and obey the caps strictly:**
-   - `confidence=high` -> Stop. Do NOT grep or explore further.
-   - `confidence=medium` -> If recommended files are insufficient, call `fallback_rg`
-     at most `max_supplementary_greps` time(s) with specific terms, then `graph_read`
-     at most `max_supplementary_files` additional file(s). Then stop.
-   - `confidence=low` -> Call `fallback_rg` at most `max_supplementary_greps` time(s),
-     then `graph_read` at most `max_supplementary_files` file(s). Then stop.
+## Niet aanraken
 
-## Token Usage
+i18n-structuur · database en sessie-opslag · websockets/realtime · lobby en
+sessieflow · presenter view. Kom je er per ongeluk terecht: stop en meld het.
 
-A `token-counter` MCP is available for tracking live token usage.
+## Statusbestand
 
-- To check how many tokens a large file or text will cost **before** reading it:
-  `count_tokens({text: "<content>"})`
-- To log actual usage after a task completes (if the user asks):
-  `log_usage({input_tokens: <est>, output_tokens: <est>, description: "<task>"})`
-- To show the user their running session cost:
-  `get_session_stats()`
+`docs/overdracht/status.md` is de bron van waarheid over wat gedaan is, niet ons
+gesprek. Werk dat bij aan het eind van elke klus.
 
-Live dashboard URL is printed at startup next to "Token usage".
+## Domein-glossarium
 
-## Rules
+`CONTEXT.md` is het glossarium: één regel per begrip plus waar het in de code
+voorkomt, inclusief termen die onder twee verschillende namen bestaan. Twijfel
+je aan een naam: check daar eerst voor je een file leest.
 
-- Do NOT use `rg`, `grep`, or bash file exploration before calling `graph_continue`.
-- Do NOT do broad/recursive exploration at any confidence level.
-- `max_supplementary_greps` and `max_supplementary_files` are hard caps - never exceed them.
-- Do NOT dump full chat history.
-- Do NOT call `graph_retrieve` more than once per turn.
-- After edits, call `graph_register_edit` with the changed files. Use `file::symbol` notation (e.g. `src/auth.ts::handleLogin`) when the edit targets a specific function, class, or hook.
+## Project Rules
 
-## Context Store
+Voor het zoeken naar de juiste plek in de code:
 
-Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call `graph_add_memory`.
-
-**To add an entry:**
-```
-graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])
-```
-
-**Do NOT write context-store.json directly** — always use `graph_add_memory`. It applies pruning and keeps the store healthy.
-
-**Rules:**
-- Only log things worth remembering across sessions (not every minor detail)
-- `content` must be under 15 words
-- `files` lists the files this decision/task relates to (can be empty)
-- Log immediately when the item arises — not at session end
-
-## Session End
-
-When the user signals they are done (e.g. "bye", "done", "wrap up", "end session"), proactively update `CONTEXT.md` in the project root with:
-- **Current Task**: one sentence on what was being worked on
-- **Key Decisions**: bullet list, max 3 items
-- **Next Steps**: bullet list, max 3 items
-
-Keep `CONTEXT.md` under 20 lines total. Do NOT summarize the full conversation — only what's needed to resume next session.
-
-## Project Rules (load before exploring)
-
-Before reading any project file, consult these rule files — they often make file reads unnecessary:
-
-- **`.claude/rules/codebase-map.md`** — exact file locations for every task, search strategy, key invariants
-- **`.claude/rules/patterns.md`** — anti-patterns, type patterns, component/API conventions, state flow
+- `.claude/rules/codebase-map.md` — exacte bestandslocaties per taak,
+  zoekstrategie, invariants.
+- `.claude/rules/patterns.md` — anti-patterns, type patterns,
+  component/API-conventies, state flow.
 
 ## Custom Commands
 
-- `/add-scenario [type]` — add a new scenario type to the template generator
-- `/add-role [id / label]` — add a new participant role
-- `/check` — run TypeScript check and filter pre-existing errors
-- `/deploy` — type-check then deploy to Vercel preview
+- `/add-scenario [type]` — add a new scenario type to the template generator.
+- `/add-role [id / label]` — add a new participant role.
+- `/check` — run TypeScript check and filter pre-existing errors.
+- `/deploy` — type-check then deploy to Vercel preview.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues (`shownoise/tabletop-upgraded-2`). Use `gh`.
+See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` at the repo root (glossarium). See
+`docs/agents/domain.md`.
