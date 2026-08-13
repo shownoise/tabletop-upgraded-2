@@ -54,7 +54,11 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
   const pending = session.activeDecision?.pendingByParticipant
 
   const rows = session.participants.map(p => {
-    const expected = pending?.[p.id]?.total ?? 1
+    // undefined when the store isn't tracking a per-participant expected total
+    // (outside DECISION phase, or scenarios without perRole decisions). We show
+    // just the submitted count in that case — a hardcoded fallback of 1 caused
+    // "7/1 ingediend" for participants who inherit multiple roles.
+    const expected = pending?.[p.id]?.total
     const submitted = currentRoundSubs.filter(d => d.participantId === p.id).length
     const distEntry = session.roleDistribution?.entries.find(e => e.participantId === p.id)
     const inheritedRoles = distEntry?.inheritedRoles ?? []
@@ -111,7 +115,9 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
             {rows.map(r => {
               const state = r.submitted === 0
                 ? "none"
-                : r.submitted >= r.expected ? "full" : "partial"
+                : r.expected != null && r.submitted >= r.expected
+                  ? "full"
+                  : "partial"
               const dotClass =
                 state === "full" ? "bg-emerald-500"
                 : state === "partial" ? "bg-amber-500"
@@ -125,7 +131,9 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
                   <span className="text-foreground truncate">{r.name}</span>
                   <span className="text-muted-foreground truncate">· {rolesText}</span>
                   <span className="ml-auto font-mono text-muted-foreground shrink-0">
-                    {r.submitted}/{r.expected} ingediend
+                    {r.expected != null
+                      ? `${r.submitted}/${r.expected} ingediend`
+                      : `${r.submitted} ingediend`}
                   </span>
                 </li>
               )
