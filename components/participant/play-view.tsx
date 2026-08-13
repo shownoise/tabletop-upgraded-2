@@ -22,6 +22,7 @@ import { ReviewCommentary } from "./review-commentary"
 import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
+import { effectiveRolesForParticipant } from "@/lib/engine/distribute-roles"
 import { RegulatoryNotificationButton } from "./regulatory-notification-button"
 import { MeldingButton } from "./melding-button"
 import { OpeningBriefing } from "./opening-briefing"
@@ -915,6 +916,18 @@ export function PlayView() {
   const isEventMode = session?.mode === "event"
   const effectiveRole: Role | undefined = isEventMode ? activeRole : participantRole
 
+  // Full role set this participant plays: primary + any absent roles that were
+  // auto-assigned to them by distributeRoles() at session start. In event-mode
+  // the acting role is the single queue role, so we don't add inherited there.
+  const myRoles: Role[] = useMemo(() => {
+    if (!session || !participantId) return effectiveRole ? [effectiveRole] : []
+    if (isEventMode) return effectiveRole ? [effectiveRole] : []
+    const entry = session.roleDistribution?.entries.find(e => e.participantId === participantId)
+    if (!entry) return effectiveRole ? [effectiveRole] : []
+    const override = session.roleAssignmentOverrides?.[participantId]
+    return effectiveRolesForParticipant(entry, override)
+  }, [session, participantId, isEventMode, effectiveRole])
+
   function setActiveRole(r: Role) {
     setActiveRoleState(r)
     try { window.sessionStorage.setItem(ACTIVE_ROLE_KEY, r) } catch { /* noop */ }
@@ -1241,6 +1254,7 @@ export function PlayView() {
                       participantId={participantId}
                       participantName={name ?? ""}
                       participantRole={effectiveRole}
+                      myRoles={myRoles}
                       isEventMode={isEventMode}
                       existingDecision={(session.submittedDecisions ?? []).find(
                         d => d.participantId === participantId

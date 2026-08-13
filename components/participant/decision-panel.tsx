@@ -26,6 +26,9 @@ interface Props {
   participantId: string
   participantName: string
   participantRole: Role | undefined
+  // Full role set this participant plays: primary + inherited (absent-role auto-assignment).
+  // Undefined → falls back to [participantRole].
+  myRoles?: Role[]
   existingDecision?: SubmittedDecision
   lang: Lang
   isEventMode?: boolean
@@ -37,6 +40,7 @@ export function DecisionPanel({
   participantId,
   participantName,
   participantRole,
+  myRoles,
   existingDecision,
   lang,
   isEventMode = false,
@@ -63,9 +67,6 @@ export function DecisionPanel({
         activeRole: isEventMode ? participantRole : undefined,
       })
       const action = roundActions.find(a => a.id === selectedActionId)
-      const isWrongRole = action && participantRole
-        ? action.allowedRoles.length > 0 && !action.allowedRoles.includes(participantRole)
-        : false
       setSubmitted({
         participantId,
         participantName,
@@ -75,7 +76,7 @@ export function DecisionPanel({
         actionLabel: action?.label ?? "",
         reasoning,
         submittedAt: new Date().toISOString(),
-        isWrongRole: isWrongRole ?? false,
+        isWrongRole: false,
         isIrDeviation: action ? !action.irPlanAligned : false,
         confidence,
       })
@@ -149,42 +150,45 @@ export function DecisionPanel({
           </div>
         ) : (
           <>
-            {/* Action grid — split by role authorization */}
+            {/* Action grid — filtered to this participant's role set (primary + inherited).
+                Inherited roles come from distributeRoles() when a role has no participant. */}
             {(() => {
               const role = participantRole // narrowed to Role (not undefined — guarded above)
-              const myActions = roundActions.filter(a => a.allowedRoles.length === 0 || a.allowedRoles.includes(role))
+              const roleSet = myRoles && myRoles.length > 0 ? myRoles : [role]
+              const myActions = roundActions.filter(
+                a => a.allowedRoles.length === 0 || a.allowedRoles.some(r => roleSet.includes(r))
+              )
+              const isInherited = (a: RoleAction): Role | undefined => {
+                if (a.allowedRoles.length === 0) return undefined
+                if (a.allowedRoles.includes(role)) return undefined
+                return a.allowedRoles.find(r => roleSet.includes(r))
+              }
 
               function ActionButton({ action }: { action: typeof roundActions[number] }) {
                 const isSelected = selectedActionId === action.id
-                const authorized = action.allowedRoles.length === 0 || action.allowedRoles.includes(role)
-                const ownerLabel = !authorized && action.allowedRoles.length > 0
-                  ? action.allowedRoles.slice(0, 2).map(r => ROLE_META[r]?.label ?? r).join(" / ")
-                  : null
+                const inheritedFor = isInherited(action)
                 return (
                   <button
                     key={action.id}
                     onClick={() => setSelectedActionId(action.id)}
                     className="text-left border px-4 py-3 transition-all"
                     style={{
-                      borderColor: isSelected ? "var(--tt-accent)" : authorized ? "var(--tt-border)" : "var(--tt-border)",
+                      borderColor: isSelected ? "var(--tt-accent)" : "var(--tt-border)",
                       backgroundColor: isSelected
                         ? "color-mix(in srgb, var(--tt-accent) 5%, transparent)"
-                        : authorized
-                          ? "color-mix(in srgb, var(--tt-bright) 4%, transparent)"
-                          : "transparent",
-                      borderLeft: isSelected ? "3px solid var(--tt-accent)" : authorized ? "3px solid var(--tt-border)" : "3px solid transparent",
-                      opacity: authorized ? 1 : 0.45,
+                        : "color-mix(in srgb, var(--tt-bright) 4%, transparent)",
+                      borderLeft: isSelected ? "3px solid var(--tt-accent)" : "3px solid var(--tt-border)",
                     }}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`font-mono text-xs font-medium ${authorized ? "text-tt-bright" : "text-tt-dim"}`}>
+                          <span className="font-mono text-xs font-medium text-tt-bright">
                             {stripMarkdown(stripBobLabel(action.label))}
                           </span>
-                          {ownerLabel && (
+                          {inheritedFor && (
                             <span className="font-mono text-[8px] uppercase tracking-widest text-tt-dim border border-tt-border px-1">
-                              → {ownerLabel}
+                              namens {ROLE_META[inheritedFor]?.label ?? inheritedFor}
                             </span>
                           )}
                         </div>

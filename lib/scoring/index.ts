@@ -22,7 +22,7 @@ export type {
   ScoringOutput,
 } from './types'
 
-export { resolveRoles, effectiveRoleFor, mandaatValue } from './role-resolution'
+export { resolveRoles, effectiveRoleFor } from './role-resolution'
 export type { RoleResolution } from './role-resolution'
 export { computeRoundOutcome, cumulativeOutcome } from './outcome-round'
 export { buildLeaderboard, divergenceOverGroups } from './points'

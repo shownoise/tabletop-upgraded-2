@@ -70,22 +70,3 @@ export function effectiveRoleFor(
   return 'NPC'
 }
 
-// Deel A §7.2 — vergelijk actuele beslisser tegen effectiveOwner van het domein.
-// m = 1.0 als exact effectiveOwner, 0.5 bij onnodige escalatie/co-hij hele-team,
-// 0.0 bij besluit buiten crisisteam of onder eigen mandaat.
-export function mandaatValue(
-  actualDecider: RoleId,
-  domain: Domain,
-  resolution: RoleResolution,
-  opts: { escalatedUnnecessarily?: boolean; belowMandate?: boolean; outsideCrisisTeam?: boolean } = {},
-): 0 | 0.5 | 1 {
-  if (opts.belowMandate || opts.outsideCrisisTeam) return 0
-  const effOwner = resolution.effectiveOwners[domain]
-  if (effOwner === 'NPC') {
-    // Niemand ontworpen én niemand bezet — facilitator neemt. Beslissing telt niet als fout.
-    return 1
-  }
-  if (actualDecider === effOwner) return 1
-  if (opts.escalatedUnnecessarily) return 0.5
-  return 0
-}
