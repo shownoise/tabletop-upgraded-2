@@ -6,7 +6,8 @@ elke klus.
 | Klus | Branch | Status | Conclusie |
 |---|---|---|---|
 | P0 Werkafspraken + glossarium | `chore/werkafspraken` | gemerged (PR #2) | Git-safety opgezet, oude sessie gered op eigen branch (PR #1), CLAUDE.md herschreven, CONTEXT.md is glossarium met alias-callouts, `docs/agents/` scaffold via `setup-matt-pocock-skills`. Main-protection ruleset actief (0 approvals). |
-| P10 Drie bugs | `fix/losse-bugs` | in review | Bug 2 gefixt (weergave). Bug 1 en 3 zijn geen code-fix — één is design (rol-filter, niet hardcoded), één is niet-verifieerbaar zonder browser en de code klopt. |
+| P10 Drie bugs | `fix/losse-bugs` | gemerged (PR #3) | Bug 2 gefixt (weergave). Bug 1 en 3 zijn geen code-fix — één is design (rol-filter, niet hardcoded), één is niet-verifieerbaar zonder browser en de code klopt. |
+| P2 Labels en teksten | `fix/labels-en-teksten` | wacht op mij | Alleen inventarisatie gedaan in `docs/overdracht/P2-inventarisatie.md`. 4 vragen om beantwoord te krijgen voor er ook maar één label wijzigt. `fabel` zit in 15+ bestanden en scenario-data — dat is een migratie, geen tweak. |
 
 ## Wacht op mij
 
