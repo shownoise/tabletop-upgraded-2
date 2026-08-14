@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     channel?: InjectChannel
     senderName?: string
     targetRoles?: Role[]
-    classification?: 'feit' | 'aanname' | 'fabel'
+    classification?: 'feit' | 'aanname'
     libraryId?: string
   }
   const result = await pushSurpriseInject({

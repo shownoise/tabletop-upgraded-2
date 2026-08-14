@@ -283,18 +283,17 @@ function InjectForm({
           value={local.classification ?? ""}
           onChange={e => {
             const v = e.target.value
-            commit({ ...local, classification: v ? (v as "feit" | "aanname" | "fabel") : undefined })
+            commit({ ...local, classification: v ? (v as "feit" | "aanname") : undefined })
           }}
           className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
         >
           <option value="">— kies —</option>
           <option value="feit">Feit</option>
           <option value="aanname">Aanname</option>
-          <option value="fabel">Fabel</option>
         </select>
         {!local.classification && (
           <p className="mt-1 text-[10px] text-yellow-700 dark:text-yellow-400">
-            Auteur moet type kiezen — feit, aanname of fabel.
+            Auteur moet type kiezen — feit of aanname.
           </p>
         )}
       </div>

@@ -3,6 +3,7 @@ import type { Role } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import { computeCoverage } from "@/lib/engine/supervision"
 import { collectSetupInjectsForDecision, buildRoundIndexMap } from "./setup-injects"
+import { ERROR_MESSAGES } from "@/lib/config/texts"
 
 export interface GraphIssue {
   severity: "error" | "warning"
@@ -156,7 +157,7 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
       issues.push({
         severity: "warning",
         nodeId: inj.id,
-        message: `Inject "${d.title ?? inj.id.slice(0, 8)}" heeft geen type informatie — kies feit, aanname of fabel.`,
+        message: ERROR_MESSAGES.missingClassification(d.title ?? inj.id.slice(0, 8)),
       })
     }
   }
@@ -186,7 +187,7 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
     return injData.triggersRegulatoryNotification === true
   })
   if (!anyTrigger) {
-    issues.push({ severity: "warning", message: "Geen enkele inject in deze graph draagt `triggersRegulatoryNotification: true` — de meldplicht wordt tijdens spel nooit geopend." })
+    issues.push({ severity: "warning", message: ERROR_MESSAGES.missingRegulatoryTrigger })
   }
 
   const outcomeNodes = graph.nodes.filter(n => n.type === "outcome")

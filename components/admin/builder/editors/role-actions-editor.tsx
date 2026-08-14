@@ -183,7 +183,7 @@ export function RoleActionsEditor({ value, onChange, suggestedIdPrefix = "act" }
                 onChange={e => update(idx, { respondsToMisleading: e.target.checked || undefined })}
                 className="size-3"
               />
-              <span>Reactie op misleidend signaal</span>
+              <span>Reactie op ongetoetste aanname</span>
             </label>
             <details className="text-[11px]">
               <summary className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground cursor-pointer">

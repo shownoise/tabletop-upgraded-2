@@ -1161,7 +1161,7 @@ export async function pushSurpriseInject(input: {
   channel?: import("./types").InjectChannel
   senderName?: string
   targetRoles?: Role[]
-  classification?: 'feit' | 'aanname' | 'fabel'
+  classification?: 'feit' | 'aanname'
   libraryId?: string
 }): Promise<{ ok: boolean; error?: string; inject?: Inject }> {
   const inject: Inject = {
@@ -2287,11 +2287,31 @@ export async function saveScenarioGraph(graph: ScenarioGraph): Promise<void> {
 }
 
 export async function loadScenarioGraph(id: string): Promise<ScenarioGraph | null> {
-  return dbLoadScenarioGraph(id)
+  const g = await dbLoadScenarioGraph(id)
+  return g ? migrateLegacyClassifications(g) : g
 }
 
 export async function listScenarioGraphs(_ownerId?: string): Promise<ScenarioGraph[]> {
-  return dbListScenarioGraphs()
+  const list = await dbListScenarioGraphs()
+  return list.map(migrateLegacyClassifications)
+}
+
+// Legacy-data migratie (2026-08-14): 'fabel' → 'aanname' op InjectNodeData;
+// 'misleading' → 'assumption' op reliability. Bestaande scenarios in KV
+// blijven werken zonder handmatige migratie.
+function migrateLegacyClassifications(graph: ScenarioGraph): ScenarioGraph {
+  let touched = false
+  const nodes = graph.nodes.map(n => {
+    if (n.type !== 'inject') return n
+    const d = n.data as { classification?: string; reliability?: string }
+    const patch: Record<string, unknown> = {}
+    if (d.classification === 'fabel') { patch.classification = 'aanname'; touched = true }
+    if (d.reliability === 'misleading') { patch.reliability = 'assumption'; touched = true }
+    if (Object.keys(patch).length === 0) return n
+    return { ...n, data: { ...n.data, ...patch } as typeof n.data }
+  })
+  if (!touched) return graph
+  return { ...graph, nodes }
 }
 
 export async function deleteScenarioGraph(id: string): Promise<void> {
@@ -2479,7 +2499,7 @@ export async function updateSupervisionReportEdits(
 export type ParticipantViewPatch = Partial<{
   hidden: string[]
   handled: string[]
-  filters: { classification?: Array<'feit' | 'aanname' | 'fabel'> }
+  filters: { classification?: Array<'feit' | 'aanname'> }
   // Append/remove semantics — the caller can send a single injectId to
   // add or remove from `hidden` / `handled` without re-sending the whole set.
   addHidden: string

@@ -121,6 +121,8 @@ function baseGraph(): ScenarioGraph {
     title: 'Pers vraagt reactie',
     content: 'Journalist wil quote.',
     classification: 'feit',
+    // Setup for D2 zodat rule 4 (elke decision heeft een feit-setup) slaagt.
+    setsUpDecisionNodeId: 'D2',
   }
   const inj4: InjectNodeData = {
     kind: 'inject',
@@ -217,16 +219,18 @@ describe("rule 3 — no dominant option", () => {
   })
 })
 
-describe("rule 4 — fabel never carries the only path", () => {
-  it("passes when setup injects are feit/aanname", () => {
+describe("rule 4 — no-op sinds fabel-migratie (2026-08-14)", () => {
+  it("passes on baseGraph", () => {
     expect(ruleNoiseNeverCarriesOnlyPath(baseGraph()).ok).toBe(true)
   })
-  it("fails when a fabel is a setup inject", () => {
+  it("passes on any graph — is a no-op nu fabel weg is", () => {
     const g = baseGraph()
-    const i1 = g.nodes.find(n => n.id === 'I1')!.data as InjectNodeData
-    i1.classification = 'fabel'
-    const res = ruleNoiseNeverCarriesOnlyPath(g)
-    expect(res.ok).toBe(false)
+    for (const n of g.nodes) {
+      if (n.type !== 'inject') continue
+      const d = n.data as InjectNodeData
+      if (d.setsUpDecisionNodeId) d.classification = 'aanname'
+    }
+    expect(ruleNoiseNeverCarriesOnlyPath(g).ok).toBe(true)
   })
 })
 
@@ -265,9 +269,9 @@ describe("rule 7 — classification ratio ≈ target", () => {
   })
   it("fails when ratio far from target", () => {
     const g = baseGraph()
-    // Flip all injects to fabel — ratio becomes 0.
+    // Flip all injects to aanname — feit-ratio becomes 0.
     for (const n of g.nodes) {
-      if (n.type === 'inject') (n.data as InjectNodeData).classification = 'fabel'
+      if (n.type === 'inject') (n.data as InjectNodeData).classification = 'aanname'
     }
     const res = ruleClassificationRatio(g, baseConfig({ factsNoiseRatio: 0.9 }))
     expect(res.ok).toBe(false)

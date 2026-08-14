@@ -14,9 +14,8 @@ interface Props {
 }
 
 const TAG_META: Record<FactCheckTag, { label: string; help: string; color: string; dot: string }> = {
-  fact:       { label: "Feit",       help: "Ik heb dit geverifieerd of vertrouw de bron", color: "text-emerald-500", dot: "bg-emerald-500" },
-  assumption: { label: "Aanname",    help: "Plausibel maar niet gecheckt",                 color: "text-yellow-500",  dot: "bg-yellow-500" },
-  misleading: { label: "Misleidend", help: "Ik denk dat dit niet klopt",                   color: "text-red-500",     dot: "bg-red-500" },
+  fact:       { label: "Feit",    help: "Ik heb dit geverifieerd of vertrouw de bron", color: "text-emerald-500", dot: "bg-emerald-500" },
+  assumption: { label: "Aanname", help: "Plausibel maar niet gecheckt",                 color: "text-yellow-500",  dot: "bg-yellow-500" },
 }
 
 export function InjectVerifyMenu({ currentTag, disabled, onTag, showFirstHint, onDismissHint }: Props) {

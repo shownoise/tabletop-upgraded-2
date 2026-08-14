@@ -61,9 +61,9 @@ export interface WizardPlanInject {
   // Phase 2 — opens the initial regulatory obligation on the session when fired.
   triggersRegulatoryNotification?: boolean
   // Phase 9 — new fields exposed to the wizard so generated plans can express
-  // classification (feit/aanname/fabel), setsUpDecisionNodeId (author link to
+  // classification (feit/aanname), setsUpDecisionNodeId (author link to
   // a decision), and facilitator-only notes.
-  classification?: 'feit' | 'aanname' | 'fabel'
+  classification?: 'feit' | 'aanname'
   setsUpDecisionNodeId?: string   // author-id of a decision in same/prev round
   facilitatorNote?: string
 }

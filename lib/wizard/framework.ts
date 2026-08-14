@@ -191,24 +191,15 @@ function groupBy<T>(items: T[], key: (t: T) => string): Record<string, T[]> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Rule 4 — a "fabel" inject never carries the only setup for a decision
+// Rule 4 — Voorheen: "fabel mag geen enige setup zijn". Die classificatie
+// bestaat niet meer sinds 2026-08-14; aannames zijn niet per definitie foute
+// signalen (in echte crises zijn cruciale keuzes vaak gebaseerd op
+// aannames). Rule is behouden als no-op zodat validateFramework's set van
+// 10 rules stabiel blijft — verwijder pas als je bereid bent de tests +
+// wizard-prompt volledig te hernummeren.
 // ───────────────────────────────────────────────────────────────────────────
-export function ruleNoiseNeverCarriesOnlyPath(graph: ScenarioGraph): RuleResult {
-  const problems: string[] = []
-  const injects = injectNodes(graph)
-  for (const i of injects) {
-    const target = i.data.setsUpDecisionNodeId
-    if (!target) continue
-    if (i.data.classification === 'fabel') {
-      problems.push(`inject ${i.id} (fabel) zet decision ${target} op`)
-    }
-  }
-  if (problems.length === 0) return { ok: true }
-  return {
-    ok: false,
-    violation: `Setup-injects met classification=fabel: ${problems.join('; ')}`,
-    hint: 'Een setup-inject introduceert een echte beslissing en mag geen fabel zijn — verander de classification naar feit of aanname, of voeg een tweede feit-inject toe die dezelfde decision opzet.',
-  }
+export function ruleNoiseNeverCarriesOnlyPath(_graph: ScenarioGraph): RuleResult {
+  return { ok: true }
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -290,7 +281,7 @@ export function ruleClassificationRatio(graph: ScenarioGraph, config: WizardConf
     return {
       ok: false,
       violation: 'Geen injects met classification — kan factsNoiseRatio niet toetsen',
-      hint: 'Voorzie ELKE inject van een classification (feit / aanname / fabel).',
+      hint: 'Voorzie ELKE inject van een classification (feit of aanname).',
     }
   }
   const facts = classified.filter(i => i.data.classification === 'feit').length
@@ -300,7 +291,7 @@ export function ruleClassificationRatio(graph: ScenarioGraph, config: WizardConf
   return {
     ok: false,
     violation: `Feit-ratio ${ratio.toFixed(2)} wijkt te veel af van target ${config.factsNoiseRatio.toFixed(2)}`,
-    hint: `Verschuif classificaties: ${ratio < config.factsNoiseRatio ? 'meer feit, minder aanname/fabel' : 'meer aanname/fabel, minder feit'}. Target-marge ±0.15.`,
+    hint: `Verschuif classificaties: ${ratio < config.factsNoiseRatio ? 'meer feit, minder aanname' : 'meer aanname, minder feit'}. Target-marge ±0.15.`,
   }
 }
 

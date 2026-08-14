@@ -8,8 +8,8 @@ import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { ESCALATION_LABELS } from "@/lib/config/texts"
 
-const ESCALATION_LABELS = ["normal", "elevated", "high", "critical"] as const
 const ESCALATION_BADGE = [
   "border-tt-dim/40 bg-tt-dim/10 text-tt-dim",
   "border-tt-warn/40 bg-tt-warn/10 text-tt-warn",

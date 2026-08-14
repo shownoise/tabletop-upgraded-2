@@ -70,7 +70,6 @@ interface InjectCardProps {
 const OWN_TAG_STYLE: Record<FactCheckTag, { border: string; pill: string; underline: string }> = {
   fact:       { border: "border-l-emerald-500", pill: "border-emerald-500/40 bg-emerald-500/10 text-emerald-500", underline: "decoration-emerald-500/60" },
   assumption: { border: "border-l-yellow-500",  pill: "border-yellow-500/40 bg-yellow-500/10 text-yellow-500",    underline: "decoration-yellow-500/60"  },
-  misleading: { border: "border-l-red-500",     pill: "border-red-500/40 bg-red-500/10 text-red-500",             underline: "decoration-red-500/60"     },
 }
 
 // ─────────────────── Shell (shared wrapper) ───────────────────
@@ -614,9 +613,9 @@ export function InjectFeed({
     )
   }
 
-  const CLASSIFICATIONS: Array<'feit' | 'aanname' | 'fabel'> = ['feit', 'aanname', 'fabel']
+  const CLASSIFICATIONS: Array<'feit' | 'aanname'> = ['feit', 'aanname']
 
-  async function toggleClassFilter(v: 'feit' | 'aanname' | 'fabel') {
+  async function toggleClassFilter(v: 'feit' | 'aanname') {
     if (!participantId) return
     const next = classFilter.includes(v)
       ? classFilter.filter(x => x !== v)

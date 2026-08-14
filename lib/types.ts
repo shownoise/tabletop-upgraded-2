@@ -1,6 +1,7 @@
 import type { GoalId } from "@/lib/engine/types"
 import type { ScenarioGraph } from "@/lib/graph/types"
 import type { SupervisionArea } from "@/lib/engine/supervision"
+import { ROLE_BRIEFINGS } from "@/lib/config/texts"
 export type { GoalId }
 
 // 8 playable roles — the client organisation's crisis-management + IT seats.
@@ -34,123 +35,33 @@ export interface RoleMeta {
   mandateSummary: string
 }
 
-export const ROLE_META: Record<Role, RoleMeta> = {
-  ceo: {
-    label: 'CEO',
-    team: 'crisis_management',
-    domain: 'leadership',
-    isTopDecisionMaker: true,
-    description: 'Directiebesluiten, communicatie naar board',
-    mandateSummary: 'Eindverantwoordelijk voor strategische keuzes, board-communicatie en het autoriseren van onomkeerbare stappen.',
-    authorities: [
-      'Beslissen over betaling losgeld (of weigering)',
-      'Openbare communicatie autoriseren',
-      'Communicatie naar board en aandeelhouders',
-      'Escalatie naar overheid of politie',
-      'Noodsituatie intern uitroepen',
-    ],
-    notResponsibleFor: 'Technische maatregelen, GDPR-meldingen opstellen',
-  },
-  ciso: {
-    label: 'CISO',
-    team: 'crisis_management',
-    domain: 'technical',
-    description: 'Beveiligingsstrategie, coördinatie incidentrespons',
-    mandateSummary: 'Coördineert incidentrespons, weegt technische risico\'s af en stuurt de externe IR-partij aan.',
-    authorities: [
-      'Coördineren van de incidentrespons',
-      'Aanbevelen van isolatie en containment-maatregelen',
-      'Aansturing externe IR-partij',
-      'Technische risicoafweging naar directie communiceren',
-      'Beslissen over beveiligingsmaatregelen',
-    ],
-    notResponsibleFor: 'Definitieve betaling losgeld, juridische meldingen',
-  },
-  cfo: {
-    label: 'CFO',
-    team: 'crisis_management',
-    domain: 'financial',
-    description: 'Financiële besluiten, verzekering, losgeld',
-    mandateSummary: 'Bewaakt financiële impact, activeert verzekering en adviseert over losgeld- en herstelbudget.',
-    authorities: [
-      'Goedkeuren van financiële noodbesluiten',
-      'Contact met verzekeraar opnemen',
-      'Financiële schade inschatten en rapporteren',
-      'Advies over losgeldsituatie geven aan CEO',
-    ],
-    notResponsibleFor: 'Technische herstelstappen, communicatie naar pers',
-  },
-  legal: {
-    label: 'Legal',
-    team: 'crisis_management',
-    domain: 'legal',
-    description: 'Compliance, meldplichten aan toezichthouders',
-    mandateSummary: 'Bewaakt meldplichten (AVG 72u, NIS2 24u) en beoordeelt aansprakelijkheid en klantverplichtingen.',
-    authorities: [
-      'AP-melding coördineren (AVG: binnen 72 uur)',
-      'NIS2-meldplicht bewaken richting NCSC',
-      'Juridisch advies over aansprakelijkheid geven',
-      'Contractuele verplichtingen richting klanten beoordelen',
-    ],
-    notResponsibleFor: 'Technische en financiële beslissingen',
-  },
-  head_of_comms: {
-    label: 'Hoofd Communicatie',
-    team: 'crisis_management',
-    domain: 'communication',
-    description: 'Interne en externe communicatie',
-    mandateSummary: 'Regisseert interne en externe boodschap, treedt op als woordvoerder en bewaakt de reputatie.',
-    authorities: [
-      'Interne communicatie naar medewerkers verzorgen',
-      'Perscommunicatie afstemmen met CEO',
-      'Social media bewaken en reageren',
-      'Woordvoerder namens de organisatie',
-    ],
-    notResponsibleFor: 'Technische en financiële beslissingen',
-  },
-  hr_lead: {
-    label: 'HR-manager',
-    team: 'crisis_management',
-    domain: 'people',
-    description: 'Medewerkerscommunicatie en insider-threat casussen',
-    mandateSummary: 'Zorgt voor medewerkers en welzijn, en trekt insider-onderzoek samen met Legal.',
-    authorities: [
-      'Medewerkerscommunicatie coördineren',
-      'Insider threat-onderzoek initiëren (samen met Legal)',
-      'Crisisopvang en welzijn medewerkers organiseren',
-    ],
-    notResponsibleFor: 'Technische en financiële beslissingen, perscommunicatie',
-  },
-  ops_manager: {
-    label: 'Operationeel manager',
-    team: 'crisis_management',
-    domain: 'operations',
-    description: 'Bedrijfscontinuïteit en operationele impact',
-    mandateSummary: 'Houdt primaire processen draaiend, activeert workarounds en bepaalt herstelprioriteit.',
-    authorities: [
-      'Operationele impact inschatten en rapporteren',
-      'Noodprocedures en handmatige processen activeren',
-      'Herstelprioriteiten op basis van bedrijfskriticaliteit bepalen',
-      'Coördineren met externe partners en leveranciers',
-    ],
-    notResponsibleFor: 'Technische herstelstappen, financiële goedkeuring',
-  },
-  it_manager: {
-    label: 'IT-manager',
-    team: 'technical_it',
-    domain: 'technical',
-    description: 'IT-infrastructuur, systeem-isolatie, back-up en herstel',
-    mandateSummary: 'Isoleert systemen, borgt back-ups en logs, en coördineert technisch herstel.',
-    authorities: [
-      'Systemen isoleren en netwerk segmenteren',
-      'IT-infrastructuur monitoren en beheren',
-      'Backups inventariseren en herstelbaarheid bepalen',
-      'Technische maatregelen coördineren',
-      'Logs en forensische data veiligstellen',
-    ],
-    notResponsibleFor: 'Businessbeslissingen, communicatie naar pers of board',
-  },
+// Rol-specifieke META (label, team, domain, isTopDecisionMaker) blijft hier;
+// de tekstuele briefing (mandateSummary, description, authorities, notResponsibleFor)
+// leest uit lib/config/texts.ts::ROLE_BRIEFINGS. Aanpassen van tekst → wijzig
+// alleen dat bestand.
+const ROLE_STRUCT: Record<Role, Pick<RoleMeta, 'label' | 'team' | 'domain' | 'isTopDecisionMaker'>> = {
+  ceo:          { label: 'CEO',                  team: 'crisis_management', domain: 'leadership',   isTopDecisionMaker: true },
+  ciso:         { label: 'CISO',                 team: 'crisis_management', domain: 'technical' },
+  cfo:          { label: 'CFO',                  team: 'crisis_management', domain: 'financial' },
+  legal:        { label: 'Legal',                team: 'crisis_management', domain: 'legal' },
+  head_of_comms:{ label: 'Hoofd Communicatie',   team: 'crisis_management', domain: 'communication' },
+  hr_lead:      { label: 'HR-manager',           team: 'crisis_management', domain: 'people' },
+  ops_manager:  { label: 'Operationeel manager', team: 'crisis_management', domain: 'operations' },
+  it_manager:   { label: 'IT-manager',           team: 'technical_it',      domain: 'technical' },
 }
+
+export const ROLE_META: Record<Role, RoleMeta> = Object.fromEntries(
+  (Object.entries(ROLE_STRUCT) as Array<[Role, Pick<RoleMeta, 'label' | 'team' | 'domain' | 'isTopDecisionMaker'>]>).map(([role, struct]) => {
+    const briefing = ROLE_BRIEFINGS[role]
+    return [role, {
+      ...struct,
+      description: briefing.description,
+      mandateSummary: briefing.mandateSummary,
+      authorities: briefing.authorities,
+      notResponsibleFor: briefing.notResponsibleFor,
+    }]
+  }),
+) as Record<Role, RoleMeta>
 
 // Minimum staffing to run a session — belongs to the role model, not to individual
 // scenarios. If fewer roles are joined the session can still start, but distributeRoles
@@ -421,7 +332,7 @@ export type EmotionalTone =
   | 'menacing'
   | 'professional'
 
-export type InjectReliability = 'fact' | 'assumption' | 'misleading'
+export type InjectReliability = 'fact' | 'assumption'
 
 export interface InjectSpanAnnotation {
   id: string
@@ -451,7 +362,7 @@ export interface Inject {
   // revealed in the review phase.
   // @deprecated Phase 2 — legacy field kept for backwards compat with older
   // scenario data. New scenarios use `classification` on InjectNodeData
-  // ('feit' | 'aanname' | 'fabel'). The builder no longer surfaces this.
+  // ('feit' | 'aanname'). The builder no longer surfaces this.
   reliability?: InjectReliability
   // Optional per-span ground truth for annotation-level scoring (Phase D.11).
   groundTruthAnnotations?: InjectSpanAnnotation[]
@@ -465,7 +376,7 @@ export interface Inject {
   requiresCapability?: string
   // Phase 2 — auteur-geclassificeerd type informatie. Undefined tolerated
   // for legacy data. New scenarios should always classify.
-  classification?: 'feit' | 'aanname' | 'fabel'
+  classification?: 'feit' | 'aanname'
   // Phase 4 — facilitator-only note about why this inject exists. Stripped
   // from participant payload in toParticipantState.
   facilitatorNote?: string
@@ -682,7 +593,7 @@ export interface RoundPhaseState {
   durations: Record<RoundPhase, number>
 }
 
-export type FactCheckTag = 'fact' | 'assumption' | 'misleading'
+export type FactCheckTag = 'fact' | 'assumption'
 
 export interface FactCheckEntry {
   injectId: string
@@ -754,7 +665,7 @@ export interface SessionState {
   participantViewState?: Record<string /* participantId */, {
     hidden: string[]      // inject ids the participant has hidden
     handled: string[]     // inject ids marked as afgehandeld
-    filters?: { classification?: Array<'feit' | 'aanname' | 'fabel'> }
+    filters?: { classification?: Array<'feit' | 'aanname'> }
   }>
   // Slim projection of the current/peek-ahead DecisionNode for participants.
   activeDecision?: ActiveDecisionState

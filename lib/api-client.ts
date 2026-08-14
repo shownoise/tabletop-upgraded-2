@@ -58,7 +58,7 @@ export const api = {
     channel?: InjectChannel
     senderName?: string
     targetRoles?: Role[]
-    classification?: 'feit' | 'aanname' | 'fabel'
+    classification?: 'feit' | 'aanname'
     libraryId?: string
   }) =>
     post<{ ok: true }>("/api/session/surprise-inject", input),
@@ -118,7 +118,7 @@ export const api = {
     patch: Partial<{
       hidden: string[]
       handled: string[]
-      filters: { classification?: Array<'feit' | 'aanname' | 'fabel'> }
+      filters: { classification?: Array<'feit' | 'aanname'> }
       addHidden: string
       removeHidden: string
       addHandled: string

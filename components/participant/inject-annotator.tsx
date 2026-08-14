@@ -21,13 +21,11 @@ interface Props {
 const UNDERLINE_CLASS: Record<FactCheckTag, string> = {
   fact:       "decoration-emerald-500/60",
   assumption: "decoration-yellow-500/60",
-  misleading: "decoration-red-500/60",
 }
 
 const DOT_CLASS: Record<FactCheckTag, string> = {
   fact:       "bg-emerald-500",
   assumption: "bg-yellow-500",
-  misleading: "bg-red-500",
 }
 
 export function InjectAnnotator({ injectId, participantId, content, annotations }: Props) {
@@ -146,7 +144,7 @@ export function InjectAnnotator({ injectId, participantId, content, annotations 
           className="absolute z-20 -translate-x-1/2 -translate-y-full rounded-md border border-tt-border bg-tt-surface shadow-md flex items-center gap-1 px-1.5 py-1"
           style={{ left: toolbar.x, top: toolbar.y }}
         >
-          {(["fact", "assumption", "misleading"] as FactCheckTag[]).map(tag => (
+          {(["fact", "assumption"] as FactCheckTag[]).map(tag => (
             <button
               key={tag}
               type="button"
