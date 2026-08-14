@@ -8,7 +8,8 @@ elke klus.
 | P0 Werkafspraken + glossarium | `chore/werkafspraken` | gemerged (PR #2) | Git-safety opgezet, oude sessie gered op eigen branch (PR #1), CLAUDE.md herschreven, CONTEXT.md is glossarium met alias-callouts, `docs/agents/` scaffold via `setup-matt-pocock-skills`. Main-protection ruleset actief (0 approvals). |
 | P10 Drie bugs | `fix/losse-bugs` | gemerged (PR #3) | Bug 2 gefixt (weergave). Bug 1 en 3 zijn geen code-fix — één is design (rol-filter, niet hardcoded), één is niet-verifieerbaar zonder browser en de code klopt. |
 | P2 Labels en teksten | `fix/labels-en-teksten` | gemerged (PR #4), wacht op antwoorden | Alleen inventarisatie gedaan in `docs/overdracht/P2-inventarisatie.md`. 4 vragen om beantwoord te krijgen voor er ook maar één label wijzigt. `fabel` zit in 15+ bestanden en scenario-data — dat is een migratie, geen tweak. |
-| P7 Testset + rubric | `docs/kwaliteitsborging` | in review | Vijf realistische testklanten (`docs/kwaliteit/testklanten.md`) en 10-punts rubric (`docs/kwaliteit/rubric.md`). Nulmeting-workflow uitgeschreven in `docs/kwaliteit/nulmeting/README.md` — deel 3 vereist dat jij de wizard draait per klant. |
+| P7 Testset + rubric | `docs/kwaliteitsborging` | gemerged (PR #5) | Vijf realistische testklanten (`docs/kwaliteit/testklanten.md`) en 10-punts rubric (`docs/kwaliteit/rubric.md`). Nulmeting-workflow uitgeschreven in `docs/kwaliteit/nulmeting/README.md` — deel 3 vereist dat jij de wizard draait per klant. |
+| P13 Overdracht-docs | `docs/overdracht-docs` | in review | `docs/overdracht/architectuur.md` (nieuw, huidige stand + verouderd-markering voor `docs/architecture/*`), `bekende-bugs.md` (compilatie van P10/P2/P8 vondsten), `scenario-data.md` (ScenarioGraph anatomie). Root `README.md` bijgewerkt met push=prod warning en overdracht-pointer. |
 
 ## Wacht op mij
 
