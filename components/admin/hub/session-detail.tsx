@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import type { SessionSnapshot } from "@/lib/admin/sessions-archive"
 import { useToast } from "./toast"
-import { SpiderChart, BarChart, type ReportVector } from "./report-charts"
+import { SpiderChart, type ReportVector } from "./report-charts"
 import { ROLE_META, type Role } from "@/lib/types"
 import type { DecisionNodeData, InjectNodeData, ScenarioGraph } from "@/lib/graph/types"
 
@@ -197,7 +197,6 @@ function collectMismatches(rounds: RoundReport[]): FactAssumptionMismatch[] {
 export function SessionDetail({ id }: { id: string }) {
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
-  const [chartView, setChartView] = useState<"spider" | "bars" | "both">("both")
   const [observations, setObservations] = useState("")
   const [recommendations, setRecommendations] = useState("")
   const [saving, setSaving] = useState(false)
@@ -301,37 +300,10 @@ export function SessionDetail({ id }: { id: string }) {
 
       <ReportSection title="Zes dimensies">
         <p className="text-sm text-muted-foreground mb-4">
-          Cumulatieve score per dimensie (gemiddelde over alle gekozen opties). Waardes lopen −2 tot +2 per as. Beide varianten tonen dezelfde data — kies wat leest.
+          Cumulatieve score per dimensie (gemiddelde over alle gekozen opties). Waardes lopen −2 tot +2 per as.
         </p>
-        <div className="flex gap-2 mb-4 no-print">
-          {(["spider", "bars", "both"] as const).map(v => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setChartView(v)}
-              className={`px-3 py-1.5 text-xs rounded border transition-colors ${
-                chartView === v
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {v === "spider" ? "Spider" : v === "bars" ? "Staafjes" : "Beide"}
-            </button>
-          ))}
-        </div>
-        <div className={`grid gap-6 items-center ${chartView === "both" ? "md:grid-cols-2" : ""}`}>
-          {(chartView === "spider" || chartView === "both") && (
-            <div className="rounded-lg border border-border bg-card p-4 flex flex-col items-center gap-2">
-              <SpiderChart vector={totalVector} />
-              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Spider — assen om de as</span>
-            </div>
-          )}
-          {(chartView === "bars" || chartView === "both") && (
-            <div className="rounded-lg border border-border bg-card p-4 flex flex-col items-center gap-2">
-              <BarChart vector={totalVector} />
-              <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Staafjes — nul-as in het midden</span>
-            </div>
-          )}
+        <div className="rounded-lg border border-border bg-card p-4 flex flex-col items-center gap-2 max-w-md mx-auto">
+          <SpiderChart vector={totalVector} size={340} />
         </div>
       </ReportSection>
 
@@ -394,7 +366,10 @@ export function SessionDetail({ id }: { id: string }) {
         })()}
       </ReportSection>
 
-      <ReportSection title="Aanbevelingen">
+      <ReportSection title="Aanbevelingen (placeholder — facilitator vult in)">
+        <p className="text-xs text-amber-700 dark:text-amber-500 mb-3 no-print">
+          De app legt geen post-sessie observaties of aanbevelingen vast. Vul hier zelf in wat de klant morgen anders moet doen — het verschijnt in de PDF-export.
+        </p>
         <div className="flex flex-col gap-3">
           <div>
             <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Wat viel je op</label>
@@ -428,9 +403,22 @@ export function SessionDetail({ id }: { id: string }) {
           <div className="hidden print:block">
             {observations && <p className="text-sm mb-2"><strong>Observaties:</strong> {observations}</p>}
             {recommendations && <p className="text-sm"><strong>Aanbevelingen:</strong> {recommendations}</p>}
+            {!observations && !recommendations && <p className="text-sm italic text-muted-foreground">— nog niet ingevuld —</p>}
           </div>
         </div>
       </ReportSection>
+
+      {/* Placeholders overzicht — dev-info voor de facilitator, wordt niet mee-geprint */}
+      <div className="no-print rounded-lg border border-dashed border-border bg-muted/20 p-4 text-xs text-muted-foreground leading-relaxed">
+        <strong className="text-foreground">Data-gaten in dit rapport</strong> — de app legt de volgende dingen nog niet automatisch vast; ze staan er als placeholder of ontbreken:
+        <ul className="mt-2 list-disc list-inside space-y-1">
+          <li><strong>Post-sessie observaties + aanbevelingen</strong>: facilitator-input hierboven, wordt niet uit sessie-data afgeleid.</li>
+          <li><strong>Feit-vs-aanname bij niet-getagde injects</strong>: mismatches leiden we alleen af bij injects die deelnemers actief tagden. Als niemand tagde, staat de sectie leeg — niet omdat er niks was, maar omdat we het niet weten.</li>
+          <li><strong>Discussie-transcript</strong>: alleen finale keuzes en (optioneel) reasoning worden opgeslagen. Wat er in de discussie gezegd werd, blijft buiten het rapport.</li>
+          <li><strong>Groepsvergelijking bij event-mode</strong>: rapport toont team-cumulatief; per-groep uitsplitsing zit er nog niet in.</li>
+          <li><strong>Follow-up datum</strong>: wanneer je deze klant opnieuw wil oefenen — geen veld voor.</li>
+        </ul>
+      </div>
 
       <style jsx global>{`
         @media print {
