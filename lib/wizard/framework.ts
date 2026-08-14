@@ -191,15 +191,45 @@ function groupBy<T>(items: T[], key: (t: T) => string): Record<string, T[]> {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Rule 4 — Voorheen: "fabel mag geen enige setup zijn". Die classificatie
-// bestaat niet meer sinds 2026-08-14; aannames zijn niet per definitie foute
-// signalen (in echte crises zijn cruciale keuzes vaak gebaseerd op
-// aannames). Rule is behouden als no-op zodat validateFramework's set van
-// 10 rules stabiel blijft — verwijder pas als je bereid bent de tests +
-// wizard-prompt volledig te hernummeren.
+// Rule 4 — geen enkele decision mag ALLEEN misleidende injects als setup hebben.
+//
+// Semantiek: ground truth is 'reliability' (fact / assumption / misleading).
+// Een decision moet gedragen worden door minstens één inject die WAAR is (fact
+// of ten minste een aanname) — anders leunt de beslissing op verzonnen info,
+// wat pedagogisch niet houdbaar is voor wizard-generatie.
+//
+// Alleen actief in de wizard-pipeline (validateFramework). Bestaande scenarios
+// die dit overtreden krijgen hier geen blokkade — de builder toont dit apart
+// als warning via lib/graph/validate.ts als je die uitbreidt.
 // ───────────────────────────────────────────────────────────────────────────
-export function ruleNoiseNeverCarriesOnlyPath(_graph: ScenarioGraph): RuleResult {
-  return { ok: true }
+export function ruleNoiseNeverCarriesOnlyPath(graph: ScenarioGraph): RuleResult {
+  const injects = injectNodes(graph)
+  const setupsByDecision = new Map<string, Array<{ id: string; reliability?: string }>>()
+  for (const i of injects) {
+    const target = i.data.setsUpDecisionNodeId
+    if (!target) continue
+    const arr = setupsByDecision.get(target) ?? []
+    arr.push({ id: i.id, reliability: i.data.reliability })
+    setupsByDecision.set(target, arr)
+  }
+  const problems: string[] = []
+  for (const [target, setups] of setupsByDecision.entries()) {
+    if (setups.length === 0) continue
+    // Alleen falen als álle setups misleidend zijn (of onbekend + misleidend).
+    // Als er minstens één fact of assumption bij zit, is de decision gedragen.
+    const anyTruthful = setups.some(s => s.reliability === 'fact' || s.reliability === 'assumption')
+    if (anyTruthful) continue
+    const allMisleading = setups.every(s => s.reliability === 'misleading')
+    if (allMisleading) {
+      problems.push(`decision ${target}: alleen misleidende setup-injects (${setups.map(s => s.id).join(', ')})`)
+    }
+  }
+  if (problems.length === 0) return { ok: true }
+  return {
+    ok: false,
+    violation: `Decisions op alleen misleidende setups: ${problems.join('; ')}`,
+    hint: 'Elke decision moet minstens één feit- of aanname-setup hebben. Een decision op puur misleidende injects test alleen of het team liegt kan herkennen — voeg een echt signaal (reliability=fact of assumption) toe of downgrade een misleidend-inject.',
+  }
 }
 
 // ───────────────────────────────────────────────────────────────────────────

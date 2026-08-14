@@ -219,17 +219,34 @@ describe("rule 3 — no dominant option", () => {
   })
 })
 
-describe("rule 4 — no-op sinds fabel-migratie (2026-08-14)", () => {
-  it("passes on baseGraph", () => {
+describe("rule 4 — geen decision op alleen misleidende setups", () => {
+  it("passes on baseGraph (setups zijn feit/aanname, niet misleading)", () => {
     expect(ruleNoiseNeverCarriesOnlyPath(baseGraph()).ok).toBe(true)
   })
-  it("passes on any graph — is a no-op nu fabel weg is", () => {
+  it("fails when every setup for a decision is reliability=misleading", () => {
     const g = baseGraph()
+    // Beide setup-injects (I1 → D1, I2 → D2) op misleading zetten
+    // via ground truth. classification (publiek) mag hetzelfde blijven.
     for (const n of g.nodes) {
       if (n.type !== 'inject') continue
       const d = n.data as InjectNodeData
-      if (d.setsUpDecisionNodeId) d.classification = 'aanname'
+      if (d.setsUpDecisionNodeId) d.reliability = 'misleading'
     }
+    const res = ruleNoiseNeverCarriesOnlyPath(g)
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.violation).toContain('misleidende')
+  })
+  it("passes when at least one setup per decision is fact/assumption", () => {
+    const g = baseGraph()
+    // Setup I3 op D1 (I1 blijft óók setup op D1 maar wordt misleading) —
+    // I3 is 'fact' dus D1 heeft nog een truthful setup. I2 is aanname
+    // (heeft geen reliability, maar rule 4 vereist enkel dat setups niet
+    // ALLEMAAL misleading zijn — undefined is 'onbekend', geen misleiding).
+    const i1 = g.nodes.find(n => n.id === 'I1')!.data as InjectNodeData
+    const i3 = g.nodes.find(n => n.id === 'I3')!.data as InjectNodeData
+    i1.reliability = 'misleading'
+    i3.reliability = 'fact'
+    i3.setsUpDecisionNodeId = 'D1'
     expect(ruleNoiseNeverCarriesOnlyPath(g).ok).toBe(true)
   })
 })

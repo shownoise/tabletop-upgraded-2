@@ -105,7 +105,7 @@ Framework-regels die de code toetst:
 1. Elke decision heeft een setup-inject in dezelfde of vorige ronde (inject.setsUpDecisionNodeId).
 2. Per decision: exact ${config.optionsPerRolePerRound} opties per rol.
 3. Geen enkele optie domineert een andere op alle 6 outcome-assen.
-4. Een aanname-inject mag nooit de enige setup zijn — feiten moeten een decision aankondigen (aannames mogen wél meebewegen).
+4. Geen enkele decision mag alleen misleidende setup-injects hebben. Het reliability-veld (ground truth) mag 'misleading' zijn voor red-herring injects, maar minstens één setup van elke decision moet reliability=fact of reliability=assumption zijn.
 5. Ronde N≥2 verwijst zichtbaar naar keuze/les uit ronde N-1.
 6. Elke optie beweegt minstens één as van CONT/FOR/BC/JUR/VER/KOS (in -2..+2).
 7. Fractie 'feit' in classificaties ≈ ${config.factsNoiseRatio.toFixed(2)} (±0.15).
