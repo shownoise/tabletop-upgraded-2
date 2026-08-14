@@ -115,8 +115,8 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
             "Van: telefonistes locatie Zuid. Binnengekomen tussen 08:50 en 09:20: zeven ouders bellen omdat ze een SMS hebben gekregen: 'Uw ouderaccount vereist een wachtwoord-reset — klik hier voor bevestiging.' Link wijst naar een domein dat lijkt op ov-no.nl maar dat niet is. Ouders vragen of dit klopt. Let op: deze SMS is niet uitgegaan vanaf een van onze systemen. Waarschijnlijk een losstaande phishingcampagne die toevallig vandaag piekt.",
           senderName: "Frontoffice locatie Zuid",
           timestamp: "09:22",
-          reliability: "misleading",
-          classification: "fabel",
+          reliability: "assumption",
+          classification: "aanname",
           targetTeam: "crisis_management",
           facilitatorNote: "Fabel — expliciete red herring. Test of team dit als losstaande phishingcampagne herkent.",
         },
@@ -1989,7 +1989,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
   ],
 }
 
-// Phase 5 — 6 authored ruis-injects (2 feit, 2 aanname, 2 fabel) matching the
+// Phase 5 — 6 authored ruis-injects (mix feit + aanname) matching the
 // schoolvereniging world. Facilitator kan deze via het runtime-panel afvuren
 // tijdens de discussie. Puur context — nooit gescoord.
 const schoolverenigingInjectLibrary: PremadeInject[] = [
@@ -2049,7 +2049,7 @@ const schoolverenigingInjectLibrary: PremadeInject[] = [
     label: "Vage LinkedIn-post — 'grote hack scholen Utrecht'",
     channel: "news",
     urgency: "low",
-    classification: "fabel",
+    classification: "aanname",
     senderName: "LinkedIn — anonieme post",
     title: "LinkedIn-gerucht over 'grote hack bij scholen in Utrecht'",
     content:
@@ -2062,7 +2062,7 @@ const schoolverenigingInjectLibrary: PremadeInject[] = [
     label: "WhatsApp conciërge — 'iemand zei dat...'",
     channel: "whatsapp",
     urgency: "low",
-    classification: "fabel",
+    classification: "aanname",
     senderName: "Conciërge Willem (loc. Noord)",
     title: "WhatsApp — 'iemand zei dat de rectrix aftreedt'",
     content:

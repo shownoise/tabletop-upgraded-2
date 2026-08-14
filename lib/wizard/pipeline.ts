@@ -92,7 +92,7 @@ Structuur:
 - Aantal rondes: ${config.rounds}
 - Injects per ronde: ${config.injectsPerRound}
 - Opties per rol per decision: ${config.optionsPerRolePerRound}
-- Feit/ruis-ratio: ${config.factsNoiseRatio.toFixed(2)} (0 = pure ruis, 1 = pure feiten). Elke inject krijgt classification 'feit', 'aanname' of 'fabel'.
+- Feit/aanname-ratio: ${config.factsNoiseRatio.toFixed(2)} (0 = alle aannames, 1 = alle feiten). Elke inject krijgt classification 'feit' of 'aanname'.
 
 Rollen betrokken: ${config.rolesIncluded.join(", ")}
 
@@ -105,7 +105,7 @@ Framework-regels die de code toetst:
 1. Elke decision heeft een setup-inject in dezelfde of vorige ronde (inject.setsUpDecisionNodeId).
 2. Per decision: exact ${config.optionsPerRolePerRound} opties per rol.
 3. Geen enkele optie domineert een andere op alle 6 outcome-assen.
-4. Een fabel-inject mag nooit de enige setup zijn.
+4. Een aanname-inject mag nooit de enige setup zijn — feiten moeten een decision aankondigen (aannames mogen wél meebewegen).
 5. Ronde N≥2 verwijst zichtbaar naar keuze/les uit ronde N-1.
 6. Elke optie beweegt minstens één as van CONT/FOR/BC/JUR/VER/KOS (in -2..+2).
 7. Fractie 'feit' in classificaties ≈ ${config.factsNoiseRatio.toFixed(2)} (±0.15).
@@ -181,7 +181,7 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
   // + injectLibrary + name/scenarioType/irPlaybook so we don't hard-code them.
   const closerRaw = await opts.llm([
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: `Geef nu als JSON: { "name": "…", "scenarioType": "ransomware_double_extortion" | "insider_threat" | "bec_cfo_fraud" | "supply_chain_compromise", "irPlaybook": "…markdown…", "outcomes": [ { "key": "…", "label": "…", "narrative": "…", "lessonLearned": "…", "scoreRange": {"min":…, "max":…} } ], "roleBriefings": { "ceo": {"text": "…", "playbookGaps": ["…"]}, … }, "injectLibrary": [ { "id":"…", "label":"…", "channel":"…", "urgency":"…", "classification":"feit|aanname|fabel", "title":"…", "content":"…" } ] }. Minstens 3 outcomes, roleBriefings voor elk van ${config.rolesIncluded.join(", ")}.` },
+    { role: 'user', content: `Geef nu als JSON: { "name": "…", "scenarioType": "ransomware_double_extortion" | "insider_threat" | "bec_cfo_fraud" | "supply_chain_compromise", "irPlaybook": "…markdown…", "outcomes": [ { "key": "…", "label": "…", "narrative": "…", "lessonLearned": "…", "scoreRange": {"min":…, "max":…} } ], "roleBriefings": { "ceo": {"text": "…", "playbookGaps": ["…"]}, … }, "injectLibrary": [ { "id":"…", "label":"…", "channel":"…", "urgency":"…", "classification":"feit|aanname", "title":"…", "content":"…" } ] }. Minstens 3 outcomes, roleBriefings voor elk van ${config.rolesIncluded.join(", ")}.` },
   ])
   const closer = JSON.parse(extractJson(closerRaw)) as {
     name: string

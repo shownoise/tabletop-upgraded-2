@@ -8,16 +8,16 @@ interface Props {
 }
 
 const TAG_META: Record<FactCheckTag, { label: string; color: string; bg: string }> = {
-  fact:       { label: "Feit",       color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500" },
-  assumption: { label: "Aanname",    color: "text-yellow-600 dark:text-yellow-400",   bg: "bg-yellow-500"  },
-  misleading: { label: "Misleidend", color: "text-red-600 dark:text-red-400",         bg: "bg-red-500"     },
+  fact:       { label: "Feit",    color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500" },
+  assumption: { label: "Aanname", color: "text-yellow-600 dark:text-yellow-400",   bg: "bg-yellow-500"  },
 }
 
 const GROUND_TRUTH_LABEL: Record<string, { label: string; color: string }> = {
-  fact:        { label: "Feit",       color: "text-emerald-600 dark:text-emerald-400" },
-  assumption:  { label: "Aanname",    color: "text-yellow-600 dark:text-yellow-400"   },
-  misleading:  { label: "Misleidend", color: "text-red-600 dark:text-red-400"         },
-  unverified:  { label: "Ongeverifieerd", color: "text-orange-600 dark:text-orange-400" },
+  fact:       { label: "Feit",    color: "text-emerald-600 dark:text-emerald-400" },
+  assumption: { label: "Aanname", color: "text-yellow-600 dark:text-yellow-400"   },
+  // Legacy 'misleading' data valt visueel terug op aanname-styling
+  misleading: { label: "Aanname", color: "text-yellow-600 dark:text-yellow-400"   },
+  unverified: { label: "Ongeverifieerd", color: "text-orange-600 dark:text-orange-400" },
 }
 
 export function FactCheckPanel({ session }: Props) {
@@ -41,7 +41,7 @@ export function FactCheckPanel({ session }: Props) {
       <div className="max-h-96 overflow-y-auto divide-y divide-border">
         {targets.map(({ round, inject }) => {
           const checks = (session.factChecks ?? []).filter(f => f.injectId === inject.id)
-          const counts: Record<FactCheckTag, number> = { fact: 0, assumption: 0, misleading: 0 }
+          const counts: Record<FactCheckTag, number> = { fact: 0, assumption: 0 }
           for (const c of checks) counts[c.tag] += 1
           const total = checks.length
           const changes = checks.reduce((acc, c) => acc + (c.changedCount ?? 0), 0)
@@ -64,7 +64,7 @@ export function FactCheckPanel({ session }: Props) {
 
               {/* Distribution bar */}
               <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-border">
-                {(["fact", "assumption", "misleading"] as FactCheckTag[]).map(tag => {
+                {(["fact", "assumption"] as FactCheckTag[]).map(tag => {
                   const pct = total > 0 ? (counts[tag] / total) * 100 : 0
                   if (pct === 0) return null
                   return (

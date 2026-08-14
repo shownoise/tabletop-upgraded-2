@@ -23,7 +23,7 @@ const library: PremadeInject[] = [
     label: "LinkedIn post",
     channel: "news",
     urgency: "low",
-    classification: "fabel",
+    classification: "aanname",
     title: "LinkedIn post",
     content: "Verkeerde regio",
   },

@@ -17,7 +17,7 @@ const CHANNELS: InjectChannel[] = [
   "siem_alert", "news_ticker", "system_alert", "raw",
 ]
 const URGENCIES: Urgency[] = ["low", "medium", "high", "critical"]
-const CLASSIFICATIONS: Array<PremadeInject['classification']> = ["feit", "aanname", "fabel"]
+const CLASSIFICATIONS: Array<PremadeInject['classification']> = ["feit", "aanname"]
 const ROLES: readonly Role[] = ROLE_ORDER
 
 // Phase 5 — helper for a blank "add new" entry. Sensible defaults + a random id.

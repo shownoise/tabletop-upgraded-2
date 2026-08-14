@@ -779,7 +779,7 @@ function IrPlaybookPanel({ session, participantRole }: {
         <div className="border-t border-tt-accent/20 px-4 pb-3 pt-2 max-h-[400px] overflow-y-auto">
           <PlaybookRenderer text={playbook} participantRole={participantRole} />
           <p className="mt-3 pt-2 border-t border-tt-accent/20 font-mono text-[9px] text-muted-foreground italic">
-            Let op: dit playbook bevat mogelijk verouderde, incomplete of misleidende passages. Verifieer feiten vóór je erop handelt.
+            Let op: dit playbook bevat mogelijk verouderde of incomplete passages. Verifieer feiten vóór je erop handelt.
           </p>
         </div>
       )}

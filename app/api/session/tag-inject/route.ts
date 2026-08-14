@@ -5,7 +5,7 @@ import type { FactCheckTag } from "@/lib/types"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-const TAGS: FactCheckTag[] = ["fact", "assumption", "misleading"]
+const TAGS: FactCheckTag[] = ["fact", "assumption"]
 
 export async function POST(req: Request) {
   const body = (await req.json()) as { participantId?: string; injectId?: string; tag?: string }

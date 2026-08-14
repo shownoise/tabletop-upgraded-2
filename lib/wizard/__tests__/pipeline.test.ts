@@ -176,17 +176,20 @@ describe("wizard pipeline — happy path", () => {
 describe("wizard pipeline — repair loop", () => {
   it("records a repair log entry and returns a passing graph when the second attempt fixes the failure", async () => {
     const good = passingPlan()
-    // First response — deliberately broken: change one inject's classification to fabel
-    // AND make it the only setup for a decision (violates rule 4).
+    // First response — deliberately broken: verwijder alle setup-links op de
+    // eerste-ronde injects zodat rule 1 (elke decision heeft een setup-inject)
+    // faalt en de repair-loop moet aanslaan.
     const broken = JSON.parse(JSON.stringify(good)) as WizardPlan
-    broken.rounds[0].injects![0].classification = 'fabel'
+    for (const inj of broken.rounds[0].injects ?? []) {
+      inj.setsUpDecisionNodeId = undefined
+    }
     // Also break rule 1 (setup-inject) by clearing i2 to make sure only one rule fails
     // per repair attempt is not required — multiple failing rules on first pass is fine.
     const roundsRaw = good.rounds.map((r, i) => JSON.stringify({ round: r, decision: good.decisions![i] }))
     const outlineRaw = JSON.stringify({ rounds: good.rounds.map(r => ({ title: r.title, situation: r.situation })) })
     const closerRaw = JSON.stringify({ name: good.name, scenarioType: good.scenarioType, outcomes: good.outcomes })
 
-    // First round response: broken plan for round 1 (fabel setup).
+    // First round response: broken plan for round 1 (setups removed, violates rule 1).
     const brokenRoundsRaw = [
       JSON.stringify({ round: broken.rounds[0], decision: broken.decisions![0] }),
       roundsRaw[1],
@@ -207,8 +210,8 @@ describe("wizard pipeline — repair loop", () => {
       now: () => 100,
     })
     expect(result.repairLog.length).toBeGreaterThanOrEqual(1)
-    // The known rule 4 failure should be logged.
-    expect(result.repairLog.map(r => r.ruleId)).toContain('rule4_noise_not_only_path')
+    // We removed the setup-links → rule 1 (setup-inject required) triggers.
+    expect(result.repairLog.map(r => r.ruleId)).toContain('rule1_setup_inject')
     // Final graph passes — the pipeline only returns on ok.
     expect(result.graph.publishStatus).toBe('draft')
   })

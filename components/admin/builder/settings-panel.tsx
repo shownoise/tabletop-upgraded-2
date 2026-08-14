@@ -16,8 +16,8 @@ interface FeatureRow {
 }
 
 const FEATURES: FeatureRow[] = [
-  { key: 'reliability', label: 'Betrouwbaarheid (BOB)', hint: 'Feit / aanname / misleidend als tag + span-marker op injects.' },
-  { key: 'compliance',  label: 'Compliance & meldplicht', hint: 'Meldplicht-profielen, NIS2-testgebieden en coverage-panel actief.' },
+  { key: 'reliability', label: 'Betrouwbaarheid (BOB)', hint: 'Feit / aanname als tag + span-marker op injects.' },
+  { key: 'compliance',  label: 'Compliance & meldplicht', hint: 'Meldplicht-profielen en coverage-panel actief; regime bepaalt bevoegde autoriteit.' },
   { key: 'scoring',     label: 'Score & dimensies',      hint: 'Punten per keuze + cumulatieve score kiest automatisch outcome.' },
 ]
 

@@ -25,7 +25,7 @@ export type GraphEdgeType = "sequence" | "branch" | "outcome" | "inject"
 // carry 'facts_assumptions' in their arrays; the inspector treats it as an
 // alias for 'reliability' (see normalizeAspects in evaluation-aspects.tsx).
 export type EvaluationAspect =
-  | 'reliability'          // BOB-select + span-editor (feit / aanname / misleidend)
+  | 'reliability'          // BOB-select + span-editor (feit / aanname)
   | 'facts_assumptions'    // DEPRECATED — alias for reliability, kept for backwards compat
   | 'nis2'                 // nis2Relevant flag + supervision areas
   | 'decision_impact'      // scoreImpact / linkedDimension
@@ -91,10 +91,11 @@ export interface InjectNodeData extends Omit<Inject, "id"> {
   // consequence for options that set a capability (e.g. retainer_activated →
   // forensic-findings inject).
   requiresCapability?: string
-  // Phase 2 — auteur-geclassificeerd type informatie. Feiten, aannames en
-  // fabels. Alleen data, geen scoring-hook (dit past). Feeds wizard noise
-  // ratio + participant filter (Phase 6).
-  classification?: 'feit' | 'aanname' | 'fabel'
+  // Phase 2 — auteur-geclassificeerd type informatie: feit (getoetst) of
+  // aanname (ongetoetst). Alleen data, geen scoring-hook. Feeds wizard
+  // feit-ratio + participant filter. 'fabel' is verwijderd 2026-08-14 —
+  // leugens zijn achteraf ongetoetste aannames.
+  classification?: 'feit' | 'aanname'
   // Phase 4 — één-regel facilitator-noot: waarom staat deze inject hier?
   // Facilitator-only; toParticipantState strips this. Never scored.
   facilitatorNote?: string
@@ -280,7 +281,7 @@ export interface PremadeInject {
   label: string
   channel: InjectNodeData['channel']
   urgency?: InjectNodeData['urgency']
-  classification?: 'feit' | 'aanname' | 'fabel'
+  classification?: 'feit' | 'aanname'
   senderName?: string
   title: string
   content: string
@@ -300,7 +301,7 @@ export interface ScenarioGraph {
   // IR retainer branding (facilitated by X) — verschijnt in participant chrome
   irRetainerName?: string
   // Crisis playbook / IR plan — verschijnt rechts bij elke participant tijdens de sessie.
-  // Bevat opzettelijk zowel bruikbare als misleidende info (BOB-training: pas op wat je gelooft).
+  // Bevat opzettelijk zowel feiten als aannames (BOB-training: verifieer voor je erop handelt).
   irPlaybook?: string
   irRetainerProfile?: IrRetainerProfile
   features?: GraphFeatures

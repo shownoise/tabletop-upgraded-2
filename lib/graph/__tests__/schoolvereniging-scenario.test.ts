@@ -122,12 +122,12 @@ describe('examples-schoolvereniging — structural invariants', () => {
 describe('examples-schoolvereniging — Phase 10 migration', () => {
   const graph = schoolverenigingScenario()
 
-  it('every inject carries a classification (feit/aanname/fabel)', () => {
+  it('every inject carries a classification (feit/aanname)', () => {
     for (const node of graph.nodes) {
       if (node.type !== 'inject') continue
       const d = node.data as InjectNodeData
       expect(d.classification, `inject "${d.title}" missing classification`).toBeDefined()
-      expect(['feit', 'aanname', 'fabel']).toContain(d.classification)
+      expect(['feit', 'aanname']).toContain(d.classification)
     }
   })
 
@@ -146,7 +146,7 @@ describe('examples-schoolvereniging — Phase 10 migration', () => {
     expect(rule1, `rule1 failed: ${rule1?.violation}`).toBeUndefined()
   })
 
-  it('no setup inject is classified fabel (rule 4)', () => {
+  it('every decision has at least one feit-setup (rule 4 — geen decisions op alleen aannames)', () => {
     const res = validateFramework(graph, CONFIG)
     const rule4 = res.failures.find(f => f.ruleId === 'rule4_noise_not_only_path')
     expect(rule4, `rule4 failed: ${rule4?.violation}`).toBeUndefined()
@@ -181,7 +181,7 @@ describe('examples-schoolvereniging — Phase 10 migration', () => {
     expect(graph.publishStatus).toBe('published')
   })
 
-  it('injectLibrary has the seeded 7 entries (2 feit / 2 aanname / 2 fabel + drift-tolerant)', () => {
+  it('injectLibrary has the seeded entries (feit + aanname mix)', () => {
     expect(graph.injectLibrary).toBeDefined()
     expect(graph.injectLibrary!.length).toBeGreaterThanOrEqual(6)
   })

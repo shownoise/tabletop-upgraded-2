@@ -34,13 +34,15 @@ interface Props {
 }
 
 const TAG_META: Record<FactCheckTag, { label: string; dot: string; color: string }> = {
-  fact:       { label: "Feit",       dot: "bg-emerald-500", color: "text-emerald-600 dark:text-emerald-400" },
-  assumption: { label: "Aanname",    dot: "bg-yellow-500",  color: "text-yellow-600 dark:text-yellow-400"   },
-  misleading: { label: "Misleidend", dot: "bg-red-500",     color: "text-red-600 dark:text-red-400"         },
+  fact:       { label: "Feit",    dot: "bg-emerald-500", color: "text-emerald-600 dark:text-emerald-400" },
+  assumption: { label: "Aanname", dot: "bg-yellow-500",  color: "text-yellow-600 dark:text-yellow-400"   },
 }
 
 function normalizeReliability(rel: string | undefined): FactCheckTag | undefined {
-  if (rel === "fact" || rel === "assumption" || rel === "misleading") return rel
+  // Legacy 'misleading' data valt terug op 'assumption' (aanname is een
+  // superset — leugens zijn achteraf ongetoetste aannames).
+  if (rel === "fact" || rel === "assumption") return rel
+  if (rel === "misleading") return "assumption"
   return undefined
 }
 
@@ -158,7 +160,6 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
 const UNDERLINE_MINE: Record<FactCheckTag, string> = {
   fact: "decoration-emerald-500/70",
   assumption: "decoration-yellow-500/70",
-  misleading: "decoration-red-500/70",
 }
 
 function SpanDiff({
