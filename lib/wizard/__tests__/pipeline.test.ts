@@ -130,6 +130,10 @@ function passingPlan(): WizardPlan {
       { key: 'middel',    label: 'Gemiddeld',   narrative: 'Redelijk', scoreRange: { min: -2, max: 4 } },
       { key: 'slecht',    label: 'Slecht',      narrative: 'Escalatie', scoreRange: { max: -3 } },
     ],
+    // Rule 11 — hidden weakness in de briefing van minstens één rol.
+    roleBriefings: {
+      ceo: { text: 'CEO-briefing.', playbookGaps: ['crisismandaat niet vastgelegd'] },
+    },
   }
 }
 
@@ -143,6 +147,7 @@ describe("wizard pipeline — happy path", () => {
         name: plan.name,
         scenarioType: plan.scenarioType,
         outcomes: plan.outcomes,
+        roleBriefings: plan.roleBriefings,
       }),
     })
     const result = await runWizardPipeline(testConfig(), { llm: stub.llm, now: () => 1_700_000_000 })
@@ -160,12 +165,12 @@ describe("wizard pipeline — happy path", () => {
     const stub1 = buildStub({
       outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
       rounds: plan.rounds.map((r, i) => JSON.stringify({ round: r, decision: plan.decisions![i] })),
-      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes }),
+      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, roleBriefings: plan.roleBriefings }),
     })
     const stub2 = buildStub({
       outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
       rounds: plan.rounds.map((r, i) => JSON.stringify({ round: r, decision: plan.decisions![i] })),
-      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes }),
+      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, roleBriefings: plan.roleBriefings }),
     })
     const r1 = await runWizardPipeline(testConfig(), { llm: stub1.llm, now: () => 42 })
     const r2 = await runWizardPipeline(testConfig(), { llm: stub2.llm, now: () => 42 })
@@ -248,7 +253,7 @@ describe("wizard pipeline — draft status + seed on graph", () => {
     const stub = buildStub({
       outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
       rounds: plan.rounds.map((r, i) => JSON.stringify({ round: r, decision: plan.decisions![i] })),
-      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes }),
+      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, roleBriefings: plan.roleBriefings }),
     })
     const result = await runWizardPipeline(testConfig({ seed: 'my-seed-xyz' }), { llm: stub.llm, now: () => 1 })
     expect(result.graph.publishStatus).toBe('draft')
