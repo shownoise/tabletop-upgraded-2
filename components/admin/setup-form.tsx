@@ -473,9 +473,12 @@ export function SetupForm() {
         </div>
       </div>
 
-      {/* Simulation mode selector */}
+      {/* Simulation mode selector — one-time keuze bij aanmaken. Kan na start
+          niet meer gewijzigd worden. */}
       <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 p-5">
-        <span className="font-mono text-xs uppercase tracking-wider text-primary">Simulation mode</span>
+        <div className="flex items-baseline justify-between">
+          <span className="font-mono text-xs uppercase tracking-wider text-primary">Modus (kies nu — vaststaand voor de hele sessie)</span>
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {(["training", "event"] as SimulationMode[]).map(m => (
             <button
@@ -491,11 +494,20 @@ export function SetupForm() {
               <span className={`font-mono text-sm font-medium ${mode === m ? "text-primary" : "text-foreground"}`}>
                 {m === "training" ? "Training" : "Event"}
               </span>
-              <span className="text-xs text-muted-foreground">
-                {m === "training"
-                  ? "NIS2-focused training with IR plan adherence and process deviation tracking."
-                  : "Multi-team event mode with team-based grouping and leaderboard scoring."}
-              </span>
+              {m === "training" ? (
+                <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
+                  <li>Elke deelnemer één rol, één device</li>
+                  <li>Injects verschijnen alleen bij de betreffende rol</li>
+                  <li>Individuele beslissingen + IR-plan adherentie</li>
+                </ul>
+              ) : (
+                <ul className="text-xs text-muted-foreground space-y-0.5 list-disc list-inside">
+                  <li>Eén notulist per team, één iPad; publiek kijkt mee</li>
+                  <li>Alle rollen op één device — switcher kiest actieve rol</li>
+                  <li>Alle injects komen op dat device binnen</li>
+                  <li>Teamnaam in lobby, leaderboard-scoring tussen teams</li>
+                </ul>
+              )}
             </button>
           ))}
         </div>
