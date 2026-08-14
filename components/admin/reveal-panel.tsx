@@ -4,8 +4,10 @@ import { useEffect, useState } from "react"
 import type { AssessmentReport } from "@/lib/scoring"
 import type { RegulatoryObligationState, RegulatoryRegime, SessionState, Role } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
+import type { DecisionNodeData, GraphNode, ScenarioGraph } from "@/lib/graph/types"
 import { effectiveRolesForParticipant } from "@/lib/engine/distribute-roles"
 import { retainerAdvice } from "@/lib/scoring/retainer-advice"
+import { vectorOverrideFor, type OutcomeVector } from "@/lib/scoring/vector-overrides"
 
 // REVIEW-fase reveal — Dutch labels, no abbreviations, explicit direction per axis.
 // Trend only renders completed rounds. Version + coverage moved to facilitator-only debug panel.
@@ -177,6 +179,15 @@ export function RevealPanel({
             </div>
           )}
 
+          {/* 2b. Keuzes per rol — deze ronde */}
+          {session?.graph && session.submittedDecisions !== undefined && (
+            <DecisionsPerRole
+              graph={session.graph}
+              submissions={session.submittedDecisions ?? []}
+              roundIndex={currentRound - 1}
+            />
+          )}
+
           {/* 3. Rolverdeling — Dutch labels + participant names */}
           {session?.roleDistribution && session.roleDistribution.entries.length > 0 && (
             <div>
@@ -214,6 +225,178 @@ export function RevealPanel({
       )}
     </div>
   )
+}
+
+// ── Decisions per role — deze ronde ─────────────────────────────────────
+// Per beslissing in de huidige ronde: welke rol koos wat, met alternatieven en
+// hun scoring-vector. Vectors komen uit lib/scoring/vector-overrides.ts (single
+// source of truth); inline outcomeVector op de scenario-optie is fallback.
+
+const DIM_KEYS = ["CONT", "FOR", "BC", "JUR", "VER", "KOS"] as const
+
+function DecisionsPerRole({
+  graph,
+  submissions,
+  roundIndex,
+}: {
+  graph: ScenarioGraph
+  submissions: import("@/lib/types").SubmittedDecision[]
+  roundIndex: number
+}) {
+  const decisionsInRound = decisionNodesForRound(graph, roundIndex)
+  if (decisionsInRound.length === 0) return null
+  const roundSubs = submissions.filter(s => s.roundIndex === roundIndex)
+
+  return (
+    <div>
+      <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+        Keuzes per rol — deze ronde
+      </div>
+      <div className="flex flex-col gap-3">
+        {decisionsInRound.map(dn => {
+          const dd = dn.data as DecisionNodeData
+          // Group options by allowed role. Options zonder allowedRole vallen onder 'any'.
+          const roles = Array.from(new Set(
+            dd.options.map(o => o.allowedRole ?? "any"),
+          ))
+          return (
+            <div key={dn.id} className="rounded border border-border bg-background p-2">
+              <div className="text-sm font-semibold mb-2">{dd.prompt}</div>
+              {roles.map(role => {
+                const roleOptions = dd.options.filter(o => (o.allowedRole ?? "any") === role)
+                const submission = roundSubs.find(s =>
+                  s.role === role
+                  && roleOptions.some(o => o.id === s.actionId),
+                )
+                const chosen = submission
+                  ? roleOptions.find(o => o.id === submission.actionId)
+                  : null
+                const alternatives = chosen
+                  ? roleOptions.filter(o => o.id !== chosen.id)
+                  : roleOptions
+                const roleLabel = role === "any" ? "Alle rollen" : (ROLE_META[role as Role]?.label ?? role)
+                return (
+                  <div key={role} className="mt-2 first:mt-0">
+                    <div className="flex items-baseline justify-between mb-1">
+                      <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{roleLabel}</span>
+                      {submission ? (
+                        <span className="text-[11px] text-muted-foreground">door {submission.participantName}</span>
+                      ) : (
+                        <span className="text-[11px] italic text-amber-700 dark:text-amber-500">geen inzending</span>
+                      )}
+                    </div>
+                    {chosen && (
+                      <div className="rounded border-2 border-primary/50 bg-primary/5 p-2 mb-1">
+                        <div className="text-xs font-medium mb-1">✓ Gekozen: {chosen.label}</div>
+                        <VectorRow option={chosen} allowedRole={role} />
+                        {submission?.reasoning && (
+                          <div className="text-[11px] italic text-muted-foreground mt-1">"{submission.reasoning}"</div>
+                        )}
+                      </div>
+                    )}
+                    {alternatives.length > 0 && (
+                      <details className="text-[11px]">
+                        <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                          {chosen ? `Alternatieven (${alternatives.length})` : `Beschikbare opties (${alternatives.length})`}
+                        </summary>
+                        <div className="flex flex-col gap-1 mt-1 pl-2 border-l-2 border-border">
+                          {alternatives.map(alt => (
+                            <div key={alt.id} className="py-1">
+                              <div className="text-xs">{alt.label}</div>
+                              <VectorRow option={alt} allowedRole={role} />
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function VectorRow({
+  option,
+  allowedRole,
+}: {
+  option: DecisionNodeData['options'][number]
+  allowedRole: string
+}) {
+  const vector = resolveVector(option, allowedRole)
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      {DIM_KEYS.map(dim => {
+        const v = vector[dim]
+        const color = v > 0
+          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+          : v < 0
+            ? "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30"
+            : "bg-muted-foreground/10 text-muted-foreground border-border"
+        return (
+          <span
+            key={dim}
+            className={`font-mono text-[10px] px-1.5 py-0.5 rounded border ${color}`}
+            title={`${dim}: ${v > 0 ? "+" : ""}${v}`}
+          >
+            {dim} {v > 0 ? "+" : ""}{v}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function resolveVector(
+  option: DecisionNodeData['options'][number],
+  allowedRole: string,
+): OutcomeVector {
+  const role = allowedRole === "any" ? undefined : allowedRole
+  const override = vectorOverrideFor(role, option.label)
+  if (override) return override
+  if (option.outcomeVector) return option.outcomeVector as OutcomeVector
+  return { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 }
+}
+
+// Round-number toewijzing via sequence-edges vanaf start. Node → 0-based round index.
+// undefined = geen ronde (start-node zelf, of onbereikbaar).
+function numberRoundsFromStart(graph: ScenarioGraph): Map<string, number> {
+  const out = new Map<string, number>()
+  const start = graph.nodes.find(n => n.type === "start")
+  if (!start) return out
+  const sequenceOut = new Map<string, string[]>()
+  for (const e of graph.edges) {
+    if (e.type !== "sequence") continue
+    const list = sequenceOut.get(e.source) ?? []
+    list.push(e.target)
+    sequenceOut.set(e.source, list)
+  }
+  // BFS from start, incrementing round-counter on each new round-node encounter.
+  const queue: Array<{ id: string; roundIdx: number }> = [{ id: start.id, roundIdx: -1 }]
+  const seen = new Set<string>([start.id])
+  const nodeById = new Map(graph.nodes.map(n => [n.id, n]))
+  while (queue.length > 0) {
+    const item = queue.shift()!
+    const node = nodeById.get(item.id)
+    let idx = item.roundIdx
+    if (node?.type === "round") { idx = idx + 1; out.set(item.id, idx) }
+    else if (idx >= 0) out.set(item.id, idx)
+    for (const next of sequenceOut.get(item.id) ?? []) {
+      if (seen.has(next)) continue
+      seen.add(next)
+      queue.push({ id: next, roundIdx: idx })
+    }
+  }
+  return out
+}
+
+function decisionNodesForRound(graph: ScenarioGraph, roundIndex: number): GraphNode[] {
+  const map = numberRoundsFromStart(graph)
+  return graph.nodes.filter(n => n.type === "decision" && map.get(n.id) === roundIndex)
 }
 
 // Build the Dutch advice sentence for the current review round.

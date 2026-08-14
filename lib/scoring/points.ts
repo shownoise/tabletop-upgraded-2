@@ -27,7 +27,10 @@ export function buildLeaderboard(
   return entries
 }
 
-// Tie-break: eerst hoogste totaal, dan zwaarst gewogen dimensie in laatste ronde, dan besluitmoment.
+// Tie-break: eerst hoogste totaal, dan CONT (containment) van de laatste ronde.
+// Sinds de per-ronde weging is verwijderd (2026-08-14) is CONT als kompas gekozen
+// omdat het de meest tactische dimensie is: bij gelijke punten wint wie beter
+// heeft ingedamd.
 function compareLeaderboard(
   a: LeaderboardEntry,
   b: LeaderboardEntry,
@@ -36,25 +39,12 @@ function compareLeaderboard(
 ): number {
   if (a.totalPoints !== b.totalPoints) return b.totalPoints - a.totalPoints
   const lastRoundNumber = Math.max(...scenario.rounds.map(r => r.number))
-  const lastSpec = scenario.rounds.find(r => r.number === lastRoundNumber)
-  if (!lastSpec) return 0
-  const heaviest = pickHeaviestDim(lastSpec.outcomeWeights)
   const aLast = outcomesByGroup[a.groupId].find(o => o.round === lastRoundNumber)
   const bLast = outcomesByGroup[b.groupId].find(o => o.round === lastRoundNumber)
-  const av = aLast?.perDimension[heaviest] ?? 0
-  const bv = bLast?.perDimension[heaviest] ?? 0
+  const av = aLast?.perDimension.CONT ?? 0
+  const bv = bLast?.perDimension.CONT ?? 0
   if (av !== bv) return bv - av
   return 0
-}
-
-function pickHeaviestDim(weights: Record<string, number>): typeof OUTCOME_DIMENSIONS[number] {
-  let best = OUTCOME_DIMENSIONS[0] as typeof OUTCOME_DIMENSIONS[number]
-  let bestW = weights[best] ?? 0
-  for (const d of OUTCOME_DIMENSIONS) {
-    const w = weights[d] ?? 0
-    if (w > bestW) { bestW = w; best = d }
-  }
-  return best
 }
 
 // Deel B §7.3 — divergentie: entropie over de keuzeverdeling per beslispunt.

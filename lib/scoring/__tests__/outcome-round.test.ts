@@ -62,20 +62,49 @@ describe('RONDE_UITKOMST (§5)', () => {
     expect(o.points).toBe(50)
   })
 
-  it('golden 4: weging accentueert CONT+FOR (ransomware R1) → positieve outcome', () => {
+  it('golden 4: gelijke weging over 6 dimensies (best-option R1) → positieve outcome', () => {
     const o = computeRoundOutcome(baseScenario, eventsWith('best'), 1)
-    // vector: CONT+2 FOR+2 BC 0 JUR 0 VER 0 KOS−1; gewichten 3/3/2/1/1/1 → 6+6+0+0+0−1 = 11
-    // noemer: (3+3+2+1+1+1)*2 = 22 → 0.5
-    expect(o.normalized).toBeCloseTo(11 / 22, 4)
-    expect(o.points).toBe(75)
+    // Vector 'best': CONT+2, FOR+2, BC 0, JUR 0, VER 0, KOS-1
+    // Som = 3, dim-count = 6, normalized = 3 / (6*2) = 0.25
+    expect(o.normalized).toBeCloseTo(3 / 12, 4)
+    expect(o.points).toBe(63)
   })
 
-  it('golden 5: geen inzending → fallback-vector (Deel B §7.1)', () => {
-    // Geen decision_submitted. Fallback vector: CONT:-1, FOR:0, BC:-1, JUR:-1, VER:0, KOS:0
+  it('golden 5: geen inzending → hasSubmissions=false, normalized=0 (bug-fix)', () => {
+    // Zonder submissions worden onbeantwoorde decisions niet meer als negatieve
+    // fallback meegeteld — dat is de "alles negatief na één antwoord"-bug.
+    // Impliciete "geen besluit" komt pas na finalizeDecision (LOCK).
     const o = computeRoundOutcome(baseScenario, [{ kind: 'session_start', t: 0 }], 1)
-    // R1 weights: 3/3/2/1/1/1 → 3·(-1) + 3·0 + 2·(-1) + 1·(-1) + 1·0 + 1·0 = -3 -2 -1 = -6
-    // noemer 22 → normalized = -6/22 ≈ -0.273
-    expect(o.normalized).toBeCloseTo(-6 / 22, 4)
+    expect(o.hasSubmissions).toBe(false)
+    expect(o.normalized).toBe(0)
+    expect(o.points).toBe(50)
+  })
+
+  it('bug regressie: partial submissions tellen alleen ingediende decisions', () => {
+    // Twee decisions in dezelfde ronde, één ingediend met 'best' → score reflecteert
+    // alléén die ene, niet -1 voor de onbeantwoorde.
+    const s: ScenarioSpec = {
+      rounds: [{ number: 1, designTimeMinutes: 20 }],
+      decisionPoints: [
+        { id: 'dp1', round: 1, domain: 'CONTAINMENT', designedOwner: 'X', options: [
+          { id: 'good', outcomeVector: { CONT: 2, FOR: 1, BC: 0, JUR: 0, VER: 0, KOS: 0 } },
+        ] },
+        { id: 'dp2', round: 1, domain: 'JURIDISCH', designedOwner: 'Y', options: [
+          { id: 'good', outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 2, VER: 1, KOS: 0 } },
+        ] },
+      ],
+      injects: [],
+    }
+    const events: ExerciseEvent[] = [
+      { kind: 'session_start', t: 0 },
+      { kind: 'decision_submitted', t: 1000, round: 1, decisionPointId: 'dp1', optionId: 'good', by: 'X' },
+      // dp2 blijft onbeantwoord
+    ]
+    const o = computeRoundOutcome(s, events, 1)
+    // Alleen dp1 telt → perDim gelijk aan die vector, normalized = 3/12 = 0.25
+    expect(o.perDimension.CONT).toBe(2)
+    expect(o.perDimension.JUR).toBe(0)  // niet negatief!
+    expect(o.normalized).toBeCloseTo(3 / 12, 4)
   })
 
   it('property: points = round(100 · (normalized+1) / 2), altijd 0..100', () => {

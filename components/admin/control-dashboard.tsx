@@ -614,7 +614,7 @@ export function ControlDashboard() {
 
             {/* Reveal (Deel B §5.2) — verschijnt tijdens lock/review */}
             {session.graph && isActive && (session.roundPhase === "review") && (
-              <RevealPanel visible={true} currentRound={currentIndex + 1} />
+              <RevealPanel visible={true} currentRound={currentIndex + 1} session={session} />
             )}
 
             {/* Phase 7 — facilitator-only round-review narrative. Renders during REVIEW. */}
