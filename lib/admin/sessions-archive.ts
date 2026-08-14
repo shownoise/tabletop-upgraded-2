@@ -23,6 +23,13 @@ export interface SessionSnapshot {
   // ScorePanel + narrative kunnen erop draaien alsof het live is.
   // Grote blob (~100KB) maar KV kan het aan.
   snapshot: SessionState
+  // Post-sessie facilitator-notities. Bewerken via het session-detail
+  // rapport. Optioneel — rapport rendert prima zonder.
+  facilitatorReport?: {
+    observations?: string        // "wat viel op"
+    recommendations?: string     // concrete aanbevelingen voor klant
+    updatedAt?: number
+  }
 }
 
 const KEY = "admin:sessions-archive"
