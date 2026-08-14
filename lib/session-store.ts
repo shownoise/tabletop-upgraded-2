@@ -505,6 +505,19 @@ export async function createSession(
 }
 
 export async function resetSession(): Promise<void> {
+  // Archiveer eerst als de sessie een echte run heeft gehad (ended of active).
+  const current = await dbGetSession()
+  if (current && (current.status === "ended" || current.status === "active")) {
+    try {
+      const { upsertSnapshot, snapshotFromSession } = await import("./admin/sessions-archive")
+      const clientId = (current.config as unknown as { adminClientId?: string })?.adminClientId
+      const clientName = (current.config as unknown as { adminClientName?: string })?.adminClientName
+      await upsertSnapshot(snapshotFromSession(current, clientId, clientName))
+    } catch (err) {
+      // Archiveren mag niet blocking zijn voor de reset — sessie-reset heeft prio.
+      console.warn("[session-archive] snapshot failed:", err)
+    }
+  }
   await dbSetSession(null)
   emit("session_reset", {})
   broadcastState(null)
