@@ -62,8 +62,13 @@ export interface RoundSpec {
   number: number
   // Deel A §7.1 — Δ_ref voor tempo-scoring (ronde-niveau default).
   designTimeMinutes: number
-  // Deel A §5 — weging per dimensie in deze ronde.
-  outcomeWeights: Record<OutcomeDimension, number>
+  /**
+   * @deprecated Per-ronde dimensie-weging is verwijderd — alle 6 dimensies tellen
+   * even zwaar. Veld blijft in het type zodat oude scenario-data blijft parsen,
+   * maar wordt niet meer gelezen. Zie `lib/scoring/vector-overrides.ts` om de
+   * per-optie scores aan te passen.
+   */
+  outcomeWeights?: Record<OutcomeDimension, number>
   // Deel A §7.4 — tijdvenster voor herziening (min). Default REVISION_WINDOW_MIN.
   revisionWindowMin?: number
 }

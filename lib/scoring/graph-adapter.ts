@@ -8,6 +8,7 @@ import type {
   Inject as AppInject, TimelineEvent,
 } from '@/lib/types'
 import { NO_DECISION_FALLBACK_VECTOR, OUTCOME_DIMENSIONS, type Domain, type OutcomeDimension } from './constants'
+import { vectorOverrideFor } from './vector-overrides'
 import type {
   DecisionPointSpec, ExerciseEvent, ExerciseInput, InjectSpec,
   Mode, OptionSpec, RoundSpec, ScenarioSpec,
@@ -26,15 +27,10 @@ export interface GraphToScoringOptions {
   // Als undefined proberen we designTimeMinutes uit RoundNodeData.timerMinutes te lezen
   // en anders default 20 min.
   defaultDesignTimeMinutes?: number
-  // Als undefined gebruikt de bridge gelijk gewicht per dimensie.
-  defaultOutcomeWeights?: Record<OutcomeDimension, number>
 }
 
 export function graphToScenarioSpec(graph: ScenarioGraph, opts: GraphToScoringOptions = {}): ScenarioSpec {
   const defaultDesign = opts.defaultDesignTimeMinutes ?? 20
-  const defaultWeights: Record<OutcomeDimension, number> = opts.defaultOutcomeWeights ?? {
-    CONT: 1, FOR: 1, BC: 1, JUR: 1, VER: 1, KOS: 1,
-  }
 
   const roundNodes = graph.nodes.filter(n => n.type === 'round')
   const injectNodes = graph.nodes.filter(n => n.type === 'inject')
@@ -49,7 +45,6 @@ export function graphToScenarioSpec(graph: ScenarioGraph, opts: GraphToScoringOp
     return {
       number: roundNumberByNodeId.get(n.id) ?? 1,
       designTimeMinutes: rd.scoring?.designTimeMinutes ?? rd.timerMinutes ?? defaultDesign,
-      outcomeWeights: rd.scoring?.outcomeWeights ?? defaultWeights,
     }
   }).sort((a, b) => a.number - b.number)
 
@@ -289,14 +284,16 @@ function inferOwnerFromOptions(dd: DecisionNodeData): string {
   return 'CRISIS_LEAD'
 }
 
-// Options must carry an explicit outcomeVector on the 6 axes. If missing, the
-// scoring engine treats the option as a no-op — falling back to qualityRank
-// via qualityRankToVector below.
+// Options first look for a vector in the central override tabel
+// (lib/scoring/vector-overrides.ts) so authors kunnen scores aanpassen zonder
+// scenario-data te editen. Als er geen override bestaat: inline outcomeVector,
+// dan qualityRank-fallback.
 function optionFromDecision(o: DecisionNodeData['options'][number]): OptionSpec {
+  const override = vectorOverrideFor(o.allowedRole, o.label)
   return {
     id: o.id,
     label: o.label,
-    outcomeVector: o.outcomeVector ?? qualityRankToVector(o.qualityRank),
+    outcomeVector: override ?? o.outcomeVector ?? qualityRankToVector(o.qualityRank),
     debriefNote: o.lessonLearned ?? o.facilitatorCommentary,
     implicit: o.implicit,
   }

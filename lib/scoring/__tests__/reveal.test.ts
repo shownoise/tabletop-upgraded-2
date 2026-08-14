@@ -28,16 +28,13 @@ const groups = [
 ]
 
 describe('reveal (Deel B §5.2)', () => {
-  it('per-ronde reveal onthult weging pas nu (niet vooraf)', () => {
+  it('per-ronde reveal toont keuzeverdeling per beslispunt', () => {
     const events: ExerciseEvent[] = [
       { kind: 'decision_submitted', t: 100, round: 1, decisionPointId: 'r1-cont', optionId: 'best',   by: 'p1' },
       { kind: 'decision_submitted', t: 100, round: 1, decisionPointId: 'r1-cont', optionId: 'best',   by: 'p2' },
       { kind: 'decision_submitted', t: 100, round: 1, decisionPointId: 'r1-cont', optionId: 'bad',    by: 'p3' },
     ]
     const reveal = buildReveal({ scenario, events, round: 1, groups })
-    // Weging pas nu zichtbaar in de reveal-payload:
-    expect(reveal.weights.CONT).toBe(3)
-    expect(reveal.weights.FOR).toBe(3)
     expect(reveal.decisionReveals).toHaveLength(1)
     // Verdeling: 2 groepen 'best', 1 groep 'bad'
     expect(reveal.decisionReveals[0].optionDistribution).toEqual({ best: 2, bad: 1 })
@@ -113,12 +110,10 @@ describe('reveal (Deel B §5.2)', () => {
     expect(end.perGroupOutcomes.g3).toHaveLength(2)
   })
 
-  it('per-ronde reveal toont géén score-informatie vóór ronde-lock — geldt via het feit dat buildReveal alléén na LOCK wordt aangeroepen (afspraak). Weight-info in de payload is de reveal zelf.', () => {
+  it('per-ronde reveal-payload bevat decisionReveals en standings (geen weights meer sinds 2026-08-14)', () => {
     const reveal = buildReveal({ scenario, events: [], round: 1, groups })
-    // Structuur-check: de reveal-payload bevat expliciete weights, vectors, en distribution.
-    // De caller is verantwoordelijk voor NIET tonen tijdens KEUZE-fase.
-    expect(reveal).toHaveProperty('weights')
     expect(reveal).toHaveProperty('decisionReveals')
     expect(reveal).toHaveProperty('standings')
+    expect(reveal).not.toHaveProperty('weights')
   })
 })

@@ -11,7 +11,6 @@ import type { ExerciseEvent, RoundOutcome, ScenarioSpec } from './types'
 
 export interface RoundReveal {
   round: number
-  weights: Record<OutcomeDimension, number>
   decisionReveals: Array<{
     decisionPointId: string
     // Deel B §5.2 punt 2: aggregatie van hoeveel groepen welke optie kozen.
@@ -38,7 +37,6 @@ export function buildReveal(input: {
   groups: Array<{ id: string; participantIds: string[] }>
 }): RoundReveal {
   const { scenario, events, round, groups } = input
-  const roundSpec = scenario.rounds.find(r => r.number === round)!
   const dps = scenario.decisionPoints.filter(d => d.round === round)
 
   // Bepaal de finale submission per (group, dp).
@@ -71,7 +69,6 @@ export function buildReveal(input: {
 
   return {
     round,
-    weights: roundSpec.outcomeWeights,
     decisionReveals,
     standings,
   }
