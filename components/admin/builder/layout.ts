@@ -4,13 +4,18 @@ import type { Edge, Node } from "@xyflow/react"
 const COL_WIDTH = 360
 const SPINE_ROW = 220   // vertical center of the spine
 const INJECT_ROW_STEP = 180
+const DECISION_ROW_STEP = 420  // decisions sit below injects in the same column as their round
 const CHASER_ROW = SPINE_ROW - 200  // chasers above the spine so they read as "fires from"
 const PAD_X = 80
 const PAD_Y = 40
 const INJECT_STAGGER = 200
 
 // Nodes that form the main left-to-right story spine.
+// Decisions used to be spine-columns of their own; they now stack UNDER their
+// preceding round (see collapseDecisionsIntoRounds below) so a round visually
+// contains its situation, injects, and decision.
 const SPINE_TYPES = new Set(["start", "round", "decision", "special", "outcome"])
+const RANKABLE_SPINE_TYPES = new Set(["start", "round", "special", "outcome"])
 // Edge kinds that count towards the spine ordering.
 const SPINE_EDGE_KINDS = new Set(["sequence", "branch", "outcome"])
 
@@ -24,21 +29,40 @@ function edgeKind(e: EdgeKindOnly): string {
   return e.sourceHandle === "injects" ? "inject" : "sequence"
 }
 
-// Longest-path rank for spine nodes. Rank 0 = start (or any node with no
-// spine-incoming edges). We iterate until stable rather than doing a full
-// topological sort — the graph is small (<200 nodes in practice) and this is
-// simpler to reason about.
+// Longest-path rank for RANKABLE spine nodes (everything except decisions).
+// Decisions inherit their preceding round's rank so they stack in the same
+// column visually — the round "contains" its decision.
 function computeSpineRanks(nodes: RFNode[], edges: EdgeKindOnly[]): Map<string, number> {
   const rank = new Map<string, number>()
-  const spine = nodes.filter(n => SPINE_TYPES.has(n.type ?? ""))
-  for (const n of spine) rank.set(n.id, 0)
+  const decisionSet = new Set(nodes.filter(n => n.type === "decision").map(n => n.id))
+  const rankable = nodes.filter(n => RANKABLE_SPINE_TYPES.has(n.type ?? ""))
+  for (const n of rankable) rank.set(n.id, 0)
 
-  const spineEdges = edges.filter(e => SPINE_EDGE_KINDS.has(edgeKind(e)) && rank.has(e.source) && rank.has(e.target))
+  const allSpineEdges = edges.filter(e => SPINE_EDGE_KINDS.has(edgeKind(e)))
+
+  // Build a "logical" edge set that skips over decisions. If round R → decision D → next-node N,
+  // we treat this as R → N for ranking purposes. That way N ends up in R's next column,
+  // not two columns away.
+  const logicalEdges: EdgeKindOnly[] = []
+  for (const e of allSpineEdges) {
+    if (decisionSet.has(e.source)) continue  // handled via bypass below
+    if (decisionSet.has(e.target)) {
+      // Find outgoing edges from this decision that lead to a non-decision.
+      const decisionOut = allSpineEdges.filter(x => x.source === e.target && !decisionSet.has(x.target))
+      for (const dOut of decisionOut) {
+        logicalEdges.push({ source: e.source, target: dOut.target, sourceHandle: null, data: null })
+      }
+    } else {
+      logicalEdges.push(e)
+    }
+  }
+
   let changed = true
   let guard = 0
   while (changed && guard++ < nodes.length + 2) {
     changed = false
-    for (const e of spineEdges) {
+    for (const e of logicalEdges) {
+      if (!rank.has(e.source) || !rank.has(e.target)) continue
       const next = (rank.get(e.source) ?? 0) + 1
       if (next > (rank.get(e.target) ?? 0)) {
         rank.set(e.target, next)
@@ -46,11 +70,20 @@ function computeSpineRanks(nodes: RFNode[], edges: EdgeKindOnly[]): Map<string, 
       }
     }
   }
+
+  // Assign each decision the rank of its preceding round (via sequence edge).
+  // If no sequence-parent found, drop it into rank 0 as an orphan.
+  for (const decId of decisionSet) {
+    const parent = allSpineEdges.find(e => e.target === decId && rank.has(e.source))
+    rank.set(decId, parent ? (rank.get(parent.source) ?? 0) : 0)
+  }
   return rank
 }
 
 // Position the spine into columns; within a column, sort by existing y so the
-// author's hand-drawn ordering is preserved as a tie-breaker.
+// author's hand-drawn ordering is preserved as a tie-breaker. Decisions in a
+// column are stacked below the spine center (below any injects) so a round
+// visually contains its downstream decision.
 function layoutSpine(nodes: RFNode[], rank: Map<string, number>): Map<string, { x: number; y: number }> {
   const cols: Record<number, RFNode[]> = {}
   for (const n of nodes) {
@@ -61,11 +94,20 @@ function layoutSpine(nodes: RFNode[], rank: Map<string, number>): Map<string, { 
   const positions = new Map<string, { x: number; y: number }>()
   for (const [rStr, arr] of Object.entries(cols)) {
     const r = Number(rStr)
-    const sorted = [...arr].sort((a, b) => a.position.y - b.position.y)
+    const decisions = arr.filter(n => n.type === "decision")
+    const spineOthers = arr.filter(n => n.type !== "decision")
+    const sorted = [...spineOthers].sort((a, b) => a.position.y - b.position.y)
     const totalHeight = (sorted.length - 1) * 200
     const startY = SPINE_ROW - totalHeight / 2
     sorted.forEach((n, i) => {
       positions.set(n.id, { x: PAD_X + r * COL_WIDTH, y: PAD_Y + startY + i * 200 })
+    })
+    // Decisions stack below the spine, anchored to the first round in this column.
+    const anchor = sorted[0]
+      ? positions.get(sorted[0].id)!
+      : { x: PAD_X + r * COL_WIDTH, y: PAD_Y + SPINE_ROW }
+    decisions.forEach((n, i) => {
+      positions.set(n.id, { x: anchor.x, y: anchor.y + DECISION_ROW_STEP + i * 200 })
     })
   }
   return positions
