@@ -10,7 +10,8 @@ elke klus.
 | P2 Labels en teksten | `fix/labels-en-teksten` | gemerged (PR #4), wacht op antwoorden | Alleen inventarisatie gedaan in `docs/overdracht/P2-inventarisatie.md`. 4 vragen om beantwoord te krijgen voor er ook maar één label wijzigt. `fabel` zit in 15+ bestanden en scenario-data — dat is een migratie, geen tweak. |
 | P7 Testset + rubric | `docs/kwaliteitsborging` | gemerged (PR #5) | Vijf realistische testklanten (`docs/kwaliteit/testklanten.md`) en 10-punts rubric (`docs/kwaliteit/rubric.md`). Nulmeting-workflow uitgeschreven in `docs/kwaliteit/nulmeting/README.md` — deel 3 vereist dat jij de wizard draait per klant. |
 | P13 Overdracht-docs | `docs/overdracht-docs` | gemerged (PR #6) | `docs/overdracht/architectuur.md`, `bekende-bugs.md`, `scenario-data.md`. Root `README.md` bijgewerkt met push=prod warning. |
-| P4 fase 1 (inventarisatie) | `refactor/teksten-centraal` | in review | `docs/overdracht/configureerbaar.md` — tabel: onderdeel / locatie / bron (builder/scenario-data/code/i18n) / kan-ik-het-zonder-code. ~65% van deelnemer-tekst komt uit scenario-data (per-scenario aanpasbaar), ~30% i18n, ~5% hardcoded. Voorstel voor fase 2 wacht op akkoord per rij. |
+| P4 fase 1 (inventarisatie) | `refactor/teksten-centraal` | gemerged (PR #7) | `docs/overdracht/configureerbaar.md` — tabel: onderdeel / locatie / bron (builder/scenario-data/code/i18n) / kan-ik-het-zonder-code. ~65% van deelnemer-tekst komt uit scenario-data (per-scenario aanpasbaar), ~30% i18n, ~5% hardcoded. Voorstel voor fase 2 wacht op akkoord per rij. |
+| P12 Rapport-voorbeeld | `docs/rapport-ontwerp` | in review | `docs/rapport-voorbeeld.md` — volledig fictief rapport voor GGZ De Waterhof, 4 rondes, alle 6 dimensies, feit-vs-aanname sectie, lessons + aanbevelingen. Onderdelen die de app niet vastlegt zijn expliciet met 🟡 gemarkeerd; developer-schema-schets onderaan. |
 
 ## Wacht op mij
 
