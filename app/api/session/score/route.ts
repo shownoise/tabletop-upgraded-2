@@ -4,6 +4,7 @@ import { getState } from '@/lib/session-store'
 import { scoreExercise, scoreExerciseByGroup, buildAssessmentReport } from '@/lib/scoring'
 import { sessionToScoringInput } from '@/lib/scoring/graph-adapter'
 import { applyRegulatoryAdjustment } from '@/lib/regulatory/scoring-adjustment'
+import { installAdminOverrides } from '@/lib/admin/apply'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -16,6 +17,10 @@ export const runtime = 'nodejs'
 export async function GET(req: Request) {
   const gate = await requireFacilitator()
   if (!gate.ok) return gate.response
+
+  // KV-admin scoring overrides pre-loaden voor deze request. Idempotent
+  // + cached 30s per instance.
+  await installAdminOverrides()
 
   const state = await getState()
   if (!state.session) {

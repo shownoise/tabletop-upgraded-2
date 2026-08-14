@@ -133,8 +133,25 @@ export const DECISION_VECTOR_OVERRIDES: Record<string, OutcomeVector> = {
   "legal::AP-vervolgtraject onderschatten — 'komt vanzelf wel goed'": { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -2, KOS: 2 },
 }
 
+// Runtime layer bovenop DECISION_VECTOR_OVERRIDES. Wordt bijgewerkt door
+// installRuntimeOverrides() vanuit KV (lib/admin/overrides.ts). Wint van
+// de statische defaults hierboven. Sync lookup — vereist dat het install
+// pad wordt aangeroepen vóór scoring binnen dezelfde request.
+const RUNTIME_OVERRIDES: Record<string, OutcomeVector> = {}
+
 export function vectorOverrideFor(allowedRole: string | undefined, label: string): OutcomeVector | undefined {
   if (!allowedRole) return undefined
   const key = `${allowedRole}::${label}`
-  return DECISION_VECTOR_OVERRIDES[key]
+  return RUNTIME_OVERRIDES[key] ?? DECISION_VECTOR_OVERRIDES[key]
 }
+
+// Merge KV-admin overrides bovenop de statische defaults. Idempotent.
+// Wordt door installAdminOverrides() in @/lib/admin/apply.ts aangeroepen
+// aan het begin van elke request die scoring uitvoert.
+export function installRuntimeOverrides(overrides: Record<string, OutcomeVector> | undefined): void {
+  if (!overrides) return
+  for (const [key, vec] of Object.entries(overrides)) {
+    RUNTIME_OVERRIDES[key] = vec
+  }
+}
+
