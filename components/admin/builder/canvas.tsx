@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   addEdge,
   Background,
@@ -434,6 +434,29 @@ function InnerCanvas() {
     setEdges(toFlowEdges(g))
     setSelectedId(null)
   }, [setNodes, setEdges])
+
+  // Auto-load on mount als de URL ?id=<graphId> bevat (vanuit de admin
+  // scenario-list of klant-detail). Idempotent per graphId zodat we niet in
+  // een loop komen als de gebruiker binnen de builder de graph wijzigt.
+  const searchParams = useSearchParams()
+  const requestedId = searchParams?.get("id") ?? null
+  const loadedIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!requestedId || loadedIdRef.current === requestedId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/scenario-graph")
+        if (!res.ok) return
+        const data = await res.json() as { graphs: ScenarioGraph[] }
+        const found = data.graphs.find(g => g.id === requestedId)
+        if (!found || cancelled) return
+        loadedIdRef.current = requestedId
+        handleLoad(found)
+      } catch { /* stil falen — user ziet leeg canvas en kan handmatig laden */ }
+    })()
+    return () => { cancelled = true }
+  }, [requestedId, handleLoad])
 
   const persistGraph = useCallback(async (): Promise<boolean> => {
     const graph = buildGraph()
