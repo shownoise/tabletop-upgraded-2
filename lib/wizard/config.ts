@@ -45,7 +45,7 @@ export interface WizardConfig {
 export const WIZARD_LIMITS = {
   rounds:               { min: 4, max: 8, default: 5 },
   injectsPerRound:      { min: 3, max: 5, default: 4 },
-  optionsPerRolePerRound: { min: 2, max: 6, default: 4 },
+  optionsPerRolePerRound: { min: 3, max: 6, default: 4 },
   factsNoiseRatio:      { min: 0, max: 1, default: 0.7 },
 } as const
 

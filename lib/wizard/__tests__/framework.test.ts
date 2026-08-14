@@ -158,20 +158,23 @@ function baseGraph(): ScenarioGraph {
       { id: 'e8', source: 'R2', target: 'D2', type: 'sequence' },
       { id: 'e9', source: 'D2', target: 'OUT', type: 'sequence' },
     ],
+    // Rule 11 — hidden weakness in de briefing van minstens één rol.
+    roleBriefings: {
+      ceo: { text: 'CEO-briefing.', playbookGaps: ['crisismandaat niet formeel vastgelegd'] },
+    },
   }
 }
 
 describe("wizard framework — passing baseline", () => {
-  it("baseGraph + baseConfig passes all 10 rules", () => {
+  it("baseGraph + baseConfig passes all 12 rules", () => {
     const graph = baseGraph()
     const config = baseConfig()
     const result = validateFramework(graph, config)
     if (!result.ok) {
-      // Surfacing all failing rules helps when the baseline itself drifts.
       throw new Error(`baseline expected to pass but got: ${result.failures.map(f => f.ruleId + ': ' + f.violation).join(' | ')}`)
     }
     expect(result.ok).toBe(true)
-    expect(FRAMEWORK_RULE_IDS.length).toBe(10)
+    expect(FRAMEWORK_RULE_IDS.length).toBe(12)
   })
 })
 

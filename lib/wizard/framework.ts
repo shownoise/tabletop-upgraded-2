@@ -463,6 +463,84 @@ export function ruleFacilitatorGuidanceExists(graph: ScenarioGraph): RuleResult 
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Rule 11 — hidden weakness in het scenario (voor generatie-narratief)
+//
+// Elke wizard-scenario moet één standaard-zwakte hebben die in de briefing van
+// een rol is opgenomen (roleBriefings.<role>.playbookGaps). Zonder deze rode
+// draad mist het scenario zijn belangrijkste leermoment. Concreet: minstens
+// één rol met minstens één playbookGaps-item.
+// ───────────────────────────────────────────────────────────────────────────
+export function ruleHiddenWeaknessAuthored(graph: ScenarioGraph): RuleResult {
+  const briefings = graph.roleBriefings ?? {}
+  const rolesWithGaps = Object.entries(briefings).filter(
+    ([_role, brief]) => Array.isArray(brief?.playbookGaps) && (brief!.playbookGaps!.length > 0),
+  )
+  if (rolesWithGaps.length > 0) return { ok: true }
+  return {
+    ok: false,
+    violation: 'Geen enkele rol heeft playbookGaps — hidden weakness ontbreekt',
+    hint: 'Voeg één standaard-zwakte toe (back-ups nooit getest, plan nooit geoefend, mandaat niet vastgelegd, kritieke kennis bij één persoon) via roleBriefings.<role>.playbookGaps van de meest-getroffen rol. Zorg dat die zwakte later in een decision-optie terugkomt.',
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Rule 12 — taalconsistentie (geen Engelse UI-woorden in NL-teksten)
+//
+// Heuristiek: check vrije-tekstvelden in het scenario (titles, content,
+// briefings, options.label, prompts, facilitatorNotes) op typische Engelse
+// UI-uitdrukkingen die niet als vakterm door de vingers gaan. Vaktermen zoals
+// SLA, MSP, EPD, MDR, DPO, SOC, IR, KPI mogen wel. Deze heuristiek is bewust
+// grof — een taalfout is een prompt-signal, geen datamigratie.
+// ───────────────────────────────────────────────────────────────────────────
+export function ruleLanguageConsistency(graph: ScenarioGraph): RuleResult {
+  const ENGLISH_LEAK_PATTERNS = /\b(urgency|dismissed|handled|assumption failed|critical event|no comment|breaking news|please note|be advised|regards|kind regards)\b/gi
+  const problems: string[] = []
+  const seen = new Set<string>()
+  const check = (source: string, text: string | undefined) => {
+    if (!text) return
+    const m = text.match(ENGLISH_LEAK_PATTERNS)
+    if (!m) return
+    const key = `${source}::${m[0].toLowerCase()}`
+    if (seen.has(key)) return
+    seen.add(key)
+    problems.push(`${source}: "${m[0]}"`)
+  }
+  for (const n of graph.nodes) {
+    if (n.type === 'round') {
+      const d = n.data as RoundNodeData
+      check(`round.title`, d.title)
+      check(`round.situation`, d.situation_update)
+      for (const p of d.openingPrompts ?? []) check(`round.openingPrompts`, p)
+      for (const p of d.reviewPrompts ?? []) check(`round.reviewPrompts`, p)
+      check(`round.facilitatorNotes.goal`, d.facilitatorNotes?.discussionGoal)
+    } else if (n.type === 'inject') {
+      const d = n.data as InjectNodeData
+      check(`inject.title`, d.title)
+      check(`inject.content`, d.content)
+    } else if (n.type === 'decision') {
+      const d = n.data as DecisionNodeData
+      check(`decision.prompt`, d.prompt)
+      for (const o of d.options) {
+        check(`decision.option.label`, o.label)
+        check(`decision.option.lesson`, o.lessonLearned)
+      }
+    }
+  }
+  const briefings = graph.roleBriefings ?? {}
+  for (const [role, brief] of Object.entries(briefings)) {
+    check(`briefing.${role}.text`, brief?.text)
+    for (const g of brief?.playbookGaps ?? []) check(`briefing.${role}.gap`, g)
+  }
+  if (graph.irPlaybook) check('irPlaybook', graph.irPlaybook)
+  if (problems.length === 0) return { ok: true }
+  return {
+    ok: false,
+    violation: `Engelse woorden in NL-teksten: ${problems.slice(0, 6).join('; ')}${problems.length > 6 ? ` (+${problems.length - 6} meer)` : ''}`,
+    hint: 'Alle vrije-tekst in het scenario moet Nederlands zijn. Vaktermen (SLA, MSP, EPD, MDR, DPO, SOC) mogen. Losse Engelse UI-woorden ("urgency", "handled", "critical event") niet.',
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Aggregate
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -482,6 +560,8 @@ const RULES: Array<{ id: string; fn: (g: ScenarioGraph, c: WizardConfig) => Rule
   { id: 'rule8_special_conditions',     fn: (g, c)  => ruleSpecialConditionsAppear(g, c) },
   { id: 'rule9_regulatory_window',      fn: (g, c)  => ruleRegulatoryWindowPlaced(g, c) },
   { id: 'rule10_facilitator_guidance',  fn: (g)     => ruleFacilitatorGuidanceExists(g) },
+  { id: 'rule11_hidden_weakness',       fn: (g)     => ruleHiddenWeaknessAuthored(g) },
+  { id: 'rule12_language_consistency',  fn: (g)     => ruleLanguageConsistency(g) },
 ]
 
 export function validateFramework(graph: ScenarioGraph, config: WizardConfig): FrameworkResult {

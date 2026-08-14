@@ -101,9 +101,24 @@ ${regimeLine}
 Special conditions (verweef in de inhoud):
 ${conds}
 
+Narratieve richtlijnen (geen strikte framework-check maar wél kwaliteitscriterium):
+
+A. Keuzes van onderop. Beslissingen komen bij voorkeur van onderop aangedragen — iemand onder de verantwoordelijke rol stelt iets voor (technisch medewerker vraagt aan CISO of ze isoleren; MSP-engineer suggereert de retainer te activeren; controller stelt aan CFO voor de verzekeraar te bellen). Het decision-moment is dan "keur je dit voorstel goed?" of "kies uit deze varianten die het team heeft aangedragen". Niet elke decision moet zo, maar minstens de helft.
+
+B. Balans ruis / toegevoegde waarde. De feit-ratio is een numerieke check, maar denk ook aan kwaliteit: sommige injects zijn puur ruis (WhatsApp-gerucht, media-vraag zonder scope), sommige lijken ruis maar dragen verborgen waarde (medewerker appt dat hij misschien de back-up vergat — bleek later relevant). Streef expliciet naar deze mix: ~40-50% signal (echte beslispunt-onderbouwing), ~30% context (feit maar niet direct handeling), ~20-30% ruis-met-verdekte-waarde of pure ruis.
+
+C. Standaard-zwakte in het verhaal. Kies ÉÉN van deze zwaktes en verweef 'm door het scenario:
+   - back-ups zijn nooit volledig hersteld getest
+   - crisisplan bestaat maar is nooit geoefend
+   - crisismandaat is niet vastgelegd (wie mag wat tekenen?)
+   - kritieke systeem-kennis zit bij één persoon die onbereikbaar is
+   De gekozen zwakte landt in de briefing van de meest-getroffen rol (roleBriefings.<role>.playbookGaps als één van de items), en komt LATER in een decision-moment concreet terug (bijv. een optie "test toch de back-up voor je gaat herstellen" of "activeer plaatsvervangende mandaat"). Dit is de rode draad die de sessie een leermoment geeft.
+
+D. Consequent één taal. Alle vrije-tekstvelden in het Nederlands: titel, content, opties, briefings, prompts, facilitatorNotes. Engelse vaktermen (SLA, MSP, EPD, MDR, DPO, SOC) zijn OK. Volledige Engelse zinnen of losse Engelse woorden ('urgency', 'assumption failed', 'critical event' als label) niet. Consistent = alle scenario-tekst is NL-first.
+
 Framework-regels die de code toetst:
 1. Elke decision heeft een setup-inject in dezelfde of vorige ronde (inject.setsUpDecisionNodeId).
-2. Per decision: exact ${config.optionsPerRolePerRound} opties per rol.
+2. Per decision: exact ${config.optionsPerRolePerRound} opties per rol (minimum uit config is 3; geen binaire wel-of-niet).
 3. Geen enkele optie domineert een andere op alle 6 outcome-assen.
 4. Geen enkele decision mag alleen misleidende setup-injects hebben. Het reliability-veld (ground truth) mag 'misleading' zijn voor red-herring injects, maar minstens één setup van elke decision moet reliability=fact of reliability=assumption zijn.
 5. Ronde N≥2 verwijst zichtbaar naar keuze/les uit ronde N-1.
@@ -112,6 +127,8 @@ Framework-regels die de code toetst:
 8. Elke geselecteerde special condition verschijnt in het vereiste aantal rondes.
 9. Minstens één inject met triggersRegulatoryNotification=true, met verwijzing naar de toezichthouder.
 10. Elke ronde heeft facilitatorNotes.discussionGoal; feiten/namen in de goal moeten ook in de ronde-inhoud staan.
+11. Minstens één rol heeft roleBriefings.<role>.playbookGaps met minstens één ingang — daar landt de standaard-zwakte (richtlijn C).
+12. Taalconsistentie: geen losse Engelse zinnen of typische Engelse UI-woorden (urgency/high/critical/handled/dismissed) in NL-teksten. Vaktermen (SLA, MSP, EPD) zijn OK.
 
 Geef ALLEEN geldige JSON terug volgens het WizardPlan schema, geen markdown, geen uitleg.`
 }
