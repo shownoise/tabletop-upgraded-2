@@ -1,13 +1,15 @@
 import { NO_DECISION_FALLBACK_VECTOR, OUTCOME_DIMENSIONS, type OutcomeDimension } from './constants'
 import type { ExerciseEvent, RoundOutcome, ScenarioSpec } from './types'
 
-// Deel A §5 — gewogen som van gekozen optie-vectoren, genormaliseerd op −1..+1.
+// Ronde-uitkomst — gemiddelde van gekozen vectoren, genormaliseerd op −1..+1.
+// Alle 6 dimensies tellen even zwaar. Geen per-ronde weging.
 //
-// Formule:
-//   uitkomst(r) = Σ_dim ( w_dim(r) · gemiddelde_gekozen_vector_dim ) / Σ_dim ( w_dim(r) · 2 )
-//
-// Meerdere beslispunten in één ronde → gemiddelde van hun vectoren per dimensie.
-// Beslispunten zonder inzending → fallback-vector (Deel B §7.1).
+// Belangrijk: onbeantwoorde beslissingen worden TIJDENS de ronde overgeslagen —
+// anders zou een team na één antwoord meteen negatief scoren omdat de andere
+// beslissingen als "geen besluit" (NO_DECISION_FALLBACK_VECTOR, met -1 op
+// CONT/BC/JUR) mee zouden tellen. `finalizeDecision` in session-store voegt
+// impliciete submissions toe bij LOCK, dus na afsluiten van de ronde tellen
+// die wél mee.
 export function computeRoundOutcome(
   scenario: ScenarioSpec,
   events: ExerciseEvent[],
@@ -28,35 +30,39 @@ export function computeRoundOutcome(
     }
   }
 
-  // Sommeer per-dim over alle beslispunten.
+  // Sommeer per-dim over ALLEEN beslispunten waarvoor een submission bestaat.
+  // Onbeantwoorde beslissingen tellen niet — die worden pas via
+  // finalizeDecision aangevuld met impliciete submissions bij LOCK.
   const sums = emptyVector()
   let n = 0
-  let submittedCount = 0
   for (const dp of decisionsThisRound) {
     const optId = submissionsById.get(dp.id)
-    const vec = optId
-      ? dp.options.find(o => o.id === optId)?.outcomeVector
-      : implicitVectorFor(dp) ?? NO_DECISION_FALLBACK_VECTOR
-    if (!vec) continue
+    if (!optId) continue  // geen submission — skip tijdens live compute
+    let vec = dp.options.find(o => o.id === optId)?.outcomeVector
+    if (!vec) {
+      // Impliciete submission (van finalizeDecision) zonder authored implicit-option:
+      // val terug op de scenario-implicit vector, anders de "geen besluit" default.
+      vec = implicitVectorFor(dp) ?? NO_DECISION_FALLBACK_VECTOR
+    }
     for (const dim of OUTCOME_DIMENSIONS) sums[dim] += vec[dim]
     n++
-    if (optId) submittedCount++
   }
 
   const perDim = emptyVector()
   if (n > 0) for (const dim of OUTCOME_DIMENSIONS) perDim[dim] = sums[dim] / n
 
-  const weights = roundSpec.outcomeWeights
-  let num = 0
-  let den = 0
-  for (const dim of OUTCOME_DIMENSIONS) {
-    num += (weights[dim] ?? 0) * perDim[dim]
-    den += (weights[dim] ?? 0) * 2
+  // Genormaliseerde uitkomst: gemiddelde over alle 6 dimensies gedeeld door 2
+  // (want elke dimensie loopt −2..+2, dus het gemiddelde ook, genormaliseerd
+  // door /2 komt uit op −1..+1).
+  let normalized = 0
+  if (n > 0) {
+    let sum = 0
+    for (const dim of OUTCOME_DIMENSIONS) sum += perDim[dim]
+    normalized = sum / (OUTCOME_DIMENSIONS.length * 2)
   }
-  const normalized = den === 0 ? 0 : num / den
   const points = Math.round(100 * (normalized + 1) / 2)
 
-  return { round, normalized, perDimension: perDim, points, hasSubmissions: submittedCount > 0 }
+  return { round, normalized, perDimension: perDim, points, hasSubmissions: n > 0 }
 }
 
 function emptyVector(): Record<OutcomeDimension, number> {
