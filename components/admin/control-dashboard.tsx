@@ -189,23 +189,14 @@ export function ControlDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* Mode toggle — klik om te wisselen tussen EVENT en ASSESSMENT (training) */}
-            <button
-              type="button"
-              onClick={async () => {
-                const next = session.mode === "event" ? "training" : "event"
-                await fetch("/api/session/set-mode", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ mode: next }),
-                })
-              }}
-              title="Klik om modus te wisselen (EVENT / ASSESSMENT)"
-              className="hidden items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-primary md:flex hover:bg-primary/20 transition-colors"
+            {/* Mode badge — read-only. De modus is vastgesteld bij het aanmaken
+                van de sessie en kan tijdens de flow niet meer wijzigen. */}
+            <div
+              title="Modus is vastgesteld bij aanmaken van de sessie"
+              className="hidden items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-primary md:flex"
             >
               {session.mode === "event" ? tr(lang, "mode_event") : tr(lang, "mode_training")}
-              <span className="text-[9px] opacity-60">▲▼</span>
-            </button>
+            </div>
             {/* Escalation badge */}
             {isActive && (
               <div className={`hidden items-center rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider md:flex ${ESCALATION_CLASSES[escalationIndex]}`}>
