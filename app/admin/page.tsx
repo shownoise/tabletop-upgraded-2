@@ -1,9 +1,8 @@
-import { AdminHub } from "@/components/admin/hub/tabs"
+import { redirect } from "next/navigation"
 
-// Landing na login. Tabbed hub met vijf secties: scenario's, sessie starten,
-// teksten, rollen, scoring. De losse setup-form die hier voorheen stond is
-// nu de "Sessie starten"-tab.
-
+// /admin landt op /admin/clients. Klanten is de bovenlaag: van daar naar
+// scenario's en sessies per klant. De oude tabbed hub is vervangen door
+// echte routes (zie components/admin/hub/shell.tsx + de sub-pages).
 export default function AdminPage() {
-  return <AdminHub />
+  redirect("/admin/clients")
 }
