@@ -203,7 +203,12 @@ function InjectForm({
   const target = local.targetRoles ?? []
   function toggleRole(r: Role) {
     const next = target.includes(r) ? target.filter(x => x !== r) : [...target, r]
-    commit({ ...local, targetRoles: next.length ? next : undefined })
+    // Zichtbaarheid volgt targetRoles: leeg → 'shared' (iedereen), gevuld → 'exclusive'
+    // (alleen die rollen). Voorheen was dit een aparte dropdown die niet doorwerkte
+    // in de deelnemer-view (alleen scoring keek ernaar); we consolideren tot één
+    // control zodat de bedoeling niet meer uit twee schermen bij elkaar te lezen is.
+    const visibility: "shared" | "exclusive" = next.length > 0 ? "exclusive" : "shared"
+    commit({ ...local, targetRoles: next.length ? next : undefined, visibility })
   }
 
   // Phase 1 — populate the setup-decision dropdown from the current graph.
@@ -261,29 +266,16 @@ function InjectForm({
           Leeg of 0 = inject verschijnt direct bij ronde-start. Hoger = drip-effect (bijv. 60/180/300).
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label className="text-xs">Belang</Label>
-          <select
-            value={local.importance ?? "info"}
-            onChange={e => commit({ ...local, importance: e.target.value as "crucial" | "info" })}
-            className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
-          >
-            <option value="info">info (achtergrond)</option>
-            <option value="crucial">crucial (materieel)</option>
-          </select>
-        </div>
-        <div>
-          <Label className="text-xs">Zichtbaarheid</Label>
-          <select
-            value={local.visibility ?? "shared"}
-            onChange={e => commit({ ...local, visibility: e.target.value as "shared" | "exclusive" })}
-            className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
-          >
-            <option value="shared">iedereen (default)</option>
-            <option value="exclusive">alleen doelrollen</option>
-          </select>
-        </div>
+      <div>
+        <Label className="text-xs">Belang</Label>
+        <select
+          value={local.importance ?? "info"}
+          onChange={e => commit({ ...local, importance: e.target.value as "crucial" | "info" })}
+          className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+        >
+          <option value="info">info (achtergrond)</option>
+          <option value="crucial">crucial (materieel)</option>
+        </select>
       </div>
       <div>
         <Label className="text-xs">Type informatie</Label>
@@ -581,8 +573,10 @@ function OptionsByRole({
   onAdd: (role?: Role) => void
 }) {
   // Only one option is expanded across the whole grid at any time — expanding
-  // a new row collapses the previous one.
+  // a new row collapses the previous one. `expandAll` overrides: als true dan
+  // negeren we expandedId en toont elke rij zijn editor.
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [expandAll, setExpandAll] = useState(false)
 
   const roleBuckets = new Map<Role | "__any__", Array<{ opt: DecisionNodeData["options"][number]; idx: number }>>()
   options.forEach((opt, idx) => {
@@ -604,6 +598,20 @@ function OptionsByRole({
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <Label className="text-xs">Opties per rol</Label>
+        {options.length > 0 && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setExpandAll(prev => !prev)
+              setExpandedId(null)
+            }}
+            className="h-6 text-[10px] font-mono uppercase tracking-wider"
+            title={expandAll ? "Alles inklappen" : "Alles uitklappen"}
+          >
+            {expandAll ? "− Alles inklappen" : "+ Alles uitklappen"}
+          </Button>
+        )}
       </div>
 
       {orderedRoles.map(roleKey => {
@@ -632,7 +640,7 @@ function OptionsByRole({
                 <OptionRow
                   key={opt.id}
                   option={opt}
-                  expanded={expandedId === opt.id}
+                  expanded={expandAll || expandedId === opt.id}
                   onExpand={() => setExpandedId(prev => prev === opt.id ? null : opt.id)}
                   onChange={patch => onUpdate(idx, patch)}
                   onRemove={() => {
