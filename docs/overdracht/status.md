@@ -7,7 +7,8 @@ elke klus.
 |---|---|---|---|
 | P0 Werkafspraken + glossarium | `chore/werkafspraken` | gemerged (PR #2) | Git-safety opgezet, oude sessie gered op eigen branch (PR #1), CLAUDE.md herschreven, CONTEXT.md is glossarium met alias-callouts, `docs/agents/` scaffold via `setup-matt-pocock-skills`. Main-protection ruleset actief (0 approvals). |
 | P10 Drie bugs | `fix/losse-bugs` | gemerged (PR #3) | Bug 2 gefixt (weergave). Bug 1 en 3 zijn geen code-fix — één is design (rol-filter, niet hardcoded), één is niet-verifieerbaar zonder browser en de code klopt. |
-| P2 Labels en teksten | `fix/labels-en-teksten` | wacht op mij | Alleen inventarisatie gedaan in `docs/overdracht/P2-inventarisatie.md`. 4 vragen om beantwoord te krijgen voor er ook maar één label wijzigt. `fabel` zit in 15+ bestanden en scenario-data — dat is een migratie, geen tweak. |
+| P2 Labels en teksten | `fix/labels-en-teksten` | gemerged (PR #4), wacht op antwoorden | Alleen inventarisatie gedaan in `docs/overdracht/P2-inventarisatie.md`. 4 vragen om beantwoord te krijgen voor er ook maar één label wijzigt. `fabel` zit in 15+ bestanden en scenario-data — dat is een migratie, geen tweak. |
+| P7 Testset + rubric | `docs/kwaliteitsborging` | in review | Vijf realistische testklanten (`docs/kwaliteit/testklanten.md`) en 10-punts rubric (`docs/kwaliteit/rubric.md`). Nulmeting-workflow uitgeschreven in `docs/kwaliteit/nulmeting/README.md` — deel 3 vereist dat jij de wizard draait per klant. |
 
 ## Wacht op mij
 
@@ -36,3 +37,6 @@ elke klus.
   misleidend kan zijn bij inherited roles (som van decisions vs. aantal
   deelnemers). Niet gedaan omdat het geen "7 van de 1" oplevert — wel
   vergelijkbare vervorming.
+- **P7 deel 3+4** (nulmeting genereren + samenvatting): jij draait de wizard
+  per testklant volgens `docs/kwaliteit/nulmeting/README.md`. Zonder échte
+  nulmeting is P6 (prompt-regels) gokken. Reken 5 min per klant voor scoren.
