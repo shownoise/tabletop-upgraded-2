@@ -23,6 +23,7 @@ import { LiveOverviewPanel } from "./live-overview-panel"
 import { MeldingenPanel } from "./meldingen-panel"
 import { SupervisionReportView } from "./supervision-report"
 import { RevealPanel } from "./reveal-panel"
+import { BUTTON_LABELS, FACILITATOR_GUIDE } from "@/lib/config/texts"
 import { RoundReviewNarrativePanel } from "./round-review-narrative-panel"
 import { PremadeInjectPanel } from "./premade-inject-panel"
 import { GroupProgress } from "./group-progress"
@@ -47,7 +48,7 @@ function DiscussionHelper() {
         <span className="font-mono text-[10px] uppercase tracking-widest text-primary">Discussie</span>
       </div>
       <p className="font-mono text-xs text-muted-foreground leading-relaxed">
-        Overweeg BOB (Beeldvorming — Oordeelsvorming — Besluitvorming) om deze fase te structureren. Het team beslist zelf of ze de methode toepassen.
+        {FACILITATOR_GUIDE.bobHint}
       </p>
     </div>
   )
@@ -337,9 +338,9 @@ export function ControlDashboard() {
                       onClick={() => run("finalize", () => api.forceLock())}
                       disabled={working !== null}
                       className="gap-1.5 font-mono uppercase tracking-wider border-amber-500/40 text-amber-700 dark:text-amber-400"
-                      title="Sluit de beslissing af — deelnemers zonder inzending krijgen een impliciete keuze"
+                      title={BUTTON_LABELS.finalizeDecisionTitle}
                     >
-                      Beslissing afsluiten
+                      {BUTTON_LABELS.finalizeDecision}
                     </Button>
                   )}
                   {(() => {

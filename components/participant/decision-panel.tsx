@@ -10,6 +10,7 @@ import { api } from "@/lib/api-client"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
 import { stripMarkdown } from "@/lib/render-markdown"
+import { ERROR_MESSAGES } from "@/lib/config/texts"
 
 function stripBobLabel(text: string): string {
   return text
@@ -49,7 +50,7 @@ export function DecisionPanel({
   const [error, setError] = useState<string | null>(null)
 
   async function onSubmit() {
-    if (!selectedActionId) { setError("Selecteer een actie."); return }
+    if (!selectedActionId) { setError(ERROR_MESSAGES.actionRequired); return }
     setError(null)
     setSubmitting(true)
     try {
@@ -80,7 +81,7 @@ export function DecisionPanel({
         confidence,
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Indienen mislukt")
+      setError(err instanceof Error ? err.message : ERROR_MESSAGES.submitFailed)
     } finally {
       setSubmitting(false)
     }
@@ -95,7 +96,7 @@ export function DecisionPanel({
           <span className="font-mono text-[10px] uppercase tracking-widest text-tt-warn">Geen rol toegewezen</span>
         </div>
         <p className="font-mono text-xs text-tt-dim">
-          Je hebt een rol nodig om beslissingen in te dienen. Neem contact op met de facilitator.
+          {ERROR_MESSAGES.noRoleAssigned}
         </p>
       </div>
     )

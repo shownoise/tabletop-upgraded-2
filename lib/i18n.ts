@@ -156,7 +156,7 @@ export const t = {
     mode_training: "Training",
     simulationMode: "Simulation mode",
     modeHint_event: "Multi-team, large group exercise with leaderboard scoring.",
-    modeHint_training: "NIS2-focused training with process adherence tracking.",
+    modeHint_training: "Training with process adherence; notification to the competent authority per selected regime.",
 
     // Escalation
     escalation_normal: "Normal",
@@ -364,7 +364,7 @@ export const t = {
     mode_training: "Training",
     simulationMode: "Simulatiemodus",
     modeHint_event: "Multi-team oefening voor grote groepen met scorebord.",
-    modeHint_training: "NIS2-gerichte training met procesconformiteit bijhouden.",
+    modeHint_training: "Training met focus op procesconformiteit; meldplicht bij de bevoegde autoriteit conform het gekozen regime.",
 
     // Escalation
     escalation_normal: "Normaal",
