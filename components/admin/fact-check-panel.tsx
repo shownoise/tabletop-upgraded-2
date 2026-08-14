@@ -12,12 +12,14 @@ const TAG_META: Record<FactCheckTag, { label: string; color: string; bg: string 
   assumption: { label: "Aanname", color: "text-yellow-600 dark:text-yellow-400",   bg: "bg-yellow-500"  },
 }
 
+// Ground-truth labels — 3-waardig omdat 'misleidend' (bewuste onwaarheid) een
+// aparte categorie is naast feit en aanname. Deelnemers kunnen dit label niet
+// zetten; alleen de auteur kent de ground truth.
 const GROUND_TRUTH_LABEL: Record<string, { label: string; color: string }> = {
-  fact:       { label: "Feit",    color: "text-emerald-600 dark:text-emerald-400" },
-  assumption: { label: "Aanname", color: "text-yellow-600 dark:text-yellow-400"   },
-  // Legacy 'misleading' data valt visueel terug op aanname-styling
-  misleading: { label: "Aanname", color: "text-yellow-600 dark:text-yellow-400"   },
-  unverified: { label: "Ongeverifieerd", color: "text-orange-600 dark:text-orange-400" },
+  fact:        { label: "Feit",           color: "text-emerald-600 dark:text-emerald-400" },
+  assumption:  { label: "Aanname",        color: "text-yellow-600 dark:text-yellow-400"   },
+  misleading:  { label: "Misleidend",     color: "text-red-600 dark:text-red-400"         },
+  unverified:  { label: "Ongeverifieerd", color: "text-orange-600 dark:text-orange-400"   },
 }
 
 export function FactCheckPanel({ session }: Props) {

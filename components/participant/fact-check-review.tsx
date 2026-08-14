@@ -33,16 +33,23 @@ interface Props {
   roundIndex?: number   // if undefined, show all rounds
 }
 
+// Deelnemers taggen zelf 2 waarden (feit/aanname). De ground truth op de
+// inject is 3-waardig — misleidend is een aparte kolom voor "wat het écht was".
 const TAG_META: Record<FactCheckTag, { label: string; dot: string; color: string }> = {
   fact:       { label: "Feit",    dot: "bg-emerald-500", color: "text-emerald-600 dark:text-emerald-400" },
   assumption: { label: "Aanname", dot: "bg-yellow-500",  color: "text-yellow-600 dark:text-yellow-400"   },
 }
 
-function normalizeReliability(rel: string | undefined): FactCheckTag | undefined {
-  // Legacy 'misleading' data valt terug op 'assumption' (aanname is een
-  // superset — leugens zijn achteraf ongetoetste aannames).
-  if (rel === "fact" || rel === "assumption") return rel
-  if (rel === "misleading") return "assumption"
+// Ground truth-labels (3 waarden — inclusief misleidend). Alleen zichtbaar
+// in review; gebruikt om het factcheck-paneel te vullen met "wat het écht was".
+const GROUND_TRUTH_META: Record<'fact' | 'assumption' | 'misleading', { label: string; dot: string; color: string }> = {
+  fact:       { label: "Feit",       dot: "bg-emerald-500", color: "text-emerald-600 dark:text-emerald-400" },
+  assumption: { label: "Aanname",    dot: "bg-yellow-500",  color: "text-yellow-600 dark:text-yellow-400"   },
+  misleading: { label: "Misleidend", dot: "bg-red-500",     color: "text-red-600 dark:text-red-400"         },
+}
+
+function normalizeReliability(rel: string | undefined): 'fact' | 'assumption' | 'misleading' | undefined {
+  if (rel === "fact" || rel === "assumption" || rel === "misleading") return rel
   return undefined
 }
 
@@ -54,7 +61,7 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
       round: number
       injectId: string
       title: string
-      truth: FactCheckTag
+      truth: 'fact' | 'assumption' | 'misleading'
       content: string
       groundTruth: InjectSpanAnnotation[]
     }> = []
@@ -93,8 +100,14 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
           const myTag = (session.factChecks ?? []).find(
             f => f.injectId === t.injectId && f.participantId === participantId
           )?.tag
+          // Deelnemer kan 'fact' of 'assumption' taggen; ground truth kan
+          // extra 'misleading' zijn. Mismatch = elke andere combinatie dan
+          // exact overeenkomen (bij misleidend is elke deelnemer-tag mismatch,
+          // want er is geen 'misleading' knop voor deelnemers — het punt is
+          // dat een 'assumption' tag hier de "voorzichtigheid" is en het
+          // dichtst bij correct staat, maar we scoren pure match).
           const mismatched = myTag && myTag !== t.truth
-          const truthMeta = TAG_META[t.truth]
+          const truthMeta = GROUND_TRUTH_META[t.truth]
           const myMeta = myTag ? TAG_META[myTag] : null
           return (
             <li key={t.injectId} className="py-2 flex items-center gap-3 text-xs">

@@ -277,26 +277,50 @@ function InjectForm({
           <option value="crucial">crucial (materieel)</option>
         </select>
       </div>
-      <div>
-        <Label className="text-xs">Type informatie</Label>
-        <select
-          value={local.classification ?? ""}
-          onChange={e => {
-            const v = e.target.value
-            commit({ ...local, classification: v ? (v as "feit" | "aanname") : undefined })
-          }}
-          className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
-        >
-          <option value="">— kies —</option>
-          <option value="feit">Feit</option>
-          <option value="aanname">Aanname</option>
-        </select>
-        {!local.classification && (
-          <p className="mt-1 text-[10px] text-yellow-700 dark:text-yellow-400">
-            Auteur moet type kiezen — feit of aanname.
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs">Type informatie (publiek)</Label>
+          <select
+            value={local.classification ?? ""}
+            onChange={e => {
+              const v = e.target.value
+              commit({ ...local, classification: v ? (v as "feit" | "aanname") : undefined })
+            }}
+            className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+          >
+            <option value="">— kies —</option>
+            <option value="feit">Feit</option>
+            <option value="aanname">Aanname</option>
+          </select>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Zichtbaar voor deelnemer als label bij de inject.
           </p>
-        )}
+        </div>
+        <div>
+          <Label className="text-xs">Ground truth (privé)</Label>
+          <select
+            value={local.reliability ?? ""}
+            onChange={e => {
+              const v = e.target.value
+              commit({ ...local, reliability: v ? (v as "fact" | "assumption" | "misleading") : undefined })
+            }}
+            className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs"
+          >
+            <option value="">— optioneel —</option>
+            <option value="fact">Feit (waar)</option>
+            <option value="assumption">Aanname (onbekend)</option>
+            <option value="misleading">Misleidend (bewust onwaar)</option>
+          </select>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Gestript uit deelnemer-payload tot review-fase. Voedt factcheck-paneel.
+          </p>
+        </div>
       </div>
+      {!local.classification && (
+        <p className="text-[10px] text-yellow-700 dark:text-yellow-400">
+          Auteur moet publiek type kiezen — feit of aanname.
+        </p>
+      )}
       <div>
         <Label className="text-xs">Zet welke beslissing op?</Label>
         <select

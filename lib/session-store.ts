@@ -2296,19 +2296,19 @@ export async function listScenarioGraphs(_ownerId?: string): Promise<ScenarioGra
   return list.map(migrateLegacyClassifications)
 }
 
-// Legacy-data migratie (2026-08-14): 'fabel' → 'aanname' op InjectNodeData;
-// 'misleading' → 'assumption' op reliability. Bestaande scenarios in KV
-// blijven werken zonder handmatige migratie.
+// Legacy-data migratie: 'fabel' op InjectNodeData.classification → 'aanname'
+// (classification is publiek — deelnemer ziet dit label; 'fabel' als publiek
+// label bestaat niet meer). reliability behoudt 'misleading' (ground truth,
+// gestript tot review). Bestaande scenarios in KV blijven werken zonder
+// handmatige actie.
 function migrateLegacyClassifications(graph: ScenarioGraph): ScenarioGraph {
   let touched = false
   const nodes = graph.nodes.map(n => {
     if (n.type !== 'inject') return n
-    const d = n.data as { classification?: string; reliability?: string }
-    const patch: Record<string, unknown> = {}
-    if (d.classification === 'fabel') { patch.classification = 'aanname'; touched = true }
-    if (d.reliability === 'misleading') { patch.reliability = 'assumption'; touched = true }
-    if (Object.keys(patch).length === 0) return n
-    return { ...n, data: { ...n.data, ...patch } as typeof n.data }
+    const d = n.data as { classification?: string }
+    if (d.classification !== 'fabel') return n
+    touched = true
+    return { ...n, data: { ...n.data, classification: 'aanname' } as typeof n.data }
   })
   if (!touched) return graph
   return { ...graph, nodes }

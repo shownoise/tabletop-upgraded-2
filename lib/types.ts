@@ -332,7 +332,13 @@ export type EmotionalTone =
   | 'menacing'
   | 'professional'
 
-export type InjectReliability = 'fact' | 'assumption'
+// Ground truth reliability op InjectNodeData / Inject. Author-set, wordt
+// gestript uit de participant-payload via toParticipantState() tot de sessie
+// in REVIEW-fase komt. Sinds 2026-08-14 blijft dit 3-waardig omdat 'misleading'
+// (bewuste onwaarheid) semantisch verschilt van 'assumption' (ongetoetste
+// aanname); wat de deelnemer denkt (feit/aanname) is een aparte as via
+// FactCheckTag.
+export type InjectReliability = 'fact' | 'assumption' | 'misleading'
 
 export interface InjectSpanAnnotation {
   id: string

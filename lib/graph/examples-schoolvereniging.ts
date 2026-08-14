@@ -115,10 +115,10 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
             "Van: telefonistes locatie Zuid. Binnengekomen tussen 08:50 en 09:20: zeven ouders bellen omdat ze een SMS hebben gekregen: 'Uw ouderaccount vereist een wachtwoord-reset — klik hier voor bevestiging.' Link wijst naar een domein dat lijkt op ov-no.nl maar dat niet is. Ouders vragen of dit klopt. Let op: deze SMS is niet uitgegaan vanaf een van onze systemen. Waarschijnlijk een losstaande phishingcampagne die toevallig vandaag piekt.",
           senderName: "Frontoffice locatie Zuid",
           timestamp: "09:22",
-          reliability: "assumption",
+          reliability: "misleading",
           classification: "aanname",
           targetTeam: "crisis_management",
-          facilitatorNote: "Fabel — expliciete red herring. Test of team dit als losstaande phishingcampagne herkent.",
+          facilitatorNote: "Misleidend — expliciete red herring. Test of team dit als losstaande phishingcampagne herkent en niet in scope trekt.",
         },
         {
           id: "r1-rob-whatsapp",
