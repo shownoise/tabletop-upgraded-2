@@ -2,13 +2,70 @@
 
 Live: **https://tabletop-upgraded-2.vercel.app**
 
-Een Next.js-platform voor het draaien van cybersecurity crisis tabletop-oefeningen. Facilitators configureren een oefening via een setup-form; deelnemers ontvangen real-time injects en maken beslissingen vanuit hun rol. De AI genereert het scenario op basis van de organisatieprofiel-configuratie.
+> ⚠ **Pushen naar `main` = productie.** Elke merge op `main` deployed automatisch
+> naar de bovenstaande URL via Vercel. Werk altijd op een branch en merge via
+> een PR (main is beschermd met een ruleset sinds 2026-08-13). Zie
+> `docs/overdracht/status.md`.
+
+Een Next.js-platform voor het draaien van cybersecurity crisis tabletop-oefeningen. Facilitators configureren een oefening via een setup-form of visuele scenariobuilder; deelnemers ontvangen real-time injects en maken beslissingen vanuit hun rol. De AI-wizard genereert een `ScenarioGraph` op basis van klantprofiel + special conditions.
+
+## Voor overdracht en nieuw personeel
+
+Begin met deze docs, in deze volgorde:
+
+1. `CLAUDE.md` — werkafspraken (git-discipline, harde regels, niet-aanraken).
+2. `CONTEXT.md` — domein-glossarium, mét de aliasconflicten die anders
+   verwarring geven.
+3. `docs/overdracht/architectuur.md` — huidige stand van de codebase.
+4. `docs/overdracht/bekende-bugs.md` — wat we onderweg gevonden en laten liggen.
+5. `docs/overdracht/scenario-data.md` — anatomie van een scenario-bestand.
+6. `docs/overdracht/status.md` — waar we nu staan.
+
+De `docs/architecture/*.md`-set (`01_three_layer_logic.md` t/m
+`05_data_model.md`) is **verouderd**; die beschrijft de oude
+module-library-architectuur van vóór de graph-refactor. Alleen lezen om
+context te krijgen op oude beslissingen.
 
 ---
 
-## Architectuur
+## Snel starten (local dev)
 
-Het platform werkt in drie lagen:
+```bash
+pnpm install
+pnpm run dev
+```
+
+Opent op http://localhost:3000. Auth is **uit** in local dev — ga direct naar
+`/admin`. Sessies zijn in-memory (reset bij restart). Templates in localStorage.
+
+`ANTHROPIC_API_KEY` in `.env.local` als je de AI-wizard wilt testen.
+
+Volledige env-vars en Vercel setup: `SETUP.md`.
+
+---
+
+## Architectuur (huidig)
+
+Alles draait om `ScenarioGraph` in `lib/graph/`. Kort:
+
+```
+WizardConfig (klant + sector + rollen + special condition)
+  ↓ lib/wizard/framework.ts — multi-step LLM-orchestratie
+ScenarioGraph (lib/graph/types.ts:291) — nodes + edges, JSON-serializable
+  ↓ lib/graph/dynamic-fill.ts — {{sector}} etc. token-substitutie
+  ↓ lib/graph/engine.ts — state-machine
+Sessie (lib/session-store.ts, in-memory + KV persist)
+  ↓ SSE stream via /api/session/state, met 4s polling fallback
+Facilitator / Deelnemer / Presenter / Observer views
+```
+
+Voor het uitgebreide verhaal: `docs/overdracht/architectuur.md`.
+
+---
+
+## Legacy architectuur (nog aanwezig in code, deels ongebruikt)
+
+De oude drie-laags pipeline:
 
 ```
 ExerciseConfig (setup-form)
