@@ -33,10 +33,11 @@ interface RoundReport {
       alternatives: Array<{ label: string; vector?: ReportVector }>
     }>
     setupInjects: Array<{
+      injectId: string
       title: string
       classification?: string
       groundTruth?: string
-      teamViews: Array<{ participantName: string; tag: "fact" | "assumption" }>
+      participantViews: Array<{ participantName: string; tag: "fact" | "assumption" }>
     }>
   }>
   lessonsLearned: string[]
@@ -104,17 +105,18 @@ function buildRoundReport(snapshot: SessionSnapshot): RoundReport[] {
       const setupInjects: RoundReport["decisions"][0]["setupInjects"] = []
       for (const [, inj] of injectById) {
         if (inj.setsUpDecisionNodeId !== dNode.id) continue
-        const teamViews = factChecks
+        const participantViews = factChecks
           .filter(fc => fc.injectId === inj.id)
           .map(fc => ({
             participantName: participants.find(p => p.id === fc.participantId)?.name ?? fc.participantId,
             tag: fc.tag,
           }))
         setupInjects.push({
+          injectId: inj.id,
           title: inj.title,
           classification: inj.classification,
           groundTruth: inj.reliability,
-          teamViews,
+          participantViews,
         })
       }
       return {
@@ -164,34 +166,61 @@ function cumulativeVector(rounds: RoundReport[]): ReportVector {
   return acc
 }
 
-interface FactAssumptionMismatch {
+interface FactAssumptionRow {
+  injectId: string
   injectTitle: string
-  groundTruth: string
-  teamViews: Array<{ participantName: string; tag: "fact" | "assumption" }>
+  groundTruth: "fact" | "assumption" | "misleading"
+  participantViews: Array<{ participantName: string; tag: "fact" | "assumption" }>
+  // Wat het team volgens de facilitator behandelde (retroactief). Leeg als
+  // de facilitator (nog) niet heeft ingevuld.
+  retroactiveTag?: "fact" | "assumption"
+  // Effectieve team-perceptie: eerst deelnemer-consensus (majority) als
+  // die er is, anders de retro-tag.
+  effectiveTeamTag?: "fact" | "assumption"
   linkedDecisionPrompt?: string
+  isMismatch: boolean
 }
 
-function collectMismatches(rounds: RoundReport[]): FactAssumptionMismatch[] {
-  const out: FactAssumptionMismatch[] = []
+function buildFactAssumptionRows(
+  rounds: RoundReport[],
+  retroactiveTags: Record<string, "fact" | "assumption">,
+): FactAssumptionRow[] {
+  const rows: FactAssumptionRow[] = []
+  const seenInjects = new Set<string>()
   for (const r of rounds) {
     for (const d of r.decisions) {
       for (const inj of d.setupInjects) {
         if (!inj.groundTruth) continue
-        const hasFactTag = inj.teamViews.some(tv => tv.tag === "fact")
-        const wasMisleading = inj.groundTruth === "misleading"
-        const wasAssumption = inj.groundTruth === "assumption"
-        if ((hasFactTag && wasMisleading) || (hasFactTag && wasAssumption)) {
-          out.push({
-            injectTitle: inj.title,
-            groundTruth: inj.groundTruth,
-            teamViews: inj.teamViews,
-            linkedDecisionPrompt: d.prompt,
-          })
+        if (seenInjects.has(inj.injectId)) continue
+        seenInjects.add(inj.injectId)
+        const gt = inj.groundTruth as "fact" | "assumption" | "misleading"
+        const retro = retroactiveTags[inj.injectId]
+        // Majority-tag van deelnemers als er meer factchecks zijn dan één
+        // is-fact en één is-assumption. Bij tie kiezen we niks.
+        let participantMajority: "fact" | "assumption" | undefined
+        if (inj.participantViews.length > 0) {
+          const facts = inj.participantViews.filter(v => v.tag === "fact").length
+          const asns = inj.participantViews.filter(v => v.tag === "assumption").length
+          if (facts > asns) participantMajority = "fact"
+          else if (asns > facts) participantMajority = "assumption"
         }
+        const effective = participantMajority ?? retro
+        const isMismatch =
+          effective === "fact" && (gt === "misleading" || gt === "assumption")
+        rows.push({
+          injectId: inj.injectId,
+          injectTitle: inj.title,
+          groundTruth: gt,
+          participantViews: inj.participantViews,
+          retroactiveTag: retro,
+          effectiveTeamTag: effective,
+          linkedDecisionPrompt: d.prompt,
+          isMismatch,
+        })
       }
     }
   }
-  return out
+  return rows
 }
 
 export function SessionDetail({ id }: { id: string }) {
@@ -199,7 +228,9 @@ export function SessionDetail({ id }: { id: string }) {
   const [loading, setLoading] = useState(true)
   const [observations, setObservations] = useState("")
   const [recommendations, setRecommendations] = useState("")
+  const [retroTags, setRetroTags] = useState<Record<string, "fact" | "assumption">>({})
   const [saving, setSaving] = useState(false)
+  const [savingRetro, setSavingRetro] = useState(false)
   const toast = useToast()
 
   const load = useCallback(async () => {
@@ -211,6 +242,7 @@ export function SessionDetail({ id }: { id: string }) {
       setSnapshot(data.snapshot)
       setObservations(data.snapshot.facilitatorReport?.observations ?? "")
       setRecommendations(data.snapshot.facilitatorReport?.recommendations ?? "")
+      setRetroTags(data.snapshot.facilitatorReport?.retroactiveInjectTags ?? {})
     } catch (e) {
       toast.push("error", `Laden mislukt: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
@@ -240,7 +272,35 @@ export function SessionDetail({ id }: { id: string }) {
 
   const rounds = useMemo(() => snapshot ? buildRoundReport(snapshot) : [], [snapshot])
   const totalVector = useMemo(() => cumulativeVector(rounds), [rounds])
-  const mismatches = useMemo(() => collectMismatches(rounds), [rounds])
+  const factAssumptionRows = useMemo(() => buildFactAssumptionRows(rounds, retroTags), [rounds, retroTags])
+  const mismatchCount = factAssumptionRows.filter(r => r.isMismatch).length
+
+  // Retro-tag update: debounce naar server zodat facilitator niet elke klik hoeft te bevestigen.
+  const saveRetroTags = useCallback(async (next: Record<string, "fact" | "assumption">) => {
+    setSavingRetro(true)
+    try {
+      const res = await fetch(`/api/admin/sessions?id=${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ facilitatorReport: { retroactiveInjectTags: next } }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    } catch (e) {
+      toast.push("error", `Retro-tag opslaan mislukt: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setSavingRetro(false)
+    }
+  }, [id, toast])
+
+  function setRetroTag(injectId: string, tag: "fact" | "assumption" | "") {
+    setRetroTags(prev => {
+      const next = { ...prev }
+      if (tag === "") delete next[injectId]
+      else next[injectId] = tag
+      void saveRetroTags(next)
+      return next
+    })
+  }
 
   if (loading) return <p className="text-sm text-muted-foreground">Laden…</p>
   if (!snapshot) return <p className="text-sm text-muted-foreground">Sessie niet gevonden.</p>
@@ -294,7 +354,7 @@ export function SessionDetail({ id }: { id: string }) {
         <p className="text-sm text-muted-foreground mt-4 leading-relaxed">
           Het team doorliep {snapshot.currentRound} van de {snapshot.rounds} rondes in {snapshot.mode}-modus.
           {snapshot.finalOutcomeLabel && <> Eindoordeel: <strong className="text-foreground">{snapshot.finalOutcomeLabel}</strong>.</>}
-          {mismatches.length > 0 && <> Het team behandelde {mismatches.length} inject{mismatches.length === 1 ? "" : "s"} als feit terwijl de ground truth aanname of misleidend was — zie sectie feiten &amp; aannamen.</>}
+          {mismatchCount > 0 && <> Het team behandelde {mismatchCount} inject{mismatchCount === 1 ? "" : "s"} als feit terwijl de ground truth aanname of misleidend was — zie sectie feiten &amp; aannamen.</>}
         </p>
       </ReportSection>
 
@@ -320,34 +380,28 @@ export function SessionDetail({ id }: { id: string }) {
       </ReportSection>
 
       <ReportSection title="Feit versus aanname">
-        {mismatches.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Geen mismatches: het team labelde alle setup-injects consistent met de ground truth, of er zijn geen tags ingediend.</p>
+        {factAssumptionRows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Geen setup-injects met ground truth in dit scenario.</p>
         ) : (
           <>
             <p className="text-sm text-muted-foreground mb-4">
-              Wat het team als feit behandelde, tegenover wat het in werkelijkheid was. Deze mismatches wijzen op momenten waar de beslissing rustte op een aanname of misleidende input.
+              Wat het team behandelde als feit, tegenover wat het in werkelijkheid was. Waar deelnemers niet zelf tagden tijdens de sessie: kies hieronder wat het team volgens jou behandelde — de mismatches worden meteen bijgewerkt.
+              {savingRetro && <span className="ml-2 text-xs italic text-muted-foreground">opslaan…</span>}
             </p>
-            <div className="flex flex-col gap-3">
-              {mismatches.map((m, i) => (
-                <div key={i} className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
-                  <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
-                    <h4 className="font-medium text-sm">{m.injectTitle}</h4>
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-500 border border-amber-500/40 px-1.5 py-0.5 rounded">
-                      Ground truth: {m.groundTruth === "misleading" ? "misleidend" : m.groundTruth === "assumption" ? "aanname" : m.groundTruth}
-                    </span>
-                  </div>
-                  <div className="text-xs text-muted-foreground mb-2">
-                    Team-tag: {m.teamViews.map(tv => `${tv.participantName} → ${tv.tag === "fact" ? "feit" : "aanname"}`).join(" · ")}
-                  </div>
-                  {m.linkedDecisionPrompt && (
-                    <div className="text-xs">
-                      <span className="text-muted-foreground">Beslissing die hierop rustte: </span>
-                      <span className="italic">{m.linkedDecisionPrompt}</span>
-                    </div>
-                  )}
-                </div>
+            <div className="flex flex-col gap-2">
+              {factAssumptionRows.map(row => (
+                <FactAssumptionRowView
+                  key={row.injectId}
+                  row={row}
+                  onSetRetro={tag => setRetroTag(row.injectId, tag)}
+                />
               ))}
             </div>
+            {mismatchCount > 0 && (
+              <p className="text-xs text-amber-700 dark:text-amber-500 mt-3">
+                {mismatchCount} van de {factAssumptionRows.length} injects: het team behandelde als feit terwijl de ground truth aanname of misleidend was.
+              </p>
+            )}
           </>
         )}
       </ReportSection>
@@ -413,7 +467,7 @@ export function SessionDetail({ id }: { id: string }) {
         <strong className="text-foreground">Data-gaten in dit rapport</strong> — de app legt de volgende dingen nog niet automatisch vast; ze staan er als placeholder of ontbreken:
         <ul className="mt-2 list-disc list-inside space-y-1">
           <li><strong>Post-sessie observaties + aanbevelingen</strong>: facilitator-input hierboven, wordt niet uit sessie-data afgeleid.</li>
-          <li><strong>Feit-vs-aanname bij niet-getagde injects</strong>: mismatches leiden we alleen af bij injects die deelnemers actief tagden. Als niemand tagde, staat de sectie leeg — niet omdat er niks was, maar omdat we het niet weten.</li>
+          <li><strong>Feit-vs-aanname als deelnemers niet tagden</strong>: opgelost — waar geen deelnemer-tags zijn, kun je nu retroactief per inject vullen wat het team volgens jou behandelde. Mismatches worden direct bijgewerkt.</li>
           <li><strong>Discussie-transcript</strong>: alleen finale keuzes en (optioneel) reasoning worden opgeslagen. Wat er in de discussie gezegd werd, blijft buiten het rapport.</li>
           <li><strong>Groepsvergelijking bij event-mode</strong>: rapport toont team-cumulatief; per-groep uitsplitsing zit er nog niet in.</li>
           <li><strong>Follow-up datum</strong>: wanneer je deze klant opnieuw wil oefenen — geen veld voor.</li>
@@ -532,6 +586,89 @@ function VectorBadges({ vector }: { vector: ReportVector }) {
           </span>
         )
       })}
+    </div>
+  )
+}
+
+function FactAssumptionRowView({
+  row,
+  onSetRetro,
+}: {
+  row: {
+    injectId: string
+    injectTitle: string
+    groundTruth: "fact" | "assumption" | "misleading"
+    participantViews: Array<{ participantName: string; tag: "fact" | "assumption" }>
+    retroactiveTag?: "fact" | "assumption"
+    effectiveTeamTag?: "fact" | "assumption"
+    linkedDecisionPrompt?: string
+    isMismatch: boolean
+  }
+  onSetRetro: (tag: "fact" | "assumption" | "") => void
+}) {
+  const gtLabel = row.groundTruth === "misleading" ? "misleidend"
+                : row.groundTruth === "assumption" ? "aanname"
+                : "feit"
+  const gtClass = row.groundTruth === "misleading" ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                : row.groundTruth === "assumption" ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+                : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+  const teamHadTags = row.participantViews.length > 0
+  const outerClass = row.isMismatch
+    ? "border-amber-500/40 bg-amber-500/5"
+    : "border-border bg-card"
+  return (
+    <div className={`rounded-lg border ${outerClass} p-3`}>
+      <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
+        <h4 className="font-medium text-sm">{row.injectTitle}</h4>
+        <span className={`font-mono text-[10px] uppercase tracking-wider border px-1.5 py-0.5 rounded ${gtClass}`}>
+          Ground truth: {gtLabel}
+        </span>
+      </div>
+
+      {/* Team-perceptie */}
+      <div className="flex items-baseline gap-2 flex-wrap text-xs mb-2">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Team behandelde als:</span>
+        {teamHadTags ? (
+          <>
+            <span className="text-foreground">
+              {row.participantViews.map(v => `${v.participantName} → ${v.tag === "fact" ? "feit" : "aanname"}`).join(" · ")}
+            </span>
+            {row.effectiveTeamTag && (
+              <span className="font-mono text-[10px] text-muted-foreground">
+                majority: {row.effectiveTeamTag === "fact" ? "feit" : "aanname"}
+              </span>
+            )}
+          </>
+        ) : (
+          <select
+            value={row.retroactiveTag ?? ""}
+            onChange={e => onSetRetro(e.target.value as "fact" | "assumption" | "")}
+            className="h-7 rounded border border-border bg-background px-2 text-xs no-print"
+          >
+            <option value="">— nog niet bepaald —</option>
+            <option value="fact">Team behandelde als feit</option>
+            <option value="assumption">Team behandelde als aanname</option>
+          </select>
+        )}
+        {!teamHadTags && row.retroactiveTag && (
+          <span className="hidden print:inline text-foreground">
+            {row.retroactiveTag === "fact" ? "feit" : "aanname"} <span className="text-muted-foreground text-[10px]">(retroactief door facilitator)</span>
+          </span>
+        )}
+      </div>
+
+      {row.isMismatch && (
+        <p className="text-xs text-amber-800 dark:text-amber-400 mb-2">
+          <strong>Mismatch:</strong> team behandelde dit als feit terwijl ground truth {gtLabel} was.
+        </p>
+      )}
+
+      {row.linkedDecisionPrompt && (
+        <div className="text-xs">
+          <span className="text-muted-foreground">Beslissing die hierop rustte: </span>
+          <span className="italic">{row.linkedDecisionPrompt}</span>
+        </div>
+      )}
     </div>
   )
 }

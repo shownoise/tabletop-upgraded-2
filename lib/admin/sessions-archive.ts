@@ -28,6 +28,10 @@ export interface SessionSnapshot {
   facilitatorReport?: {
     observations?: string        // "wat viel op"
     recommendations?: string     // concrete aanbevelingen voor klant
+    // Retroactieve feit-vs-aanname labels per inject. Gebruikt als
+    // deelnemers zelf niet tagden tijdens de sessie. Sleutel = inject-id.
+    // Waarde = wat het team volgens de facilitator behandelde.
+    retroactiveInjectTags?: Record<string, "fact" | "assumption">
     updatedAt?: number
   }
 }
