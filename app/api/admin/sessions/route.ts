@@ -29,18 +29,24 @@ export async function PATCH(req: Request) {
   const url = new URL(req.url)
   const id = url.searchParams.get("id")
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
-  const body = (await req.json()) as { facilitatorReport?: { observations?: string; recommendations?: string } }
+  const body = (await req.json()) as {
+    facilitatorReport?: {
+      observations?: string
+      recommendations?: string
+      retroactiveInjectTags?: Record<string, "fact" | "assumption">
+    }
+  }
   const snap = await getSnapshot(id)
   if (!snap) return NextResponse.json({ error: "not found" }, { status: 404 })
-  const next = {
-    ...snap,
-    facilitatorReport: {
-      observations: body.facilitatorReport?.observations,
-      recommendations: body.facilitatorReport?.recommendations,
-      updatedAt: Date.now(),
-    },
+  // Merge zodat kleine PATCHes (bv. alleen retroactive tags) de rest niet
+  // wissen.
+  const merged = {
+    observations: body.facilitatorReport?.observations ?? snap.facilitatorReport?.observations,
+    recommendations: body.facilitatorReport?.recommendations ?? snap.facilitatorReport?.recommendations,
+    retroactiveInjectTags: body.facilitatorReport?.retroactiveInjectTags ?? snap.facilitatorReport?.retroactiveInjectTags,
+    updatedAt: Date.now(),
   }
-  await upsertSnapshot(next)
+  await upsertSnapshot({ ...snap, facilitatorReport: merged })
   return NextResponse.json({ ok: true })
 }
 
