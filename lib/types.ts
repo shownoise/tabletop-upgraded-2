@@ -671,7 +671,7 @@ export interface SessionState {
   participantViewState?: Record<string /* participantId */, {
     hidden: string[]      // inject ids the participant has hidden
     handled: string[]     // inject ids marked as afgehandeld
-    filters?: { classification?: Array<'feit' | 'aanname'> }
+    filters?: { classification?: Array<'feit' | 'aanname'>; hideHandled?: boolean }
   }>
   // Slim projection of the current/peek-ahead DecisionNode for participants.
   activeDecision?: ActiveDecisionState
