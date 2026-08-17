@@ -2512,7 +2512,7 @@ export async function updateSupervisionReportEdits(
 export type ParticipantViewPatch = Partial<{
   hidden: string[]
   handled: string[]
-  filters: { classification?: Array<'feit' | 'aanname'> }
+  filters: { classification?: Array<'feit' | 'aanname'>; hideHandled?: boolean }
   // Append/remove semantics — the caller can send a single injectId to
   // add or remove from `hidden` / `handled` without re-sending the whole set.
   addHidden: string

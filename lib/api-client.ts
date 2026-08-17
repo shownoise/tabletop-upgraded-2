@@ -118,7 +118,7 @@ export const api = {
     patch: Partial<{
       hidden: string[]
       handled: string[]
-      filters: { classification?: Array<'feit' | 'aanname'> }
+      filters: { classification?: Array<'feit' | 'aanname'>; hideHandled?: boolean }
       addHidden: string
       removeHidden: string
       addHandled: string

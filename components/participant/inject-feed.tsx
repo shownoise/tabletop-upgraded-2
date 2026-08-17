@@ -549,6 +549,7 @@ export function InjectFeed({
   const hiddenIds = new Set(myView?.hidden ?? [])
   const handledIds = new Set(myView?.handled ?? [])
   const classFilter = myView?.filters?.classification ?? []
+  const hideHandledFilter = myView?.filters?.hideHandled === true
 
   const visibleByRole = pushed.filter((p) => {
     if (p.pushedAt > now) return false
@@ -572,9 +573,13 @@ export function InjectFeed({
     : visibleByRole.filter(p => p.inject.classification && classFilter.includes(p.inject.classification))
 
   // Split: hidden vs shown. Sort newest-first.
-  const shown = afterClassFilter.filter(p => !hiddenIds.has(p.inject.id))
+  const afterHandledFilter = hideHandledFilter
+    ? afterClassFilter.filter(p => !handledIds.has(p.inject.id))
+    : afterClassFilter
+  const shown = afterHandledFilter.filter(p => !hiddenIds.has(p.inject.id))
   const sorted = [...shown].sort((a, b) => b.pushedAt - a.pushedAt)
   const hiddenCount = afterClassFilter.filter(p => hiddenIds.has(p.inject.id)).length
+  const handledCount = afterClassFilter.filter(p => handledIds.has(p.inject.id) && !hiddenIds.has(p.inject.id)).length
   const topRef = useRef<HTMLDivElement>(null)
 
   const prevCount = useRef(pushed.length)
@@ -590,8 +595,36 @@ export function InjectFeed({
     prevCount.current = pushed.length
   }, [pushed.length])
 
+  const allHiddenByHandledFilter = hideHandledFilter && handledCount > 0 && shown.length === 0
+
+  async function toggleHideHandledEmpty() {
+    if (!participantId) return
+    try {
+      await api.updateMyView({
+        participantId,
+        patch: { filters: { classification: classFilter, hideHandled: false } },
+      })
+    } catch { /* ignore */ }
+  }
+
   if (shown.length === 0) {
-    // Distinguish: injects exist but none match this role vs truly nothing pushed yet
+    // Distinguish: everything handled (via filter) vs role-filtered vs truly empty.
+    if (allHiddenByHandledFilter) {
+      return (
+        <div className="flex flex-col items-center gap-3 border border-tt-border bg-tt-surface px-6 py-12 text-center">
+          <div className="font-mono text-[10px] uppercase tracking-widest text-tt-dim">
+            Alle {handledCount} injects zijn afgehandeld
+          </div>
+          <button
+            type="button"
+            onClick={toggleHideHandledEmpty}
+            className="rounded-full border border-tt-accent bg-tt-accent/10 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-tt-accent hover:bg-tt-accent/20"
+          >
+            Toon afgehandelde
+          </button>
+        </div>
+      )
+    }
     const roleFiltered = pushed.length > 0 && shown.length === 0
     return (
       <div className="flex flex-col items-center gap-4 border border-tt-border bg-tt-surface px-6 py-16 text-center">
@@ -623,7 +656,17 @@ export function InjectFeed({
     try {
       await api.updateMyView({
         participantId,
-        patch: { filters: { classification: next } },
+        patch: { filters: { classification: next, hideHandled: hideHandledFilter } },
+      })
+    } catch { /* ignore */ }
+  }
+
+  async function toggleHideHandled() {
+    if (!participantId) return
+    try {
+      await api.updateMyView({
+        participantId,
+        patch: { filters: { classification: classFilter, hideHandled: !hideHandledFilter } },
       })
     } catch { /* ignore */ }
   }
@@ -677,6 +720,18 @@ export function InjectFeed({
               </button>
             )
           })}
+          {handledCount > 0 && (
+            <button
+              type="button"
+              onClick={toggleHideHandled}
+              title={hideHandledFilter ? "Toon ook afgehandelde" : "Verberg afgehandelde uit deze lijst"}
+              className={`rounded-full border px-2 py-0.5 font-mono uppercase tracking-wider transition-colors ${
+                hideHandledFilter ? "border-tt-accent bg-tt-accent/10 text-tt-accent" : "border-tt-border text-tt-dim hover:border-tt-accent/40"
+              }`}
+            >
+              {hideHandledFilter ? `afgehandeld verborgen (${handledCount})` : `verberg afgehandeld (${handledCount})`}
+            </button>
+          )}
           {hiddenCount > 0 && (
             <span className="ml-auto flex items-center gap-2 font-mono text-tt-dim">
               {hiddenCount} verborgen
