@@ -228,9 +228,19 @@ function InnerCanvas() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<{ kind: "info" | "error"; text: string } | null>(null)
-  const [startupOpen, setStartupOpen] = useState(true)
+  // Als er ?wizard=1 in de URL staat (vanuit /admin/quality "Genereer via wizard")
+  // slaan we de startup-dialog over. De wizard-dialoog opent pas nadat een
+  // eventuele klant-prefill binnen is (useEffect verderop). window.location is
+  // veilig hier omdat de builder ssr:false is.
+  const urlHasWizard = typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("wizard") === "1"
+  const urlHasClientId = typeof window !== "undefined"
+    && !!new URLSearchParams(window.location.search).get("clientId")
+  const [startupOpen, setStartupOpen] = useState(!urlHasWizard)
   const [templatesPickerOpen, setTemplatesPickerOpen] = useState(false)
-  const [aiWizardOpen, setAiWizardOpen] = useState(false)
+  // Als er een clientId is: wachten tot prefill binnen is (useEffect zet 'm dan).
+  // Anders (bijv. wizard=1 zonder clientId): direct open.
+  const [aiWizardOpen, setAiWizardOpen] = useState(urlHasWizard && !urlHasClientId)
 
   const wrapperRef = useRef<HTMLDivElement>(null)
   const { screenToFlowPosition, setCenter, fitView } = useReactFlow()
@@ -481,32 +491,34 @@ function InnerCanvas() {
     return () => { cancelled = true }
   }, [requestedId, handleLoad])
 
-  // Auto-open wizard bij ?wizard=1 en prefill uit ?clientId=…
-  // Vanuit /admin/quality → "Genereer via wizard".
+  // Prefill wizard-config vanuit ?clientId=… (vanuit /admin/quality flow).
+  // Bij ?wizard=1 blijft de dialoog dicht tot deze fetch klaar is, zodat de
+  // wizard nooit leeg opent en de useEffect-in-de-dialoog de prefill oppikt
+  // bij de open-transition.
   const [wizardPrefill, setWizardPrefill] = useState<Partial<WizardConfig> | undefined>(undefined)
-  const wizardTriggeredRef = useRef(false)
+  const prefillFetchedRef = useRef(false)
   useEffect(() => {
-    if (!requestedWizard || wizardTriggeredRef.current) return
-    wizardTriggeredRef.current = true
+    if (!requestedClientId || prefillFetchedRef.current) return
+    prefillFetchedRef.current = true
     let cancelled = false
     ;(async () => {
-      if (requestedClientId) {
-        try {
-          const res = await fetch("/api/admin/clients")
-          if (res.ok) {
-            const data = await res.json() as { clients: AdminClient[] }
-            const client = data.clients.find(c => c.id === requestedClientId)
-            if (client && !cancelled) setWizardPrefill(clientToWizardPrefill(client))
-          }
-        } catch { /* ignore — wizard opent zonder prefill */ }
-      }
-      if (!cancelled) {
-        setStartupOpen(false)
-        setAiWizardOpen(true)
+      try {
+        const res = await fetch("/api/admin/clients")
+        if (!res.ok || cancelled) {
+          if (!cancelled && urlHasWizard) setAiWizardOpen(true)
+          return
+        }
+        const data = await res.json() as { clients: AdminClient[] }
+        const client = data.clients.find(c => c.id === requestedClientId)
+        if (cancelled) return
+        if (client) setWizardPrefill(clientToWizardPrefill(client))
+        if (urlHasWizard) setAiWizardOpen(true)
+      } catch {
+        if (!cancelled && urlHasWizard) setAiWizardOpen(true)
       }
     })()
     return () => { cancelled = true }
-  }, [requestedWizard, requestedClientId])
+  }, [requestedClientId, urlHasWizard])
 
   const persistGraph = useCallback(async (): Promise<boolean> => {
     const graph = buildGraph()
