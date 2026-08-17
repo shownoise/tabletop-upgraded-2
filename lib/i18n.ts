@@ -165,6 +165,13 @@ export const t = {
     escalation_critical: "Critical",
     escalationLevel: "Escalation",
 
+    // Urgency (per inject)
+    urgency_low: "Low",
+    urgency_medium: "Medium",
+    urgency_high: "High",
+    urgency_critical: "Critical",
+    surprise: "Surprise",
+
     // Report
     reportTitle: "End-of-Scenario Report",
     reportSub: "Post-exercise analysis and recommendations",
@@ -372,6 +379,13 @@ export const t = {
     escalation_high: "Hoog",
     escalation_critical: "Kritiek",
     escalationLevel: "Escalatieniveau",
+
+    // Urgency (per inject)
+    urgency_low: "Laag",
+    urgency_medium: "Gemiddeld",
+    urgency_high: "Hoog",
+    urgency_critical: "Kritiek",
+    surprise: "Verrassing",
 
     // Report
     reportTitle: "Eindrapport",
