@@ -65,6 +65,11 @@ interface InjectCardProps {
   myAnnotations?: Array<{ id: string; start: number; end: number; tag: FactCheckTag }>
   onTag?: (tag: FactCheckTag) => void | Promise<void>
   isFactCheckTarget?: boolean
+  lang: Lang
+}
+
+function urgencyLabel(lang: Lang, u: Urgency): string {
+  return tr(lang, `urgency_${u}` as Parameters<typeof tr>[1])
 }
 
 const OWN_TAG_STYLE: Record<FactCheckTag, { border: string; pill: string; underline: string }> = {
@@ -325,7 +330,7 @@ function WhatsAppInject(props: InjectCardProps) {
 
 // ─────────────────── SIEM Alert ───────────────────
 function SiemAlert(props: InjectCardProps) {
-  const { inject } = props
+  const { inject, lang } = props
   const isRed = inject.urgency === "critical"
   return (
     <Shell
@@ -336,11 +341,11 @@ function SiemAlert(props: InjectCardProps) {
           <span className="font-mono text-[10px] text-tt-dim shrink-0">RULE</span>
           <span className="font-mono text-xs text-tt-red truncate flex-1">{inject.title}</span>
           <span
-            className={`font-mono text-[9px] px-2 py-0.5 shrink-0 ${
+            className={`font-mono text-[9px] px-2 py-0.5 shrink-0 uppercase ${
               isRed ? "bg-tt-red/20 text-tt-red" : "bg-tt-warn/20 text-tt-warn"
             }`}
           >
-            {inject.urgency.toUpperCase()}
+            {urgencyLabel(lang, inject.urgency)}
           </span>
         </div>
       }
@@ -350,7 +355,7 @@ function SiemAlert(props: InjectCardProps) {
 
 // ─────────────────── System / EDR alert ───────────────────
 function SystemAlertInject(props: InjectCardProps) {
-  const { inject } = props
+  const { inject, lang } = props
   const isRed = inject.urgency === "critical" || inject.urgency === "high"
   return (
     <Shell
@@ -360,11 +365,11 @@ function SystemAlertInject(props: InjectCardProps) {
         inject.title ? (
           <div className="flex items-center gap-3 px-4 py-2 bg-tt-bright/5 border-b border-tt-border">
             <span
-              className={`font-mono text-xs truncate flex-1 ${
+              className={`font-mono text-xs truncate flex-1 uppercase ${
                 isRed ? "text-tt-red" : "text-tt-warn"
               }`}
             >
-              [{inject.urgency.toUpperCase()}] {inject.title}
+              [{urgencyLabel(lang, inject.urgency)}] {inject.title}
             </span>
           </div>
         ) : undefined
@@ -782,8 +787,8 @@ export function InjectFeed({
                   }}
                 />
                 <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
-                  {p.inject.urgency}
-                  {isSurprise ? " · SURPRISE" : ""}
+                  {urgencyLabel(lang, p.inject.urgency)}
+                  {isSurprise ? ` · ${tr(lang, "surprise")}` : ""}
                 </span>
                 {isUnread && participantId && (
                   <span className="size-1.5 rounded-full bg-tt-accent" aria-label="ongelezen" title="ongelezen" />
@@ -825,6 +830,7 @@ export function InjectFeed({
                 myAnnotations={(session?.injectAnnotations ?? []).filter(a => a.injectId === p.inject.id && a.participantId === participantId).map(a => ({ id: a.id, start: a.start, end: a.end, tag: a.tag }))}
                 reviewPhase={reviewPhase}
                 isFactCheckTarget={isFactCheckTarget}
+                lang={lang}
               />
               {isFactCheckTarget && participantId && (
                 <FactCheckFooter
