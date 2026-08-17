@@ -51,6 +51,27 @@ import type {
 import { EYE_SECURITY_RETAINER, DEFAULT_FEATURES } from "@/lib/graph/types"
 import { validateGraph } from "@/lib/graph/validate"
 import type { ScenarioType } from "@/lib/types"
+import type { WizardConfig, CompanySize } from "@/lib/wizard/config"
+import type { AdminClient } from "@/lib/admin/clients"
+
+function companySizeFromEmployees(n: number): CompanySize {
+  if (n < 50) return 'small'
+  if (n < 500) return 'mkbplus'
+  return 'enterprise'
+}
+
+function clientToWizardPrefill(c: AdminClient): Partial<WizardConfig> {
+  const prefill: Partial<WizardConfig> = {
+    clientName: c.name,
+    sector: c.sector,
+    companySize: companySizeFromEmployees(c.employees),
+    itArrangement: c.itArrangement,
+    regulatoryRegimeId: c.regimeId,
+  }
+  if (c.crisisTeamRoles?.length) prefill.rolesIncluded = c.crisisTeamRoles
+  if (c.crownJewels?.trim()) prefill.importantContext = `Kroonjuwelen: ${c.crownJewels}`
+  return prefill
+}
 
 const NODE_TYPES = {
   start: StartNode,
@@ -440,6 +461,8 @@ function InnerCanvas() {
   // een loop komen als de gebruiker binnen de builder de graph wijzigt.
   const searchParams = useSearchParams()
   const requestedId = searchParams?.get("id") ?? null
+  const requestedWizard = searchParams?.get("wizard") === "1"
+  const requestedClientId = searchParams?.get("clientId") ?? null
   const loadedIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!requestedId || loadedIdRef.current === requestedId) return
@@ -457,6 +480,33 @@ function InnerCanvas() {
     })()
     return () => { cancelled = true }
   }, [requestedId, handleLoad])
+
+  // Auto-open wizard bij ?wizard=1 en prefill uit ?clientId=…
+  // Vanuit /admin/quality → "Genereer via wizard".
+  const [wizardPrefill, setWizardPrefill] = useState<Partial<WizardConfig> | undefined>(undefined)
+  const wizardTriggeredRef = useRef(false)
+  useEffect(() => {
+    if (!requestedWizard || wizardTriggeredRef.current) return
+    wizardTriggeredRef.current = true
+    let cancelled = false
+    ;(async () => {
+      if (requestedClientId) {
+        try {
+          const res = await fetch("/api/admin/clients")
+          if (res.ok) {
+            const data = await res.json() as { clients: AdminClient[] }
+            const client = data.clients.find(c => c.id === requestedClientId)
+            if (client && !cancelled) setWizardPrefill(clientToWizardPrefill(client))
+          }
+        } catch { /* ignore — wizard opent zonder prefill */ }
+      }
+      if (!cancelled) {
+        setStartupOpen(false)
+        setAiWizardOpen(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [requestedWizard, requestedClientId])
 
   const persistGraph = useCallback(async (): Promise<boolean> => {
     const graph = buildGraph()
@@ -755,6 +805,7 @@ function InnerCanvas() {
         open={aiWizardOpen}
         onOpenChange={setAiWizardOpen}
         onGenerated={handleLoad}
+        initialConfig={wizardPrefill}
       />
     </div>
   )
