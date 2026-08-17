@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,6 +26,10 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   onGenerated: (graph: ScenarioGraph, meta: { seed: string; repairLog: RepairLogEntry[] }) => void
+  // Optionele voor-invulling — bijv. vanuit /admin/quality met ?clientId=… naar de builder.
+  // Wordt toegepast bij elke open-transition (false→true), overschrijft user-edits pas
+  // bij volgende opening.
+  initialConfig?: Partial<WizardConfig>
 }
 
 interface RepairLogEntry {
@@ -43,11 +47,19 @@ const COMPANY_SIZES: Array<{ id: CompanySize; label: string }> = [
 // AI wizard for creating a client-tailored starting scenario. The full
 // WizardConfig is exposed here — every field steers both the generation
 // prompt and the framework validation. The wizard always writes drafts.
-export function AiWizardDialog({ open, onOpenChange, onGenerated }: Props) {
-  const [config, setConfig] = useState<WizardConfig>(() => defaultWizardConfig())
+export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig }: Props) {
+  const [config, setConfig] = useState<WizardConfig>(() => ({ ...defaultWizardConfig(), ...initialConfig }))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastLog, setLastLog] = useState<{ seed: string; repairLog: RepairLogEntry[] } | null>(null)
+
+  // Reset config bij open-transition zodat een nieuwe klant of nieuwe prefill
+  // niet blijft hangen op de vorige state. User-edits binnen de dialoog blijven
+  // behouden zolang die open blijft.
+  useEffect(() => {
+    if (open) setConfig({ ...defaultWizardConfig(), ...initialConfig })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const update = <K extends keyof WizardConfig>(key: K, value: WizardConfig[K]) => {
     setConfig(prev => ({ ...prev, [key]: value }))
