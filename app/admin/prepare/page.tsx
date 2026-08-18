@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { ArrowLeft, ChevronRight, Play, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSessionStream } from "@/lib/use-session-stream"
@@ -10,6 +10,7 @@ import { api } from "@/lib/api-client"
 import { getAllGoals, getGoal } from "@/lib/goals/registry"
 import { buildExerciseConfig } from "@/lib/engine/exercise-config"
 import type { GoalId } from "@/lib/engine/types"
+import { SetupForm } from "@/components/admin/setup-form"
 
 // ─── Minimal markdown renderer (## headers, - bullets, **bold**) ──
 
@@ -92,13 +93,30 @@ export default function PreparePage() {
   }
 
   if (!session) {
+    // Geen actieve sessie → toon de setup-form zodat de facilitator er één
+    // kan aanmaken. Na SetupForm's POST /api/session/create leidt die zelf
+    // opnieuw naar /admin/prepare, waar de stream de nieuwe sessie oppikt
+    // en de brief hieronder verschijnt.
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex gap-1.5">
-          {[0, 1, 2].map(i => (
-            <span key={i} className="size-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: `${i * 0.3}s` }} />
-          ))}
-        </div>
+      <div className="min-h-screen bg-background">
+        <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
+          <div className="mx-auto flex max-w-4xl items-center gap-3 px-5 py-3 md:px-8">
+            <Link href="/admin" className="flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="size-4" />
+            </Link>
+            <div className="flex flex-col">
+              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Nieuwe sessie</span>
+              <span className="font-mono text-sm text-foreground">Configureer scenario en start</span>
+            </div>
+          </div>
+        </header>
+        <main className="mx-auto max-w-4xl px-5 py-8 md:px-8">
+          <div className="rounded-lg border border-border bg-card p-6 md:p-8">
+            <Suspense fallback={<div className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Laden…</div>}>
+              <SetupForm />
+            </Suspense>
+          </div>
+        </main>
       </div>
     )
   }
