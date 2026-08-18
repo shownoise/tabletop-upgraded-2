@@ -82,7 +82,7 @@ export function ClientsList() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {clients.length === 0 && (
+          {testCount === 0 && (
             <Button size="sm" variant="outline" onClick={onSeed} disabled={seeding} className="gap-1.5">
               {seeding ? <Loader2 className="size-3.5 animate-spin" /> : <TestTube2 className="size-3.5" />}
               Testklanten inladen
