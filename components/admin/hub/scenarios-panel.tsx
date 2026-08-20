@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { Plus, Sparkles, Copy, Pencil, Trash2, ExternalLink, Loader2, Search, Archive, ArchiveRestore } from "lucide-react"
+import { Plus, Sparkles, Copy, Pencil, Trash2, ExternalLink, Loader2, Search, Archive, ArchiveRestore, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "./toast"
@@ -272,6 +272,11 @@ export function ScenariosPanel() {
                     <td className="px-4 py-2 text-muted-foreground">{formatWhen(g.updatedAt)}</td>
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
+                        <Link href={`/admin/prepare?graphId=${encodeURIComponent(g.id)}`}>
+                          <Button size="sm" variant="default" title="Sessie starten met dit scenario" className="h-8 px-2 gap-1">
+                            <Play className="size-3.5" />
+                          </Button>
+                        </Link>
                         <Link href={`/admin/builder?id=${encodeURIComponent(g.id)}`}>
                           <Button size="sm" variant="ghost" title="Openen in builder" className="h-8 px-2">
                             <ExternalLink className="size-3.5" />

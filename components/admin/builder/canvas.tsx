@@ -231,12 +231,16 @@ function InnerCanvas() {
   // Als er ?wizard=1 in de URL staat (vanuit /admin/quality "Genereer via wizard")
   // slaan we de startup-dialog over. De wizard-dialoog opent pas nadat een
   // eventuele klant-prefill binnen is (useEffect verderop). window.location is
-  // veilig hier omdat de builder ssr:false is.
+  // veilig hier omdat de builder ssr:false is. Bij ?id=X (bestaand scenario
+  // openen) slaan we de startup-dialog ook over — je opent iets specifieks,
+  // niet een leeg canvas met kickoff-keuze.
   const urlHasWizard = typeof window !== "undefined"
     && new URLSearchParams(window.location.search).get("wizard") === "1"
   const urlHasClientId = typeof window !== "undefined"
     && !!new URLSearchParams(window.location.search).get("clientId")
-  const [startupOpen, setStartupOpen] = useState(!urlHasWizard)
+  const urlHasId = typeof window !== "undefined"
+    && !!new URLSearchParams(window.location.search).get("id")
+  const [startupOpen, setStartupOpen] = useState(!urlHasWizard && !urlHasId)
   const [templatesPickerOpen, setTemplatesPickerOpen] = useState(false)
   // Als er een clientId is: wachten tot prefill binnen is (useEffect zet 'm dan).
   // Anders (bijv. wizard=1 zonder clientId): direct open.
@@ -636,7 +640,10 @@ function InnerCanvas() {
     if (errors.length > 0) {
       setStatus({ kind: "info", text: `Gepubliceerd met ${errors.length} openstaand${errors.length === 1 ? "e" : "e"} validate-item${errors.length === 1 ? "" : "s"} — je kan ze via Validate bekijken.` })
     }
-    router.push(`/admin?graphId=${encodeURIComponent(graph.id)}`)
+    // Publiceren = opslaan + doorgaan naar sessie-setup met dit scenario voorgeladen.
+    // /admin zou redirecten naar /admin/clients en de graphId verliezen; /admin/prepare
+    // leest ?graphId= in de SetupForm en gebruikt exact deze graph.
+    router.push(`/admin/prepare?graphId=${encodeURIComponent(graph.id)}`)
   }, [buildGraph, router])
 
   return (
