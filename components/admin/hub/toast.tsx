@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { CheckCircle, AlertCircle, Info, X } from "lucide-react"
 
 type ToastKind = "success" | "error" | "info"
@@ -30,8 +30,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }, 4000)
     return () => clearTimeout(timer)
   }, [toasts])
+  const value = useMemo(() => ({ push }), [push])
   return (
-    <Ctx.Provider value={{ push }}>
+    <Ctx.Provider value={value}>
       {children}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
         {toasts.map(t => {
