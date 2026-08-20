@@ -101,6 +101,22 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       })
+      // Bij platform-fouten (504 gateway timeout, 500 zonder body, edge-error)
+      // komt hier HTML terug in plaats van JSON. res.json() gooit dan een
+      // JSON.parse-fout die de gebruiker niet snapt. Check content-type + status.
+      const contentType = res.headers.get("content-type") ?? ""
+      if (!contentType.includes("application/json")) {
+        if (res.status === 504) {
+          setError("Wizard nam te lang (5 min timeout). Probeer opnieuw of vereenvoudig de config (minder rondes/rollen).")
+        } else if (res.status === 401) {
+          setError("Sessie verlopen. Log opnieuw in.")
+        } else if (res.status >= 500) {
+          setError(`Server-fout (HTTP ${res.status}). Probeer opnieuw. Als het blijft: check Vercel logs.`)
+        } else {
+          setError(`Onverwacht antwoord van de server (HTTP ${res.status}, geen JSON).`)
+        }
+        return
+      }
       const data = await res.json() as {
         ok?: true
         graph?: ScenarioGraph
@@ -119,7 +135,13 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
       onGenerated(data.graph, { seed: data.seed ?? "", repairLog: data.repairLog ?? [] })
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Onbekende fout")
+      // Netwerk-fout, client cancel, of onverwachte parse. Log naar console
+      // zodat je in devtools de exacte oorzaak ziet.
+      console.error("Wizard submit failed:", err)
+      setError(err instanceof Error
+        ? `Netwerkfout: ${err.message}. Check je verbinding en probeer opnieuw.`
+        : "Onbekende fout — check browser-console."
+      )
     } finally {
       setLoading(false)
     }
