@@ -495,14 +495,20 @@ function InnerCanvas() {
     return () => { cancelled = true }
   }, [requestedId, handleLoad])
 
-  // Prefill wizard-config vanuit ?clientId=… (vanuit /admin/quality flow).
+  // Prefill wizard-config vanuit ?clientId=… (vanuit /admin/quality of klant-detail).
   // Bij ?wizard=1 blijft de dialoog dicht tot deze fetch klaar is, zodat de
   // wizard nooit leeg opent en de useEffect-in-de-dialoog de prefill oppikt
-  // bij de open-transition.
+  // bij de open-transition. clientId komt uit window.location — useSearchParams
+  // kan bij eerste render null geven zonder Suspense-boundary, en dat is
+  // precies waar deze effect op vertrouwde.
   const [wizardPrefill, setWizardPrefill] = useState<Partial<WizardConfig> | undefined>(undefined)
   const prefillFetchedRef = useRef(false)
   useEffect(() => {
-    if (!requestedClientId || prefillFetchedRef.current) return
+    if (prefillFetchedRef.current) return
+    const clientIdFromUrl = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("clientId")
+      : null
+    if (!clientIdFromUrl) return
     prefillFetchedRef.current = true
     let cancelled = false
     ;(async () => {
@@ -513,7 +519,7 @@ function InnerCanvas() {
           return
         }
         const data = await res.json() as { clients: AdminClient[] }
-        const client = data.clients.find(c => c.id === requestedClientId)
+        const client = data.clients.find(c => c.id === clientIdFromUrl)
         if (cancelled) return
         if (client) setWizardPrefill(clientToWizardPrefill(client))
         if (urlHasWizard) setAiWizardOpen(true)
@@ -522,7 +528,9 @@ function InnerCanvas() {
       }
     })()
     return () => { cancelled = true }
-  }, [requestedClientId, urlHasWizard])
+    // urlHasWizard is uit dezelfde window.location, dus stabiel voor deze mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const persistGraph = useCallback(async (): Promise<boolean> => {
     const graph = buildGraph()
