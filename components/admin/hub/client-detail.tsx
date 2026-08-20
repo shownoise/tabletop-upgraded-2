@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Loader2, Save, Trash2, Sparkles, Play, FolderKanban } from "lucide-react"
@@ -39,6 +39,14 @@ export function ClientDetail({ id }: { id: string }) {
   const [saveState, setSaveState] = useState<SaveState>("idle")
   const [scenarios, setScenarios] = useState<ScenarioGraph[]>([])
   const [sessions, setSessions] = useState<SessionSnapshot[]>([])
+  // Snapshot van de laatst-opgeslagen client. Voorkomt dat autosave triggert
+  // door alleen re-fetch (array-referenties zijn dan nieuw maar inhoud gelijk).
+  const lastSavedSnapshotRef = useRef<string | null>(null)
+
+  function clientSnapshot(c: AdminClient): string {
+    // updatedAt weglaten — die verandert bij elke save.
+    return JSON.stringify({ ...c, updatedAt: 0 })
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -51,6 +59,7 @@ export function ClientDetail({ id }: { id: string }) {
         const c = data.clients.find(x => x.id === id)
         if (!c) { toast.push("error", "Klant niet gevonden"); router.push("/admin/clients"); return }
         setClient(c)
+        lastSavedSnapshotRef.current = clientSnapshot(c)
         // Bijbehorende scenario's ophalen — matcht via clientName in de graph metadata.
         const sres = await fetch("/api/scenario-graph")
         if (sres.ok) {
@@ -81,12 +90,15 @@ export function ClientDetail({ id }: { id: string }) {
         body: JSON.stringify({ client: next }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      lastSavedSnapshotRef.current = clientSnapshot(next)
       setSaveState("saved")
       if (isNew) {
         toast.push("success", "Klant aangemaakt")
         router.push(`/admin/clients/${next.id}`)
       } else {
-        toast.push("success", "Opgeslagen")
+        // Bewuste stille save — geen toast bij elke autosave-tik, alleen
+        // status-label in de header ("Opgeslagen"). Toast bij expliciete
+        // acties (aanmaken, verwijderen) blijft.
       }
     } catch (e) {
       setSaveState("error")
@@ -96,9 +108,13 @@ export function ClientDetail({ id }: { id: string }) {
 
   // Autosave debounce — na 800ms van geen wijzigingen automatisch opslaan.
   // Alleen voor bestaande klanten; new-klant wordt met explicit knop opgeslagen.
+  // Skip als de huidige client identiek is aan wat we het laatst hebben opgeslagen —
+  // voorkomt een save/reload loop bij re-fetch (nieuwe array-referenties, gelijke inhoud).
   useEffect(() => {
     if (!client || isNew) return
     if (saveState === "saving") return
+    const snapshot = clientSnapshot(client)
+    if (lastSavedSnapshotRef.current === snapshot) return
     const t = setTimeout(() => { void save({ ...client, updatedAt: Date.now() }) }, 800)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
