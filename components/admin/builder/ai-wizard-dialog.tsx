@@ -48,10 +48,9 @@ const COMPANY_SIZES: Array<{ id: CompanySize; label: string }> = [
 // WizardConfig is exposed here — every field steers both the generation
 // prompt and the framework validation. The wizard always writes drafts.
 const PROGRESS_STEPS = [
-  { label: "Outline uitwerken…", estSeconds: 12 },
-  { label: "Rondes parallel genereren…", estSeconds: 35 },
-  { label: "Uitkomsten en briefings…", estSeconds: 20 },
-  { label: "Framework valideren en repareren…", estSeconds: 25 },
+  { label: "Outline uitwerken…", estSeconds: 8 },
+  { label: "Rondes + closer parallel genereren…", estSeconds: 20 },
+  { label: "Framework valideren en repareren…", estSeconds: 15 },
 ]
 
 export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig }: Props) {

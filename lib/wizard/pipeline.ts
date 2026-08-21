@@ -184,23 +184,33 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     throw new Error(`Outline pass produced ${outlineParsed.rounds?.length ?? 0} rondes, verwacht ${config.rounds}.`)
   }
 
-  // ── 2. Per-round generation (parallel) ──────────────────────────────
-  // Voorheen sequentieel — 5 rondes = 5x LLM-call-tijd achter elkaar (~2-3 min).
-  // Nu parallel: alle rondes tegelijk, gecombineerde tijd ≈ 1x call-tijd.
-  // Consistentie komt uit de gedeelde outline; kleine sub-ronde-drift wordt
-  // door de repair-loop later opgepakt.
-  const roundResults = await Promise.all(
-    Array.from({ length: config.rounds }, (_, i) =>
-      opts.llm([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: buildRoundPrompt(config, i, outlineParsed.rounds, [], []) },
-      ]).then(raw => {
-        const block = JSON.parse(extractJson(raw)) as RoundGeneratedBlock
-        if (!block.round) throw new Error(`Ronde ${i + 1}: LLM gaf geen 'round' terug`)
-        return { i, block }
-      })
-    )
+  // ── 2. Per-round generation + closer (alles parallel) ────────────────
+  // Voorheen sequentieel: outline → 5x rondes → closer = ~3-4 min.
+  // Nu: outline eerst (nodig voor rondes-prompt); rondes en closer daarna
+  // volledig parallel. De closer gebruikt niet de rondes-content — hij
+  // maakt outcomes, roleBriefings, injectLibrary op basis van systemPrompt
+  // en config, dus scheidbaar van de rondes-generatie.
+  const closerPromise = opts.llm([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: `Geef nu als JSON: { "name": "…", "scenarioType": "ransomware_double_extortion" | "insider_threat" | "bec_cfo_fraud" | "supply_chain_compromise", "irPlaybook": "…markdown…", "outcomes": [ { "key": "…", "label": "…", "narrative": "…", "lessonLearned": "…", "scoreRange": {"min":…, "max":…} } ], "roleBriefings": { "ceo": {"text": "…", "playbookGaps": ["…"]}, … }, "injectLibrary": [ { "id":"…", "label":"…", "channel":"…", "urgency":"…", "classification":"feit|aanname", "title":"…", "content":"…" } ] }. Minstens 3 outcomes, roleBriefings voor elk van ${config.rolesIncluded.join(", ")}.` },
+  ])
+
+  const roundPromises = Array.from({ length: config.rounds }, (_, i) =>
+    opts.llm([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: buildRoundPrompt(config, i, outlineParsed.rounds, [], []) },
+    ]).then(raw => {
+      const block = JSON.parse(extractJson(raw)) as RoundGeneratedBlock
+      if (!block.round) throw new Error(`Ronde ${i + 1}: LLM gaf geen 'round' terug`)
+      return { i, block }
+    })
   )
+
+  const [roundResults, closerRaw] = await Promise.all([
+    Promise.all(roundPromises),
+    closerPromise,
+  ])
+
   const rounds: WizardPlan['rounds'] = []
   const decisions: NonNullable<WizardPlan['decisions']> = []
   for (const { i, block } of roundResults.sort((a, b) => a.i - b.i)) {
@@ -208,12 +218,6 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     if (block.decision) decisions.push({ ...block.decision, afterRoundIndex: i })
   }
 
-  // Assemble the full plan. Ask the LLM once more for outcomes + roleBriefings
-  // + injectLibrary + name/scenarioType/irPlaybook so we don't hard-code them.
-  const closerRaw = await opts.llm([
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `Geef nu als JSON: { "name": "…", "scenarioType": "ransomware_double_extortion" | "insider_threat" | "bec_cfo_fraud" | "supply_chain_compromise", "irPlaybook": "…markdown…", "outcomes": [ { "key": "…", "label": "…", "narrative": "…", "lessonLearned": "…", "scoreRange": {"min":…, "max":…} } ], "roleBriefings": { "ceo": {"text": "…", "playbookGaps": ["…"]}, … }, "injectLibrary": [ { "id":"…", "label":"…", "channel":"…", "urgency":"…", "classification":"feit|aanname", "title":"…", "content":"…" } ] }. Minstens 3 outcomes, roleBriefings voor elk van ${config.rolesIncluded.join(", ")}.` },
-  ])
   const closer = JSON.parse(extractJson(closerRaw)) as {
     name: string
     scenarioType: WizardPlan['scenarioType']
