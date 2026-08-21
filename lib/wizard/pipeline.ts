@@ -139,13 +139,17 @@ function buildOutlinePrompt(config: WizardConfig): string {
 }
 
 // Build the per-round generation prompt.
+// Merk op: sinds parallel-generation is `previousRounds`/`previousDecisions` leeg —
+// consistentie zit dan in de gedeelde outline (elke ronde krijgt de volledige
+// outline zodat de LLM weet wat vóór en na komt).
 function buildRoundPrompt(config: WizardConfig, roundIdx: number, outline: OutlineRound[], previousRounds: WizardPlan['rounds'], previousDecisions: NonNullable<WizardPlan['decisions']>): string {
   const outlineJson = JSON.stringify(outline)
-  return `Genereer ronde ${roundIdx + 1} van ${config.rounds}. Outline: ${outlineJson}.
+  const previousContext = previousRounds.length > 0 || previousDecisions.length > 0
+    ? `\nReeds eerder gegenereerd:\n- Vorige rondes (${previousRounds.length}): ${JSON.stringify(previousRounds).slice(0, 4000)}\n- Eerdere decisions: ${JSON.stringify(previousDecisions).slice(0, 2000)}\n`
+    : ""
+  return `Genereer ronde ${roundIdx + 1} van ${config.rounds}. Outline (alle ${config.rounds} rondes): ${outlineJson}.${previousContext}
 
-Reeds eerder gegenereerd:
-- Vorige rondes (${previousRounds.length}): ${JSON.stringify(previousRounds).slice(0, 4000)}
-- Eerdere decisions: ${JSON.stringify(previousDecisions).slice(0, 2000)}
+Consistentie: hou rekening met de outline van vorige én latere rondes zodat het narratief samenhangt.
 
 Geef als JSON: { "round": WizardPlanRound, "decision": WizardPlanDecision | null } — de decision hoort bij deze ronde (afterRoundIndex=${roundIdx}). Gebruik author-id's zoals "r${roundIdx + 1}-d1" voor decision en "r${roundIdx + 1}-i1", "r${roundIdx + 1}-i2" voor injects. Elke inject die een decision opzet, zet setsUpDecisionNodeId op de decision's author-id.`
 }
@@ -180,16 +184,26 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     throw new Error(`Outline pass produced ${outlineParsed.rounds?.length ?? 0} rondes, verwacht ${config.rounds}.`)
   }
 
-  // ── 2. Per-round generation ─────────────────────────────────────────
+  // ── 2. Per-round generation (parallel) ──────────────────────────────
+  // Voorheen sequentieel — 5 rondes = 5x LLM-call-tijd achter elkaar (~2-3 min).
+  // Nu parallel: alle rondes tegelijk, gecombineerde tijd ≈ 1x call-tijd.
+  // Consistentie komt uit de gedeelde outline; kleine sub-ronde-drift wordt
+  // door de repair-loop later opgepakt.
+  const roundResults = await Promise.all(
+    Array.from({ length: config.rounds }, (_, i) =>
+      opts.llm([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: buildRoundPrompt(config, i, outlineParsed.rounds, [], []) },
+      ]).then(raw => {
+        const block = JSON.parse(extractJson(raw)) as RoundGeneratedBlock
+        if (!block.round) throw new Error(`Ronde ${i + 1}: LLM gaf geen 'round' terug`)
+        return { i, block }
+      })
+    )
+  )
   const rounds: WizardPlan['rounds'] = []
   const decisions: NonNullable<WizardPlan['decisions']> = []
-  for (let i = 0; i < config.rounds; i++) {
-    const roundRaw = await opts.llm([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: buildRoundPrompt(config, i, outlineParsed.rounds, rounds, decisions) },
-    ])
-    const block = JSON.parse(extractJson(roundRaw)) as RoundGeneratedBlock
-    if (!block.round) throw new Error(`Ronde ${i + 1}: LLM gaf geen 'round' terug`)
+  for (const { i, block } of roundResults.sort((a, b) => a.i - b.i)) {
     rounds.push(block.round)
     if (block.decision) decisions.push({ ...block.decision, afterRoundIndex: i })
   }

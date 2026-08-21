@@ -47,11 +47,20 @@ const COMPANY_SIZES: Array<{ id: CompanySize; label: string }> = [
 // AI wizard for creating a client-tailored starting scenario. The full
 // WizardConfig is exposed here — every field steers both the generation
 // prompt and the framework validation. The wizard always writes drafts.
+const PROGRESS_STEPS = [
+  { label: "Outline uitwerken…", estSeconds: 12 },
+  { label: "Rondes parallel genereren…", estSeconds: 35 },
+  { label: "Uitkomsten en briefings…", estSeconds: 20 },
+  { label: "Framework valideren en repareren…", estSeconds: 25 },
+]
+
 export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig }: Props) {
   const [config, setConfig] = useState<WizardConfig>(() => ({ ...defaultWizardConfig(), ...initialConfig }))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastLog, setLastLog] = useState<{ seed: string; repairLog: RepairLogEntry[] } | null>(null)
+  const [progressStep, setProgressStep] = useState(0)
+  const [elapsedSec, setElapsedSec] = useState(0)
 
   // Reset config bij open-transition zodat een nieuwe klant of nieuwe prefill
   // niet blijft hangen op de vorige state. User-edits binnen de dialoog blijven
@@ -60,6 +69,28 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
     if (open) setConfig({ ...defaultWizardConfig(), ...initialConfig })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  // Voortgangsanimatie tijdens loading — tijdgebaseerd (server heeft geen
+  // streaming events). Stap-labels rouleren op basis van geschatte tijden;
+  // elapsedSec drijft de progress-bar aan.
+  useEffect(() => {
+    if (!loading) { setProgressStep(0); setElapsedSec(0); return }
+    const startedAt = Date.now()
+    const tick = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000)
+      setElapsedSec(elapsed)
+      // Bepaal huidige stap op basis van cumulatieve tijden.
+      let cum = 0
+      let step = 0
+      for (let i = 0; i < PROGRESS_STEPS.length; i++) {
+        cum += PROGRESS_STEPS[i].estSeconds
+        if (elapsed < cum) { step = i; break }
+        step = PROGRESS_STEPS.length - 1
+      }
+      setProgressStep(step)
+    }, 500)
+    return () => clearInterval(tick)
+  }, [loading])
 
   const update = <K extends keyof WizardConfig>(key: K, value: WizardConfig[K]) => {
     setConfig(prev => ({ ...prev, [key]: value }))
@@ -307,7 +338,7 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
           </div>
         )}
 
-        {lastLog && (
+        {lastLog && !loading && (
           <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-xs">
             <div className="font-semibold">Wizard-log</div>
             <div className="text-muted-foreground">seed: <span className="font-mono">{lastLog.seed || "—"}</span></div>
@@ -322,6 +353,30 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
             )}
           </div>
         )}
+
+        {loading && (() => {
+          const totalEst = PROGRESS_STEPS.reduce((sum, s) => sum + s.estSeconds, 0)
+          // Progress-bar zit vast op 95% zodra we voorbij de geschatte tijd komen —
+          // vermijdt "100% maar wacht nog".
+          const pct = Math.min(95, Math.round((elapsedSec / totalEst) * 100))
+          return (
+            <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-3 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-foreground">{PROGRESS_STEPS[progressStep].label}</span>
+                <span className="font-mono text-muted-foreground">{elapsedSec}s</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all duration-500 ease-linear"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div className="text-[10px] text-muted-foreground">
+                Stap {progressStep + 1} van {PROGRESS_STEPS.length}. Verwachte totale duur: ~{totalEst}s. Kan langer duren bij veel rondes of als de LLM extra repair-passes doet.
+              </div>
+            </div>
+          )
+        })()}
 
         <div className="flex items-center justify-between gap-3 pt-1">
           <p className="text-[11px] text-muted-foreground">
