@@ -18,18 +18,20 @@ interface StubResponses {
 
 function buildStub(resp: StubResponses): { llm: (m: LlmMessage[]) => Promise<string>; calls: string[] } {
   const calls: string[] = []
-  let roundIdx = 0
   return {
     calls,
     async llm(messages) {
       const last = messages[messages.length - 1]?.content ?? ""
       calls.push(last.slice(0, 80))
-      if (last.includes("outline") || last.startsWith("Genereer eerst een OUTLINE")) return resp.outline
+      // Volgorde: specifiek → generiek. De round-prompt bevat inmiddels ook
+      // het woord "outline" (naar de gedeelde outline), dus die MOET eerst
+      // gecheckt worden anders vangt de outline-branch de round-calls op.
       if (last.startsWith("Genereer ronde ")) {
-        const out = resp.rounds[roundIdx] ?? resp.rounds[resp.rounds.length - 1]
-        roundIdx += 1
-        return out
+        const match = last.match(/^Genereer ronde (\d+)/)
+        const idx = match ? Math.max(0, Number(match[1]) - 1) : 0
+        return resp.rounds[idx] ?? resp.rounds[resp.rounds.length - 1]
       }
+      if (last.startsWith("Genereer eerst een OUTLINE")) return resp.outline
       if (last.startsWith("Geef nu als JSON")) return resp.closer
       if (last.startsWith("De vorige plan overtreedt")) return resp.repair ?? ""
       return ""
