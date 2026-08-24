@@ -339,15 +339,19 @@ export function planToGraph(plan: WizardPlan, options: PlanToGraphOptions = {}):
 
   // Decisions between rounds (or sequential Round → Round when no decision).
   const decisionsByAfter = new Map<number, WizardPlanDecision>()
-  for (const d of (plan.decisions ?? [])) decisionsByAfter.set(d.afterRoundIndex, d)
+  const decisionsArr = Array.isArray(plan.decisions) ? plan.decisions : []
+  for (const d of decisionsArr) {
+    if (d && typeof d.afterRoundIndex === "number") decisionsByAfter.set(d.afterRoundIndex, d)
+  }
 
   for (let i = 0; i < plan.rounds.length; i++) {
     const decision = decisionsByAfter.get(i)
     if (decision) {
-      // Defensief: LLM gaf soms een decision zonder valid options-array.
-      // Skippen is beter dan crashen — repair-loop of author kan het aanvullen.
-      if (!Array.isArray(decision.options)) {
-        console.warn(`[wizard-plan] Decision ${decision.authorId ?? "?"} bij ronde ${i + 1} geskipt — options is geen array`)
+      // Defensief: LLM gaf soms een decision zonder valid options-array,
+      // of met een lege array. Skippen is beter dan crashen of een decision
+      // zonder keuzes te renderen.
+      if (!Array.isArray(decision.options) || decision.options.length === 0) {
+        console.warn(`[wizard-plan] Decision ${decision.authorId ?? "?"} bij ronde ${i + 1} geskipt — options ontbreekt of is leeg`)
         continue
       }
       const did = (decision.authorId && decisionIdMap.get(decision.authorId)) || nid("dec")

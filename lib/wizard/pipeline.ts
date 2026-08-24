@@ -64,7 +64,45 @@ export function extractJson(text: string): string {
 
 function parsePlan(text: string): WizardPlan {
   const json = extractJson(text)
-  return JSON.parse(json) as WizardPlan
+  return normalizePlan(JSON.parse(json) as WizardPlan)
+}
+
+// Normaliseer arrays die de LLM soms als object/null/undefined teruggeeft.
+// Beter een leeg array met warning dan een crash op .map/.forEach/.length
+// verderop in de pipeline. Kritieke velden (rounds ontbreekt) → laat door
+// zodat de validator er een leesbare fout van maakt.
+function normalizePlan(plan: WizardPlan): WizardPlan {
+  if (!Array.isArray(plan.rounds)) {
+    console.warn("[wizard-plan] plan.rounds geen array — leeg gemaakt")
+    plan.rounds = []
+  }
+  if (plan.decisions != null && !Array.isArray(plan.decisions)) {
+    console.warn(`[wizard-plan] plan.decisions geen array (kreeg: ${typeof plan.decisions}) — leeg gemaakt`)
+    plan.decisions = []
+  }
+  if (plan.outcomes != null && !Array.isArray(plan.outcomes)) {
+    console.warn(`[wizard-plan] plan.outcomes geen array — leeg gemaakt`)
+    plan.outcomes = []
+  }
+  if (plan.injectLibrary != null && !Array.isArray(plan.injectLibrary)) {
+    plan.injectLibrary = []
+  }
+  // Per round: injects moet array zijn.
+  for (const round of plan.rounds) {
+    if (round && !Array.isArray(round.injects)) {
+      round.injects = []
+    }
+  }
+  // Per decision: options moet array zijn — anders skippen we hem verderop.
+  // Hier niet skippen (behoud volgorde/afterRoundIndex), gewoon options leeg
+  // maken zodat planToGraph 'm netjes kan afvangen.
+  for (const d of (plan.decisions ?? [])) {
+    if (d && !Array.isArray(d.options)) {
+      console.warn(`[wizard-plan] decision ${d.authorId ?? "?"} — options leeg gemaakt (was ${typeof d.options})`)
+      d.options = []
+    }
+  }
+  return plan
 }
 
 // Assemble the base LLM system prompt given a config. Includes all the config

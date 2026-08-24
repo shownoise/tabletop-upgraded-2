@@ -265,3 +265,52 @@ describe("wizard pipeline — draft status + seed on graph", () => {
     expect((inj?.data as InjectNodeData | undefined)?.classification).toBeTruthy()
   })
 })
+
+describe("wizard pipeline — defensive parsing", () => {
+  it("does not crash with 'options.map' TypeError when decision.options is not an array", async () => {
+    const plan = passingPlan()
+    // Corrumpeer: decision met options als object i.p.v. array.
+    const round0Raw = JSON.stringify({
+      round: plan.rounds[0],
+      decision: {
+        ...plan.decisions![0],
+        options: { role1: "not-an-array" },
+      },
+    })
+    const round1Raw = JSON.stringify({ round: plan.rounds[1], decision: plan.decisions![1] })
+    const stub = buildStub({
+      outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
+      rounds: [round0Raw, round1Raw],
+      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, roleBriefings: plan.roleBriefings }),
+      repair: JSON.stringify(plan),
+    })
+    // Alleen falen als de fout een TypeError over .map/.forEach/.length is.
+    // Overige fouten (bijv. WizardPipelineError na te weinig repair) zijn OK —
+    // het gaat om het voorkomen van de cryptische crash.
+    let caught: unknown = null
+    try { await runWizardPipeline(testConfig(), { llm: stub.llm, now: () => 1 }) }
+    catch (e) { caught = e }
+    const msg = caught instanceof Error ? caught.message : String(caught ?? "")
+    expect(msg).not.toMatch(/options\.map is not a function/)
+    expect(msg).not.toMatch(/Cannot read prop.*of undefined/)
+  })
+
+  it("does not crash when round.injects is not an array", async () => {
+    const plan = passingPlan()
+    const badRound = { ...plan.rounds[0], injects: null as unknown as typeof plan.rounds[0]['injects'] }
+    const round0Raw = JSON.stringify({ round: badRound, decision: plan.decisions![0] })
+    const round1Raw = JSON.stringify({ round: plan.rounds[1], decision: plan.decisions![1] })
+    const stub = buildStub({
+      outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
+      rounds: [round0Raw, round1Raw],
+      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, roleBriefings: plan.roleBriefings }),
+      repair: JSON.stringify(plan),
+    })
+    let caught: unknown = null
+    try { await runWizardPipeline(testConfig(), { llm: stub.llm, now: () => 1 }) }
+    catch (e) { caught = e }
+    const msg = caught instanceof Error ? caught.message : String(caught ?? "")
+    expect(msg).not.toMatch(/injects.*is not a function/)
+    expect(msg).not.toMatch(/Cannot read prop.*of null/)
+  })
+})
