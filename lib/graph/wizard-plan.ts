@@ -344,6 +344,12 @@ export function planToGraph(plan: WizardPlan, options: PlanToGraphOptions = {}):
   for (let i = 0; i < plan.rounds.length; i++) {
     const decision = decisionsByAfter.get(i)
     if (decision) {
+      // Defensief: LLM gaf soms een decision zonder valid options-array.
+      // Skippen is beter dan crashen — repair-loop of author kan het aanvullen.
+      if (!Array.isArray(decision.options)) {
+        console.warn(`[wizard-plan] Decision ${decision.authorId ?? "?"} bij ronde ${i + 1} geskipt — options is geen array`)
+        continue
+      }
       const did = (decision.authorId && decisionIdMap.get(decision.authorId)) || nid("dec")
       const options = decision.options.map(opt => ({
         id: nid("opt"),

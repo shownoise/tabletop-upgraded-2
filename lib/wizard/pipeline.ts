@@ -202,6 +202,19 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     ]).then(raw => {
       const block = JSON.parse(extractJson(raw)) as RoundGeneratedBlock
       if (!block.round) throw new Error(`Ronde ${i + 1}: LLM gaf geen 'round' terug`)
+      // Defensief: als de LLM een decision teruggaf zonder valid options-array,
+      // gooi hem weg (behandel als "geen decision deze ronde"). De repair-loop
+      // of latere framework-check kan het aanvullen. Beter dan een hard crash
+      // in planToGraph.
+      if (block.decision && !Array.isArray(block.decision.options)) {
+        console.warn(`[wizard] Ronde ${i + 1}: decision gooit weg — options is geen array (kreeg: ${typeof block.decision.options})`)
+        block.decision = null
+      }
+      // Zelfde voor round.injects: LLM moet een array geven.
+      if (block.round && !Array.isArray(block.round.injects)) {
+        console.warn(`[wizard] Ronde ${i + 1}: injects geen array (kreeg: ${typeof block.round.injects}) — leeg gemaakt`)
+        block.round.injects = []
+      }
       return { i, block }
     })
   )
