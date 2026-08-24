@@ -92,20 +92,29 @@ function safeParseCloserPart<T>(text: string, kind: string): T {
 // Beter een leeg array met warning dan een crash op .map/.forEach/.length
 // verderop in de pipeline. Kritieke velden (rounds ontbreekt) → laat door
 // zodat de validator er een leesbare fout van maakt.
+//
+// Historische bug: eerdere versie gebruikte `x != null && !Array.isArray(x)`.
+// Dat mist null/undefined (loose equality: `null != null` en `undefined != null`
+// zijn beide false), waardoor `planToGraph` verderop crashte met
+// "e.outcomes is not iterable". Nu gewoon Array.isArray — dekt alle non-array.
 function normalizePlan(plan: WizardPlan): WizardPlan {
   if (!Array.isArray(plan.rounds)) {
     console.warn("[wizard-plan] plan.rounds geen array — leeg gemaakt")
     plan.rounds = []
   }
-  if (plan.decisions != null && !Array.isArray(plan.decisions)) {
-    console.warn(`[wizard-plan] plan.decisions geen array (kreeg: ${typeof plan.decisions}) — leeg gemaakt`)
+  if (!Array.isArray(plan.decisions)) {
+    if (plan.decisions != null) {
+      console.warn(`[wizard-plan] plan.decisions geen array (kreeg: ${typeof plan.decisions}) — leeg gemaakt`)
+    }
     plan.decisions = []
   }
-  if (plan.outcomes != null && !Array.isArray(plan.outcomes)) {
-    console.warn(`[wizard-plan] plan.outcomes geen array — leeg gemaakt`)
+  if (!Array.isArray(plan.outcomes)) {
+    if (plan.outcomes != null) {
+      console.warn(`[wizard-plan] plan.outcomes geen array (kreeg: ${typeof plan.outcomes}) — leeg gemaakt`)
+    }
     plan.outcomes = []
   }
-  if (plan.injectLibrary != null && !Array.isArray(plan.injectLibrary)) {
+  if (!Array.isArray(plan.injectLibrary)) {
     plan.injectLibrary = []
   }
   // Per round: injects moet array zijn.
