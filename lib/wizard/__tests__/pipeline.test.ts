@@ -12,7 +12,10 @@ import type { InjectNodeData } from "@/lib/graph/types"
 interface StubResponses {
   outline: string
   rounds: string[]        // one per round index
-  closer: string
+  // Closer is nu opgesplitst in 3 aparte calls.
+  meta: string            // { name, scenarioType, irPlaybook, outcomes }
+  briefings: string       // { roleBriefings }
+  injects: string         // { injectLibrary }
   repair?: string         // response for repair passes
 }
 
@@ -23,19 +26,30 @@ function buildStub(resp: StubResponses): { llm: (m: LlmMessage[]) => Promise<str
     async llm(messages) {
       const last = messages[messages.length - 1]?.content ?? ""
       calls.push(last.slice(0, 80))
-      // Volgorde: specifiek → generiek. De round-prompt bevat inmiddels ook
-      // het woord "outline" (naar de gedeelde outline), dus die MOET eerst
-      // gecheckt worden anders vangt de outline-branch de round-calls op.
       if (last.startsWith("Genereer ronde ")) {
         const match = last.match(/^Genereer ronde (\d+)/)
         const idx = match ? Math.max(0, Number(match[1]) - 1) : 0
         return resp.rounds[idx] ?? resp.rounds[resp.rounds.length - 1]
       }
       if (last.startsWith("Genereer eerst een OUTLINE")) return resp.outline
-      if (last.startsWith("Geef nu als JSON")) return resp.closer
       if (last.startsWith("De vorige plan overtreedt")) return resp.repair ?? ""
+      // Closer-splits: match op de meest onderscheidende key in de prompt.
+      if (last.includes('"roleBriefings"')) return resp.briefings
+      if (last.includes('"injectLibrary"')) return resp.injects
+      if (last.includes('"outcomes"') || last.includes('"scenarioType"')) return resp.meta
       return ""
     },
+  }
+}
+
+// Helper: bouw stub-responses uit een compleet plan.
+function stubFromPlan(plan: WizardPlan): StubResponses {
+  return {
+    outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
+    rounds: plan.rounds.map((r, i) => JSON.stringify({ round: r, decision: plan.decisions?.[i] ?? null })),
+    meta: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, irPlaybook: plan.irPlaybook }),
+    briefings: JSON.stringify({ roleBriefings: plan.roleBriefings ?? {} }),
+    injects: JSON.stringify({ injectLibrary: plan.injectLibrary ?? [] }),
   }
 }
 
@@ -142,16 +156,7 @@ function passingPlan(): WizardPlan {
 describe("wizard pipeline — happy path", () => {
   it("produces a graph, records the seed, and returns an empty repair log when all rules pass", async () => {
     const plan = passingPlan()
-    const stub = buildStub({
-      outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
-      rounds: plan.rounds.map((r, i) => JSON.stringify({ round: r, decision: plan.decisions![i] })),
-      closer: JSON.stringify({
-        name: plan.name,
-        scenarioType: plan.scenarioType,
-        outcomes: plan.outcomes,
-        roleBriefings: plan.roleBriefings,
-      }),
-    })
+    const stub = buildStub(stubFromPlan(plan))
     const result = await runWizardPipeline(testConfig(), { llm: stub.llm, now: () => 1_700_000_000 })
     expect(result.seed).toBe('fixed-seed')
     expect(result.repairLog).toEqual([])
@@ -164,16 +169,8 @@ describe("wizard pipeline — happy path", () => {
 
   it("reproduces byte-identical graphs for the same seed + same LLM output", async () => {
     const plan = passingPlan()
-    const stub1 = buildStub({
-      outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
-      rounds: plan.rounds.map((r, i) => JSON.stringify({ round: r, decision: plan.decisions![i] })),
-      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, roleBriefings: plan.roleBriefings }),
-    })
-    const stub2 = buildStub({
-      outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
-      rounds: plan.rounds.map((r, i) => JSON.stringify({ round: r, decision: plan.decisions![i] })),
-      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, roleBriefings: plan.roleBriefings }),
-    })
+    const stub1 = buildStub(stubFromPlan(plan))
+    const stub2 = buildStub(stubFromPlan(plan))
     const r1 = await runWizardPipeline(testConfig(), { llm: stub1.llm, now: () => 42 })
     const r2 = await runWizardPipeline(testConfig(), { llm: stub2.llm, now: () => 42 })
     expect(JSON.stringify(r1.graph)).toBe(JSON.stringify(r2.graph))
@@ -192,22 +189,18 @@ describe("wizard pipeline — repair loop", () => {
     }
     // Also break rule 1 (setup-inject) by clearing i2 to make sure only one rule fails
     // per repair attempt is not required — multiple failing rules on first pass is fine.
-    const roundsRaw = good.rounds.map((r, i) => JSON.stringify({ round: r, decision: good.decisions![i] }))
-    const outlineRaw = JSON.stringify({ rounds: good.rounds.map(r => ({ title: r.title, situation: r.situation })) })
-    const closerRaw = JSON.stringify({ name: good.name, scenarioType: good.scenarioType, outcomes: good.outcomes })
-
+    const goodStub = stubFromPlan(good)
     // First round response: broken plan for round 1 (setups removed, violates rule 1).
     const brokenRoundsRaw = [
       JSON.stringify({ round: broken.rounds[0], decision: broken.decisions![0] }),
-      roundsRaw[1],
+      goodStub.rounds[1],
     ]
     // Repair response returns the good plan wholesale.
     const repairRaw = JSON.stringify(good)
 
     const stub = buildStub({
-      outline: outlineRaw,
+      ...goodStub,
       rounds: brokenRoundsRaw,
-      closer: closerRaw,
       repair: repairRaw,
     })
 
@@ -229,15 +222,10 @@ describe("wizard pipeline — repair loop", () => {
     for (const r of broken.rounds) {
       for (const inj of r.injects!) inj.classification = undefined
     }
-    const outlineRaw = JSON.stringify({ rounds: broken.rounds.map(r => ({ title: r.title, situation: r.situation })) })
-    const roundsRaw = broken.rounds.map((r, i) => JSON.stringify({ round: r, decision: broken.decisions![i] }))
-    const closerRaw = JSON.stringify({ name: broken.name, scenarioType: broken.scenarioType, outcomes: broken.outcomes })
     const repairRaw = JSON.stringify(broken)  // repair also broken
 
     const stub = buildStub({
-      outline: outlineRaw,
-      rounds: roundsRaw,
-      closer: closerRaw,
+      ...stubFromPlan(broken),
       repair: repairRaw,
     })
 
@@ -252,11 +240,7 @@ describe("wizard pipeline — repair loop", () => {
 describe("wizard pipeline — draft status + seed on graph", () => {
   it("sets publishStatus='draft' and stamps wizardSeed on the returned graph", async () => {
     const plan = passingPlan()
-    const stub = buildStub({
-      outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
-      rounds: plan.rounds.map((r, i) => JSON.stringify({ round: r, decision: plan.decisions![i] })),
-      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, roleBriefings: plan.roleBriefings }),
-    })
+    const stub = buildStub(stubFromPlan(plan))
     const result = await runWizardPipeline(testConfig({ seed: 'my-seed-xyz' }), { llm: stub.llm, now: () => 1 })
     expect(result.graph.publishStatus).toBe('draft')
     expect(result.graph.wizardSeed).toBe('my-seed-xyz')
@@ -269,7 +253,7 @@ describe("wizard pipeline — draft status + seed on graph", () => {
 describe("wizard pipeline — defensive parsing", () => {
   it("does not crash with 'options.map' TypeError when decision.options is not an array", async () => {
     const plan = passingPlan()
-    // Corrumpeer: decision met options als object i.p.v. array.
+    const base = stubFromPlan(plan)
     const round0Raw = JSON.stringify({
       round: plan.rounds[0],
       decision: {
@@ -277,16 +261,11 @@ describe("wizard pipeline — defensive parsing", () => {
         options: { role1: "not-an-array" },
       },
     })
-    const round1Raw = JSON.stringify({ round: plan.rounds[1], decision: plan.decisions![1] })
     const stub = buildStub({
-      outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
-      rounds: [round0Raw, round1Raw],
-      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, roleBriefings: plan.roleBriefings }),
+      ...base,
+      rounds: [round0Raw, base.rounds[1]],
       repair: JSON.stringify(plan),
     })
-    // Alleen falen als de fout een TypeError over .map/.forEach/.length is.
-    // Overige fouten (bijv. WizardPipelineError na te weinig repair) zijn OK —
-    // het gaat om het voorkomen van de cryptische crash.
     let caught: unknown = null
     try { await runWizardPipeline(testConfig(), { llm: stub.llm, now: () => 1 }) }
     catch (e) { caught = e }
@@ -297,13 +276,12 @@ describe("wizard pipeline — defensive parsing", () => {
 
   it("does not crash when round.injects is not an array", async () => {
     const plan = passingPlan()
+    const base = stubFromPlan(plan)
     const badRound = { ...plan.rounds[0], injects: null as unknown as typeof plan.rounds[0]['injects'] }
     const round0Raw = JSON.stringify({ round: badRound, decision: plan.decisions![0] })
-    const round1Raw = JSON.stringify({ round: plan.rounds[1], decision: plan.decisions![1] })
     const stub = buildStub({
-      outline: JSON.stringify({ rounds: plan.rounds.map(r => ({ title: r.title, situation: r.situation })) }),
-      rounds: [round0Raw, round1Raw],
-      closer: JSON.stringify({ name: plan.name, scenarioType: plan.scenarioType, outcomes: plan.outcomes, roleBriefings: plan.roleBriefings }),
+      ...base,
+      rounds: [round0Raw, base.rounds[1]],
       repair: JSON.stringify(plan),
     })
     let caught: unknown = null
@@ -312,5 +290,24 @@ describe("wizard pipeline — defensive parsing", () => {
     const msg = caught instanceof Error ? caught.message : String(caught ?? "")
     expect(msg).not.toMatch(/injects.*is not a function/)
     expect(msg).not.toMatch(/Cannot read prop.*of null/)
+  })
+
+  it("tolerates a closer-part that returns invalid JSON — no truncation crash bubbles up", async () => {
+    const plan = passingPlan()
+    const base = stubFromPlan(plan)
+    // Simuleer dat de briefings-call kapotte output gaf (truncated).
+    const stub = buildStub({
+      ...base,
+      briefings: '{"roleBriefings": {"ceo": "unterminated', // kapotte JSON
+      repair: JSON.stringify(plan), // valid repair zodat framework OK wordt
+    })
+    // De crash die we voorheen zagen was "Unterminated string in JSON at position…"
+    // uit de closer-parse zelf. Die crash mag niet meer bubbelen — de tolerante
+    // parser vangt hem af. Andere fouten (repair, validate) zijn OK voor deze test.
+    let caught: unknown = null
+    try { await runWizardPipeline(testConfig(), { llm: stub.llm, now: () => 1 }) }
+    catch (e) { caught = e }
+    const msg = caught instanceof Error ? caught.message : String(caught ?? "")
+    expect(msg).not.toMatch(/Unterminated string in JSON/)
   })
 })
