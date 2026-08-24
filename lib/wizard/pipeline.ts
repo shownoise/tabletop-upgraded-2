@@ -67,6 +67,19 @@ function parsePlan(text: string): WizardPlan {
   return normalizePlan(JSON.parse(json) as WizardPlan)
 }
 
+// Tolerante parser voor de 3 closer-deelcalls (meta / briefings / injects).
+// Als de LLM iets terug gaf dat niet parseerbaar is: return leeg object met
+// warning. De rest van de pipeline gaat dan door met zonder-briefings/leeg-
+// injectLibrary — beter dan de hele generatie faalt.
+function safeParseCloserPart<T>(text: string, kind: string): T {
+  try {
+    return JSON.parse(extractJson(text)) as T
+  } catch (err) {
+    console.warn(`[wizard] closer-part '${kind}' parse failed:`, err instanceof Error ? err.message : String(err))
+    return {} as T
+  }
+}
+
 // Normaliseer arrays die de LLM soms als object/null/undefined teruggeeft.
 // Beter een leeg array met warning dan een crash op .map/.forEach/.length
 // verderop in de pipeline. Kritieke velden (rounds ontbreekt) → laat door
@@ -222,19 +235,26 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     throw new Error(`Outline pass produced ${outlineParsed.rounds?.length ?? 0} rondes, verwacht ${config.rounds}.`)
   }
 
-  // ── 2. Per-round generation + closer (alles parallel) ────────────────
-  // Voorheen sequentieel: outline → 5x rondes → closer = ~3-4 min.
-  // Nu: outline eerst (nodig voor rondes-prompt); rondes en closer daarna
-  // volledig parallel. De closer gebruikt niet de rondes-content — hij
-  // maakt outcomes, roleBriefings, injectLibrary op basis van systemPrompt
-  // en config, dus scheidbaar van de rondes-generatie.
-  // Closer levert scenario-metadata. Beknopt houden om truncation te
-  // voorkomen: roleBriefing text max 2-3 zinnen, injectLibrary max 4 items,
-  // narrative max 2 zinnen. Sonnet respecteert dit en output past dan
-  // comfortabel onder max_tokens.
-  const closerPromise = opts.llm([
+  // ── 2. Per-round + closer-3-delen (alles parallel) ──────────────────
+  // Historie:
+  //   v1: outline → N rondes sequentieel → closer = 3-7 min
+  //   v2: outline → parallel rondes → closer parallel = 60-90s. Werkte,
+  //       maar closer werd te groot en werd afgekapt (JSON parse errors).
+  //   v3 (nu): closer opgesplitst in 3 kleine parallel calls, elk klein
+  //       genoeg om nooit truncated te worden. Alles wat parallel kan is
+  //       parallel; outline blijft sequentieel want rondes-prompts hebben
+  //       hem nodig.
+  const metaPromise = opts.llm([
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: `Geef nu als JSON (beknopt: elk tekstveld max 2-3 zinnen): { "name": "…", "scenarioType": "ransomware_double_extortion" | "insider_threat" | "bec_cfo_fraud" | "supply_chain_compromise", "irPlaybook": "korte markdown, max 6 bullets", "outcomes": [ { "key": "…", "label": "…", "narrative": "max 2 zinnen", "lessonLearned": "1 zin", "scoreRange": {"min":…, "max":…} } ], "roleBriefings": { "ceo": {"text": "max 2 zinnen", "playbookGaps": ["1 zin"]}, … }, "injectLibrary": [ { "id":"…", "label":"…", "channel":"…", "urgency":"…", "classification":"feit|aanname", "title":"…", "content":"max 2 zinnen" } ] }. Minstens 3 outcomes; roleBriefings voor elk van ${config.rolesIncluded.join(", ")}; injectLibrary max 4 items.` },
+    { role: 'user', content: `Geef nu als JSON (beknopt): { "name": "…", "scenarioType": "ransomware_double_extortion" | "insider_threat" | "bec_cfo_fraud" | "supply_chain_compromise", "irPlaybook": "korte markdown, max 6 bullets", "outcomes": [ { "key": "…", "label": "…", "narrative": "max 2 zinnen", "lessonLearned": "1 zin", "scoreRange": {"min":…, "max":…} } ] }. Minstens 3 outcomes. Geen andere velden.` },
+  ])
+  const briefingsPromise = opts.llm([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: `Geef nu als JSON (beknopt): { "roleBriefings": { "ceo": {"text": "max 2 zinnen", "playbookGaps": ["1 zin"]}, … } }. roleBriefings voor elk van ${config.rolesIncluded.join(", ")}. Geen andere velden.` },
+  ])
+  const injectsPromise = opts.llm([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: `Geef nu als JSON (beknopt): { "injectLibrary": [ { "id":"…", "label":"…", "channel":"…", "urgency":"…", "classification":"feit|aanname", "title":"…", "content":"max 2 zinnen" } ] }. Max 4 items. Geen andere velden.` },
   ])
 
   const roundPromises = Array.from({ length: config.rounds }, (_, i) =>
@@ -261,9 +281,11 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     })
   )
 
-  const [roundResults, closerRaw] = await Promise.all([
+  const [roundResults, metaRaw, briefingsRaw, injectsRaw] = await Promise.all([
     Promise.all(roundPromises),
-    closerPromise,
+    metaPromise,
+    briefingsPromise,
+    injectsPromise,
   ])
 
   const rounds: WizardPlan['rounds'] = []
@@ -273,24 +295,24 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     if (block.decision) decisions.push({ ...block.decision, afterRoundIndex: i })
   }
 
-  const closer = JSON.parse(extractJson(closerRaw)) as {
-    name: string
-    scenarioType: WizardPlan['scenarioType']
+  const meta = safeParseCloserPart<{
+    name?: string
+    scenarioType?: WizardPlan['scenarioType']
     irPlaybook?: string
-    outcomes: WizardPlan['outcomes']
-    roleBriefings?: WizardPlan['roleBriefings']
-    injectLibrary?: WizardPlan['injectLibrary']
-  }
+    outcomes?: WizardPlan['outcomes']
+  }>(metaRaw, "meta")
+  const briefingsObj = safeParseCloserPart<{ roleBriefings?: WizardPlan['roleBriefings'] }>(briefingsRaw, "briefings")
+  const injectsObj = safeParseCloserPart<{ injectLibrary?: WizardPlan['injectLibrary'] }>(injectsRaw, "injects")
 
   let plan: WizardPlan = {
-    name: closer.name,
-    scenarioType: closer.scenarioType,
+    name: meta.name ?? config.clientName,
+    scenarioType: meta.scenarioType ?? "ransomware_double_extortion",
     rounds,
     decisions,
-    outcomes: closer.outcomes,
-    irPlaybook: closer.irPlaybook,
-    roleBriefings: closer.roleBriefings,
-    injectLibrary: closer.injectLibrary,
+    outcomes: Array.isArray(meta.outcomes) ? meta.outcomes : [],
+    irPlaybook: meta.irPlaybook,
+    roleBriefings: briefingsObj.roleBriefings,
+    injectLibrary: injectsObj.injectLibrary,
   }
 
   // ── 3-4. Compile + validate ─────────────────────────────────────────

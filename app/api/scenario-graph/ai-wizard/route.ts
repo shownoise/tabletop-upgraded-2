@@ -119,7 +119,16 @@ function anthropicLlm(apiKey: string): WizardLlm {
       const text = await res.text().catch(() => "")
       throw new Error(`Anthropic call failed: ${text.slice(0, 400)}`)
     }
-    const data = await res.json() as { content: Array<{ type: string; text: string }> }
+    const data = await res.json() as {
+      content: Array<{ type: string; text: string }>
+      stop_reason?: string
+    }
+    // Als de output op max_tokens is afgekapt, is de JSON typisch incompleet.
+    // Fail hard met leesbare error — anders krijgt de user later een
+    // cryptische "Unterminated string in JSON" crash.
+    if (data.stop_reason === "max_tokens") {
+      throw new Error("LLM output afgekapt op max_tokens — probeer met minder rondes/rollen.")
+    }
     return data.content?.find(b => b.type === "text")?.text ?? ""
   }
 }
