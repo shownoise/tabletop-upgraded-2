@@ -103,10 +103,10 @@ function anthropicLlm(apiKey: string): WizardLlm {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        // Haiku 4.5 is 3-5x sneller dan Sonnet 4.6 en genoeg voor deze
-        // structured JSON output (rondes, outcomes, briefings). Als de
-        // kwaliteit te slecht blijkt: terug naar "claude-sonnet-4-6".
-        model: "claude-haiku-4-5",
+        // Haiku 4.5 produceerde truncated / broken JSON bij lange output
+        // (positie 25000+). Sonnet 4.6 is betrouwbaarder voor deze structured
+        // output. Snelheidswinst komt nu van parallel rondes + parallel closer.
+        model: "claude-sonnet-4-6",
         max_tokens: 12000,
         system: systemContent || undefined,
         messages: nonSystem,

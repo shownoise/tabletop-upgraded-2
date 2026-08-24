@@ -48,9 +48,9 @@ const COMPANY_SIZES: Array<{ id: CompanySize; label: string }> = [
 // WizardConfig is exposed here — every field steers both the generation
 // prompt and the framework validation. The wizard always writes drafts.
 const PROGRESS_STEPS = [
-  { label: "Outline uitwerken…", estSeconds: 8 },
-  { label: "Rondes + closer parallel genereren…", estSeconds: 20 },
-  { label: "Framework valideren en repareren…", estSeconds: 15 },
+  { label: "Outline uitwerken…", estSeconds: 15 },
+  { label: "Rondes + closer parallel genereren…", estSeconds: 40 },
+  { label: "Framework valideren en repareren…", estSeconds: 25 },
 ]
 
 export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig }: Props) {
@@ -177,9 +177,23 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
     }
   }
 
+  // Tijdens loading mag de dialog niet dismissible zijn — anders is de
+  // wizard-run per ongeluk weg (klik buitenaf / Escape) en moet de user
+  // weer minutenlang wachten. Alleen expliciet Annuleren of succesvol
+  // Genereren sluit de dialog.
+  const handleOpenChange = (next: boolean) => {
+    if (loading && !next) return
+    onOpenChange(next)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        className="max-w-3xl max-h-[90vh] overflow-y-auto"
+        onPointerDownOutside={(e) => { if (loading) e.preventDefault() }}
+        onEscapeKeyDown={(e) => { if (loading) e.preventDefault() }}
+        onInteractOutside={(e) => { if (loading) e.preventDefault() }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary" />
