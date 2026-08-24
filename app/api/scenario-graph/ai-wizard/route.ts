@@ -103,11 +103,14 @@ function anthropicLlm(apiKey: string): WizardLlm {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        // Haiku 4.5 produceerde truncated / broken JSON bij lange output
-        // (positie 25000+). Sonnet 4.6 is betrouwbaarder voor deze structured
-        // output. Snelheidswinst komt nu van parallel rondes + parallel closer.
+        // Sonnet 4.6: betrouwbaar voor structured JSON. Snelheidswinst uit
+        // parallel rondes + parallel closer.
+        // max_tokens 12000 was overkill: Sonnet-output ~60-80 tokens/sec,
+        // dus 12000 tokens = tot 200s per call. Onze JSON is 500-4000 tokens.
+        // 6000 is ruim genoeg voor de closer (8 rollen × briefing + outcomes +
+        // injectLibrary) en 2× sneller worst case dan 12000.
         model: "claude-sonnet-4-6",
-        max_tokens: 12000,
+        max_tokens: 6000,
         system: systemContent || undefined,
         messages: nonSystem,
       }),
@@ -149,7 +152,11 @@ export async function POST(req: Request) {
   try {
     const result = await runWizardPipeline(config, {
       llm: anthropicLlm(apiKey),
-      maxRepairAttempts: 3,
+      // Was 3. In praktijk fixt de eerste repair-pass ~90%; extra passes
+      // kosten elk 30-60s zonder veel extra opbrengst. Als er na 1 pass
+      // nog schendingen zijn: user krijgt een leesbare fout met de lijst
+      // schendingen en kan ze in de builder repareren.
+      maxRepairAttempts: 1,
     })
     return NextResponse.json({
       ok: true,
