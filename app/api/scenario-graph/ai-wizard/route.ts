@@ -105,12 +105,12 @@ function anthropicLlm(apiKey: string): WizardLlm {
       body: JSON.stringify({
         // Sonnet 4.6: betrouwbaar voor structured JSON. Snelheidswinst uit
         // parallel rondes + parallel closer.
-        // max_tokens 12000 was overkill: Sonnet-output ~60-80 tokens/sec,
-        // dus 12000 tokens = tot 200s per call. Onze JSON is 500-4000 tokens.
-        // 6000 is ruim genoeg voor de closer (8 rollen × briefing + outcomes +
-        // injectLibrary) en 2× sneller worst case dan 12000.
+        // max_tokens historie: 12000 (te traag) → 6000 (closer werd
+        // afgekapt bij grote configs, unterminated JSON strings) → 8000.
+        // 8000 is een balans: closer past comfortabel (typisch 4000-6000
+        // tokens output) en per-round calls stoppen sowieso vroeger.
         model: "claude-sonnet-4-6",
-        max_tokens: 6000,
+        max_tokens: 8000,
         system: systemContent || undefined,
         messages: nonSystem,
       }),

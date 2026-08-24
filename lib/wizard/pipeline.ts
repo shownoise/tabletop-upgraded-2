@@ -228,9 +228,13 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
   // volledig parallel. De closer gebruikt niet de rondes-content — hij
   // maakt outcomes, roleBriefings, injectLibrary op basis van systemPrompt
   // en config, dus scheidbaar van de rondes-generatie.
+  // Closer levert scenario-metadata. Beknopt houden om truncation te
+  // voorkomen: roleBriefing text max 2-3 zinnen, injectLibrary max 4 items,
+  // narrative max 2 zinnen. Sonnet respecteert dit en output past dan
+  // comfortabel onder max_tokens.
   const closerPromise = opts.llm([
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: `Geef nu als JSON: { "name": "…", "scenarioType": "ransomware_double_extortion" | "insider_threat" | "bec_cfo_fraud" | "supply_chain_compromise", "irPlaybook": "…markdown…", "outcomes": [ { "key": "…", "label": "…", "narrative": "…", "lessonLearned": "…", "scoreRange": {"min":…, "max":…} } ], "roleBriefings": { "ceo": {"text": "…", "playbookGaps": ["…"]}, … }, "injectLibrary": [ { "id":"…", "label":"…", "channel":"…", "urgency":"…", "classification":"feit|aanname", "title":"…", "content":"…" } ] }. Minstens 3 outcomes, roleBriefings voor elk van ${config.rolesIncluded.join(", ")}.` },
+    { role: 'user', content: `Geef nu als JSON (beknopt: elk tekstveld max 2-3 zinnen): { "name": "…", "scenarioType": "ransomware_double_extortion" | "insider_threat" | "bec_cfo_fraud" | "supply_chain_compromise", "irPlaybook": "korte markdown, max 6 bullets", "outcomes": [ { "key": "…", "label": "…", "narrative": "max 2 zinnen", "lessonLearned": "1 zin", "scoreRange": {"min":…, "max":…} } ], "roleBriefings": { "ceo": {"text": "max 2 zinnen", "playbookGaps": ["1 zin"]}, … }, "injectLibrary": [ { "id":"…", "label":"…", "channel":"…", "urgency":"…", "classification":"feit|aanname", "title":"…", "content":"max 2 zinnen" } ] }. Minstens 3 outcomes; roleBriefings voor elk van ${config.rolesIncluded.join(", ")}; injectLibrary max 4 items.` },
   ])
 
   const roundPromises = Array.from({ length: config.rounds }, (_, i) =>
