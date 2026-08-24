@@ -269,7 +269,7 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     opts.llm([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: buildRoundPrompt(config, i, outlineParsed.rounds, [], []) },
-    ], { stage: `round-${i + 1}`, maxTokens: 12000 }).then(raw => {
+    ], { stage: `round-${i + 1}`, maxTokens: 14000 }).then(raw => {
       const block = JSON.parse(extractJson(raw)) as RoundGeneratedBlock
       if (!block.round) throw new Error(`Ronde ${i + 1}: LLM gaf geen 'round' terug`)
       // Defensief: als de LLM een decision teruggaf zonder valid options-array,
@@ -334,10 +334,15 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     attempt += 1
     // Feed all outstanding failures at once so the LLM can align its edits.
     const failuresText = result.failures.map(f => `- [${f.ruleId}] ${f.violation}\n  Hint: ${f.hint}`).join("\n")
+    // Repair moet het HELE plan teruggeven — bij grote configs (7+ rondes,
+    // 6 opties, 8 rollen) is dat 30k-80k tokens. Cap zit dicht bij Sonnet
+    // 4.6's max_tokens-plafond (64k). 60k dekt default + typicalLarge (6 rondes)
+    // ruim; extreme 8-ronde/6-optie configs kunnen alsnog tegen de grens
+    // lopen — dat is een architectuurwijziging (per-round repair) voor later.
     const repairRaw = await opts.llm([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `De vorige plan overtreedt deze framework-regels:\n${failuresText}\n\nHuidig plan (JSON):\n${JSON.stringify(plan).slice(0, 12000)}\n\nGeef een aangepast plan als JSON. Verander ALLEEN wat nodig is om de genoemde regels te herstellen — behoud de rest.` },
-    ], { stage: `repair-${attempt}`, maxTokens: 16000 })
+    ], { stage: `repair-${attempt}`, maxTokens: 60000 })
     for (const f of result.failures) {
       repairLog.push({ attempt, ruleId: f.ruleId, violation: f.violation })
     }
