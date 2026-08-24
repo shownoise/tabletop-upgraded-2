@@ -28,7 +28,15 @@ export interface LlmMessage {
   content: string
 }
 
-export type WizardLlm = (messages: LlmMessage[]) => Promise<string>
+// Per-call knobs. `stage` gaat naar de error-message zodat de user weet welke
+// call afgekapt werd. `maxTokens` staat de zware calls toe (per-round, repair)
+// meer headroom te krijgen dan de lichte closer-parts.
+export interface LlmCallOptions {
+  stage?: string
+  maxTokens?: number
+}
+
+export type WizardLlm = (messages: LlmMessage[], options?: LlmCallOptions) => Promise<string>
 
 export interface PipelineOptions {
   llm: WizardLlm
@@ -229,7 +237,7 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
   const outlineRaw = await opts.llm([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: buildOutlinePrompt(config) },
-  ])
+  ], { stage: 'outline', maxTokens: 2000 })
   const outlineParsed = JSON.parse(extractJson(outlineRaw)) as { rounds: OutlineRound[] }
   if (!outlineParsed.rounds || outlineParsed.rounds.length !== config.rounds) {
     throw new Error(`Outline pass produced ${outlineParsed.rounds?.length ?? 0} rondes, verwacht ${config.rounds}.`)
@@ -247,21 +255,21 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
   const metaPromise = opts.llm([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: `Geef nu als JSON (beknopt): { "name": "…", "scenarioType": "ransomware_double_extortion" | "insider_threat" | "bec_cfo_fraud" | "supply_chain_compromise", "irPlaybook": "korte markdown, max 6 bullets", "outcomes": [ { "key": "…", "label": "…", "narrative": "max 2 zinnen", "lessonLearned": "1 zin", "scoreRange": {"min":…, "max":…} } ] }. Minstens 3 outcomes. Geen andere velden.` },
-  ])
+  ], { stage: 'meta', maxTokens: 4000 })
   const briefingsPromise = opts.llm([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: `Geef nu als JSON (beknopt): { "roleBriefings": { "ceo": {"text": "max 2 zinnen", "playbookGaps": ["1 zin"]}, … } }. roleBriefings voor elk van ${config.rolesIncluded.join(", ")}. Geen andere velden.` },
-  ])
+  ], { stage: 'briefings', maxTokens: 6000 })
   const injectsPromise = opts.llm([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: `Geef nu als JSON (beknopt): { "injectLibrary": [ { "id":"…", "label":"…", "channel":"…", "urgency":"…", "classification":"feit|aanname", "title":"…", "content":"max 2 zinnen" } ] }. Max 4 items. Geen andere velden.` },
-  ])
+  ], { stage: 'injects', maxTokens: 3000 })
 
   const roundPromises = Array.from({ length: config.rounds }, (_, i) =>
     opts.llm([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: buildRoundPrompt(config, i, outlineParsed.rounds, [], []) },
-    ]).then(raw => {
+    ], { stage: `round-${i + 1}`, maxTokens: 12000 }).then(raw => {
       const block = JSON.parse(extractJson(raw)) as RoundGeneratedBlock
       if (!block.round) throw new Error(`Ronde ${i + 1}: LLM gaf geen 'round' terug`)
       // Defensief: als de LLM een decision teruggaf zonder valid options-array,
@@ -329,7 +337,7 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     const repairRaw = await opts.llm([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `De vorige plan overtreedt deze framework-regels:\n${failuresText}\n\nHuidig plan (JSON):\n${JSON.stringify(plan).slice(0, 12000)}\n\nGeef een aangepast plan als JSON. Verander ALLEEN wat nodig is om de genoemde regels te herstellen — behoud de rest.` },
-    ])
+    ], { stage: `repair-${attempt}`, maxTokens: 16000 })
     for (const f of result.failures) {
       repairLog.push({ attempt, ruleId: f.ruleId, violation: f.violation })
     }

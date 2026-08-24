@@ -7,6 +7,7 @@ import {
   runWizardPipeline,
   WizardPipelineError,
   type LlmMessage,
+  type LlmCallOptions,
   type WizardLlm,
 } from "@/lib/wizard/pipeline"
 import {
@@ -86,15 +87,19 @@ function parseConfigFromBody(body: unknown): WizardConfig {
   }
 }
 
-// Build the Anthropic-backed LLM callable. The pipeline passes messages; we
-// map them to Anthropic's Messages API shape.
+// Build the Anthropic-backed LLM callable. The pipeline passes messages + per-
+// call options; we map them to Anthropic's Messages API shape. `maxTokens` per
+// stage: pipeline geeft zware calls (round=12000, repair=16000) meer headroom
+// dan lichte closer-parts (meta/briefings/injects=3000-6000).
 function anthropicLlm(apiKey: string): WizardLlm {
-  return async (messages: LlmMessage[]) => {
+  return async (messages: LlmMessage[], options?: LlmCallOptions) => {
     const systemContent = messages.filter(m => m.role === 'system').map(m => m.content).join("\n\n")
     const nonSystem = messages.filter(m => m.role !== 'system').map(m => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content,
     }))
+    const maxTokens = options?.maxTokens ?? 8000
+    const stage = options?.stage ?? 'unknown'
     const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -103,31 +108,25 @@ function anthropicLlm(apiKey: string): WizardLlm {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        // Sonnet 4.6: betrouwbaar voor structured JSON. Snelheidswinst uit
-        // parallel rondes + parallel closer.
-        // max_tokens historie: 12000 (te traag) → 6000 (closer werd
-        // afgekapt bij grote configs, unterminated JSON strings) → 8000.
-        // 8000 is een balans: closer past comfortabel (typisch 4000-6000
-        // tokens output) en per-round calls stoppen sowieso vroeger.
         model: "claude-sonnet-4-6",
-        max_tokens: 8000,
+        max_tokens: maxTokens,
         system: systemContent || undefined,
         messages: nonSystem,
       }),
     }, 240_000)
     if (!res.ok) {
       const text = await res.text().catch(() => "")
-      throw new Error(`Anthropic call failed: ${text.slice(0, 400)}`)
+      throw new Error(`Anthropic call failed (${stage}): ${text.slice(0, 400)}`)
     }
     const data = await res.json() as {
       content: Array<{ type: string; text: string }>
       stop_reason?: string
     }
     // Als de output op max_tokens is afgekapt, is de JSON typisch incompleet.
-    // Fail hard met leesbare error — anders krijgt de user later een
-    // cryptische "Unterminated string in JSON" crash.
+    // Fail hard met leesbare error incl. stage — de user weet dan waar het
+    // knelpunt zit (repair-pass is het vaakst de boosdoener bij grote configs).
     if (data.stop_reason === "max_tokens") {
-      throw new Error("LLM output afgekapt op max_tokens — probeer met minder rondes/rollen.")
+      throw new Error(`LLM output afgekapt op max_tokens in stage '${stage}' (cap: ${maxTokens}). Probeer met minder rondes/rollen/opties.`)
     }
     return data.content?.find(b => b.type === "text")?.text ?? ""
   }
