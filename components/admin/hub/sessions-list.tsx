@@ -45,15 +45,16 @@ export function SessionsList() {
 
   return (
     <section className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Sessies</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Snapshot per sessie — datum, klant, scenario, modus, deelnemers, uitkomst.
-          Nieuwe sessie starten via een klant of scenario, of via <Link href="/admin/prepare" className="text-primary hover:underline">Sessie starten</Link>.
-        </p>
-        <p className="text-xs text-amber-700 dark:text-amber-500 mt-2">
-          Opslag is bewust simpel — één snapshot per sessie in KV, geen relationeel model. Ontstaat automatisch bij het resetten of eindigen van een live sessie.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Sessies</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Eerdere en lopende sessies.</p>
+        </div>
+        <Link href="/admin/prepare">
+          <Button size="sm" className="gap-1.5">
+            <Play className="size-3.5" /> Nieuwe sessie
+          </Button>
+        </Link>
       </div>
 
       {loading && <p className="text-sm text-muted-foreground">Laden…</p>}
@@ -61,9 +62,7 @@ export function SessionsList() {
       {!loading && snapshots.length === 0 && (
         <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
           <p className="text-sm text-muted-foreground">Nog geen sessies gedraaid.</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Start een sessie via <Link href="/admin/prepare" className="text-primary hover:underline">Sessie starten</Link>. Na afloop verschijnt hij hier automatisch.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Na afloop verschijnt een sessie hier automatisch.</p>
         </div>
       )}
 
