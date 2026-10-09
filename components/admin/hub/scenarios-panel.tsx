@@ -2,9 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { Plus, Sparkles, Copy, Pencil, Trash2, ExternalLink, Loader2, Search, Archive, ArchiveRestore, Play } from "lucide-react"
+import { Plus, Sparkles, Copy, Pencil, Trash2, Loader2, Search, Archive, ArchiveRestore, MoreHorizontal, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useToast } from "./toast"
 import type { ScenarioGraph } from "@/lib/graph/types"
 import type { AdminClient } from "@/lib/admin/clients"
@@ -260,10 +267,10 @@ export function ScenariosPanel() {
                           <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setRenaming(null)}>×</Button>
                         </form>
                       ) : (
-                        <Link href={`/admin/builder?id=${encodeURIComponent(g.id)}`} className="font-medium hover:underline">
+                        <span className="font-medium">
                           {g.name}
                           {g.archived && <span className="ml-2 font-mono text-[9px] uppercase text-muted-foreground">gearchiveerd</span>}
-                        </Link>
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-2 text-muted-foreground">{g.clientName ?? "—"}</td>
@@ -273,27 +280,39 @@ export function ScenariosPanel() {
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
                         <Link href={`/admin/prepare?graphId=${encodeURIComponent(g.id)}`}>
-                          <Button size="sm" variant="default" title="Sessie starten met dit scenario" className="h-8 px-2 gap-1">
+                          <Button size="sm" title="Sessie starten met dit scenario" className="h-8 gap-1">
                             <Play className="size-3.5" />
+                            Start
                           </Button>
                         </Link>
                         <Link href={`/admin/builder?id=${encodeURIComponent(g.id)}`}>
-                          <Button size="sm" variant="ghost" title="Openen in builder" className="h-8 px-2">
-                            <ExternalLink className="size-3.5" />
+                          <Button size="sm" variant="outline" className="h-8">
+                            Openen
                           </Button>
                         </Link>
-                        <Button size="sm" variant="ghost" title="Dupliceren" className="h-8 px-2" disabled={isBusy} onClick={() => { setDuplicating(g); setDupClientId(g.clientId ?? ""); setDupName(`${g.name} (kopie)`) }}>
-                          {isBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}
-                        </Button>
-                        <Button size="sm" variant="ghost" title="Hernoemen" className="h-8 px-2" disabled={isBusy} onClick={() => { setRenaming(g.id); setRenameVal(g.name) }}>
-                          <Pencil className="size-3.5" />
-                        </Button>
-                        <Button size="sm" variant="ghost" title={g.archived ? "Uit archief" : "Archiveren"} className="h-8 px-2" disabled={isBusy} onClick={() => toggleArchive(g)}>
-                          {g.archived ? <ArchiveRestore className="size-3.5" /> : <Archive className="size-3.5" />}
-                        </Button>
-                        <Button size="sm" variant="ghost" title="Verwijderen" className="h-8 px-2 hover:text-destructive" disabled={isBusy} onClick={() => del(g)}>
-                          <Trash2 className="size-3.5" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="ghost" title="Meer acties" className="h-8 px-2" disabled={isBusy}>
+                              {isBusy ? <Loader2 className="size-3.5 animate-spin" /> : <MoreHorizontal className="size-3.5" />}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => { setDuplicating(g); setDupClientId(g.clientId ?? ""); setDupName(`${g.name} (kopie)`) }}>
+                              <Copy /> Dupliceren
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => { setRenaming(g.id); setRenameVal(g.name) }}>
+                              <Pencil /> Hernoemen
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => toggleArchive(g)}>
+                              {g.archived ? <ArchiveRestore /> : <Archive />}
+                              {g.archived ? "Uit archief halen" : "Archiveren"}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onSelect={() => del(g)}>
+                              <Trash2 /> Verwijderen
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>
