@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { useToast } from "./toast"
 import type { AdminClient } from "@/lib/admin/clients"
+import { TESTKLANTEN_SEED } from "@/lib/admin/seed-clients"
 import type { RubricScoreEntry, RubricScorePerPoint } from "@/lib/admin/rubric-scores"
 import { RUBRIC_POINTS, newRubricEntryId } from "@/lib/admin/rubric-scores"
 
@@ -47,6 +48,7 @@ export function QualityScorer() {
   const [scoreHistory, setScoreHistory] = useState<RubricScoreEntry[]>([])
   const [draft, setDraft] = useState<ScoreDraft>(emptyDraft())
   const [saving, setSaving] = useState(false)
+  const [seeding, setSeeding] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const reload = useCallback(async () => {
@@ -77,6 +79,25 @@ export function QualityScorer() {
   }
   function setNote(n: number, note: string) {
     setDraft(d => ({ ...d, notes: { ...d.notes, [n]: note } }))
+  }
+
+  async function seedTestClients() {
+    setSeeding(true)
+    try {
+      const res = await fetch("/api/admin/clients", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ seed: TESTKLANTEN_SEED }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const result = await res.json() as { added: number; existing: number }
+      toast.push("success", `Testklanten geladen: ${result.added} toegevoegd${result.existing ? `, ${result.existing} al aanwezig` : ""}`)
+      await reload()
+    } catch (e) {
+      toast.push("error", `Laden mislukt: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setSeeding(false)
+    }
   }
 
   const total = Object.values(draft.scores).reduce<number>((a, b) => a + b, 0)
@@ -136,11 +157,15 @@ export function QualityScorer() {
       </div>
 
       {testClients.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border bg-card p-6">
-          <p className="text-sm">Geen testklanten aanwezig.</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Ga naar <Link href="/admin/clients" className="text-primary hover:underline">Klanten</Link> en klik "Testklanten inladen".
-          </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-border bg-card p-6">
+          <div>
+            <p className="text-sm">Geen testklanten aanwezig.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Laad de testset om scenario’s en prompts te toetsen.</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={seedTestClients} disabled={seeding} className="gap-1.5">
+            {seeding ? <Loader2 className="size-3.5 animate-spin" /> : <TestTube2 className="size-3.5" />}
+            Testklanten laden
+          </Button>
         </div>
       )}
 
