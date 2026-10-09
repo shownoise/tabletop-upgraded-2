@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, Library } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -35,18 +35,12 @@ export default function LandingPage() {
               </Link>
             </Button>
           </div>
-          <Link
-            href="/templates"
-            className="mt-2 inline-flex items-center gap-1.5 text-sm text-eye-lavender/90 hover:text-white"
-          >
-            <Library className="size-4" /> Bekijk scenariotemplates
-          </Link>
         </div>
       </section>
 
       <footer className="border-t border-border px-6 py-3 md:px-10">
         <div className="mx-auto flex max-w-7xl items-center justify-between text-xs text-muted-foreground">
-          <span>Sessies zijn ephemeral en gedeeld via Vercel KV.</span>
+          <span>Oefen crisisteams in een realistische incidentrespons.</span>
           <span>v4.0 · Eye Security 2026</span>
         </div>
       </footer>

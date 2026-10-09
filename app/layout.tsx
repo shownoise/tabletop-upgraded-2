@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next"
 import { Source_Sans_3, IBM_Plex_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { ThemeProvider } from "@/components/theme-provider"
-import { EyeHeader } from "@/components/shared/eye-header"
+import { AppHeader } from "@/components/shared/app-header"
 import "./globals.css"
 
 // WHY: Silka is the Eye Security brand family but isn't on Google Fonts.
@@ -47,7 +47,7 @@ export default function RootLayout({
     <html lang="en" className={`${silka.variable} ${ibmPlexMono.variable}`} suppressHydrationWarning>
       <body className="font-sans antialiased min-h-screen bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-          <EyeHeader />
+          <AppHeader />
           {children}
           {process.env.NODE_ENV === "production" && <Analytics />}
         </ThemeProvider>
