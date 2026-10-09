@@ -23,7 +23,6 @@ export function EyeHeader() {
           <Image src={logo} alt="Eye Security" width={104} height={26} priority className="h-6 w-auto" />
         </Link>
         <nav className="flex items-center gap-3 text-sm">
-          <Link href="/templates" className="hidden text-foreground/80 hover:text-foreground md:inline">Templates</Link>
           <LangToggle lang={lang} setLang={setLang} />
           <ThemeToggle />
         </nav>
