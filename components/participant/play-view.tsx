@@ -1224,15 +1224,12 @@ export function PlayView() {
             {/* DECISION PHASE — pinned to top on mobile, natural order on desktop */}
             {session.roundPhase === "decision" && currentRound?.roleActions && participantId && (() => {
               const roundDecisions = (session.submittedDecisions ?? []).filter(d => d.roundIndex === session.currentRound)
-              const totalPlayers = session.participants.filter(p => p.role).length
               return (
                 <div className="order-first lg:order-none flex flex-col gap-2">
-                  {totalPlayers > 0 && (
-                    <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest text-tt-dim">
-                      <span className="size-1.5 rounded-full bg-tt-accent animate-pulse" />
-                      {roundDecisions.length}/{totalPlayers} {roundDecisions.length === 1 ? "beslissing" : "beslissingen"} ingediend
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest text-tt-dim">
+                    <span className="size-1.5 rounded-full bg-tt-accent animate-pulse" />
+                    {roundDecisions.length} {roundDecisions.length === 1 ? "keuze" : "keuzes"} ingediend
+                  </div>
                   <DecisionBoundary>
                     <DecisionPanel
                       key={`decision-${session.currentRound}-${effectiveRole ?? "none"}`}
