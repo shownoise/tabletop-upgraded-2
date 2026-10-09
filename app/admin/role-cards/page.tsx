@@ -41,7 +41,7 @@ export default async function RoleCardsPage({
       {/* Header — verborgen tijdens print */}
       <header className="border-b print:hidden">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <Link href={`/templates/builder?graph=${graphId}`} className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground">
+          <Link href={`/admin/builder?id=${graphId}`} className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground">
             <ArrowLeft className="size-3.5" />
             Terug naar builder
           </Link>
