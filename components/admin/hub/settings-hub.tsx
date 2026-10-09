@@ -5,13 +5,15 @@ import { ConfigTab } from "./config-tab"
 import { RolesTab } from "./roles-tab"
 import { RegimesTab } from "./regimes-tab"
 import { WizardPromptTab } from "./wizard-prompt-tab"
+import { LegacyTemplateMigration } from "./legacy-template-migration"
 
-type Tab = "texts" | "roles" | "regimes" | "wizard"
+type Tab = "texts" | "roles" | "regimes" | "wizard" | "migration"
 const TABS: Array<{ key: Tab; label: string; hint: string }> = [
   { key: "texts",   label: "Teksten",   hint: "Labels, foutmeldingen, guides" },
   { key: "roles",   label: "Rollen",    hint: "Standaard rollenset + briefings" },
   { key: "regimes", label: "Regimes",   hint: "Meldplicht-regimes en autoriteiten" },
   { key: "wizard",  label: "AI-wizard", hint: "Prompt + generatieregels" },
+  { key: "migration", label: "Migratie", hint: "Oude templates naar scenario's" },
 ]
 
 function readInitial(): Tab {
@@ -70,6 +72,7 @@ export function SettingsHub() {
       {tab === "roles" && <RolesTab />}
       {tab === "regimes" && <RegimesTab />}
       {tab === "wizard" && <WizardPromptTab />}
+      {tab === "migration" && <LegacyTemplateMigration />}
     </section>
   )
 }
