@@ -21,7 +21,7 @@ injects en beslissing → facilitator lockt ronde → rapport/recap.
 
 | Onderdeel | Resultaat | Bewijs |
 | --- | --- | --- |
-| Unit/integratietests | Geslaagd | `pnpm test`: 34 bestanden, 331 geslaagd, 1 overgeslagen. |
+| Unit/integratietests | Geslaagd | `pnpm test`: 34 bestanden, 332 geslaagd, 1 overgeslagen. |
 | Typecheck | Geslaagd | `pnpm exec tsc --noEmit` zonder output/fout. |
 | Productiebuild | Geslaagd | `pnpm build` compileert en genereert 16 statische routes. |
 | Offline AI-wizard | Geslaagd | `scripts/wizard-e2e-simulate.ts`: 7/7 configuraties, inclusief worst case, repair en null-output regressie. |
@@ -29,7 +29,8 @@ injects en beslissing → facilitator lockt ronde → rapport/recap.
 | Facilitator-gate in productie | Geslaagd | Klik op facilitator leidt naar `/login?callbackUrl=%2Fadmin`. |
 | Deelnemer UI → API in productie | Geslaagd | Naam + niet-bestaande code `ZZZZ` geeft zichtbaar `No active session. Ask the facilitator to create one.`; browserconsole toont de verwachte `POST /api/session/join 400`. |
 | Productie-AI fouten in logs | Geen recente match | Gerichte foutlogzoeking van 7 dagen op `ai-wizard` gaf geen resultaat. |
-| Live AI-wizard, geauthenticeerd | Ketting werkt, output afgekeurd | Een vier-ronden test ging door outline, generatie en repair; na circa 211 seconden faalde validatie omdat alle rondes een `discussionGoal` misten. Er is geen scenario opgeslagen of gepubliceerd. |
+| Live AI-wizard, eerste geauthenticeerde run | Ketting werkt, output afgekeurd | Een vier-ronden test ging door outline, generatie en repair; na circa 211 seconden faalde validatie omdat alle rondes een `discussionGoal` misten. Er is geen scenario opgeslagen of gepubliceerd. |
+| Live AI-wizard, herhaaltest na fix | Geslaagd | Een vier-ronden test genereerde een draft met 12 injects in de builder. Browser → API → Anthropic → builder werkte volledig; de test-draft is niet opgeslagen of gepubliceerd. |
 | Live Event-sessie, één deelnemer | Deels geslaagd, blocker gevonden | Eén deelnemer kon een team kiezen, zag alle zes vereiste rollen in de rolswitcher en ontving beide injects. Inject → discussie werkte. Fase- en scoreacceptatie is niet geslaagd door inconsistente fase-state, zie hieronder. |
 
 ## Aangetroffen issues
@@ -40,11 +41,11 @@ injects en beslissing → facilitator lockt ronde → rapport/recap.
 2. **Next.js-waarschuwing.** De productiebuild meldt dat `middleware` is
    verouderd ten gunste van `proxy`. Geen buildbreker, wel gepland
    onderhoudswerk met auth-regressietest.
-3. **AI-wizard faalt op een herstelbare omissie.** De geauthenticeerde live
-   run bewees de volledige browser → API → Anthropic-keten. De LLM leverde
-   echter vier verder bruikbare rondes zonder `discussionGoal`; de ene
-   repair-pass herstelde dat niet. De regressie is in deze branch afgedekt met
-   een inhoudsgebonden fallback uit `round.situation`. Het concept blijft een
+3. **AI-wizard herstelt een ontbrekend discussie-doel.** De eerste
+   geauthenticeerde run leverde vier verder bruikbare rondes zonder
+   `discussionGoal`; de ene repair-pass herstelde dat niet. De regressie is
+   afgedekt met een inhoudsgebonden fallback uit `round.situation` en de
+   daaropvolgende live run leverde een bruikbare draft. Het concept blijft een
    draft en moet in de builder worden beoordeeld.
 4. **Fasestatus is live niet betrouwbaar genoeg voor acceptatie.** In een
    wegwerp-Event-sessie werkte inject → discussie. Een daarna geklikte

@@ -393,7 +393,7 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
 
         <div className="flex items-center justify-between gap-3 pt-1">
           <p className="text-[11px] text-muted-foreground">
-            Het framework wordt strikt afgedwongen — bij overtredingen probeert de wizard automatisch tot 3× te repareren.
+            Het framework wordt strikt afgedwongen — bij overtredingen doet de wizard één herstelpoging en toont daarna wat nog ontbreekt.
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>Annuleren</Button>
