@@ -34,3 +34,6 @@ next-env.d.ts
 
 # wizard e2e simulator output (regeneratable via `npx tsx scripts/wizard-e2e-simulate.ts`)
 /scripts/e2e-output/
+
+# Local, redacted handover archives generated from tracked source.
+/exports/

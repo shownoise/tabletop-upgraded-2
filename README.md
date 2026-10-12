@@ -11,15 +11,23 @@ Een Next.js-platform voor het draaien van cybersecurity crisis tabletop-oefening
 
 ## Voor overdracht en nieuw personeel
 
+De actuele overdrachtssnapshot staat in
+[`docs/overdracht/2026-10-12-HANDOVER.md`](docs/overdracht/2026-10-12-HANDOVER.md).
+Gebruik die voor de huidige technische stand, verificatieresultaten en het
+herbouwplan. De documenten hieronder blijven behouden als historische context;
+waar ze elkaar tegenspreken, wint de snapshot van 12 oktober 2026.
+
 Begin met deze docs, in deze volgorde:
 
 1. `CLAUDE.md` — werkafspraken (git-discipline, harde regels, niet-aanraken).
 2. `CONTEXT.md` — domein-glossarium, mét de aliasconflicten die anders
    verwarring geven.
-3. `docs/overdracht/architectuur.md` — huidige stand van de codebase.
-4. `docs/overdracht/bekende-bugs.md` — wat we onderweg gevonden en laten liggen.
-5. `docs/overdracht/scenario-data.md` — anatomie van een scenario-bestand.
-6. `docs/overdracht/status.md` — waar we nu staan.
+3. `docs/overdracht/2026-10-12-HANDOVER.md` — technische overdracht en
+   operationele grenzen.
+4. `docs/overdracht/2026-10-12-REBUILD-PLAN.md` — gefaseerd herbouwplan,
+   met Partner Event als MVP.
+5. `docs/overdracht/2026-10-12-VERIFICATION.md` — wat aantoonbaar getest is
+   en wat nog een geauthenticeerde live sessie vereist.
 
 De `docs/architecture/*.md`-set (`01_three_layer_logic.md` t/m
 `05_data_model.md`) is **verouderd**; die beschrijft de oude
