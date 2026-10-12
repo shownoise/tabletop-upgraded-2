@@ -273,4 +273,17 @@ describe("wizard pipeline — robust against broken LLM output", () => {
     const r = await runOrCatch(testConfig(), llm)
     expect(r.ok).toBe(true)
   })
+
+  it("derives grounded facilitator guidance when every generated round omits it", async () => {
+    // This is the production failure reproduced on 2026-10-12: the model
+    // generated otherwise valid rounds but omitted discussionGoal everywhere.
+    // A missing facilitator prompt should not make a draft unusable when the
+    // round situation itself provides safe, grounded source text.
+    const plan = basePlan()
+    for (const round of plan.rounds) delete round.discussionGoal
+
+    const r = await runOrCatch(testConfig(), stubLlm(plan))
+
+    expect(r.ok).toBe(true)
+  })
 })

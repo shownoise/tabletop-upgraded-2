@@ -122,6 +122,13 @@ function normalizePlan(plan: WizardPlan): WizardPlan {
     if (round && !Array.isArray(round.injects)) {
       round.injects = []
     }
+
+    // A missing goal is an LLM omission, not missing scenario information.
+    // Derive a usable facilitator prompt from the round's own situation so it
+    // remains grounded and a draft can still be reviewed in the builder.
+    if (round && !round.discussionGoal?.trim() && typeof round.situation === "string" && round.situation.trim()) {
+      round.discussionGoal = `Bespreek wat deze situatie betekent: ${round.situation.trim()}`
+    }
   }
   // Per decision: options moet array zijn — anders skippen we hem verderop.
   // Hier niet skippen (behoud volgorde/afterRoundIndex), gewoon options leeg
@@ -331,6 +338,7 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     roleBriefings: briefingsObj.roleBriefings,
     injectLibrary: injectsObj.injectLibrary,
   }
+  plan = normalizePlan(plan)
 
   // ── 3-4. Compile + validate ─────────────────────────────────────────
   let graph = planToGraph(plan, { seed, now, publishStatus: 'draft' })

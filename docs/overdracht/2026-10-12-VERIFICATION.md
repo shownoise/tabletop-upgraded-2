@@ -21,14 +21,16 @@ injects en beslissing → facilitator lockt ronde → rapport/recap.
 
 | Onderdeel | Resultaat | Bewijs |
 | --- | --- | --- |
-| Unit/integratietests | Geslaagd | `pnpm test`: 34 bestanden, 330 geslaagd, 1 overgeslagen. |
+| Unit/integratietests | Geslaagd | `pnpm test`: 34 bestanden, 331 geslaagd, 1 overgeslagen. |
 | Typecheck | Geslaagd | `pnpm exec tsc --noEmit` zonder output/fout. |
 | Productiebuild | Geslaagd | `pnpm build` compileert en genereert 16 statische routes. |
 | Offline AI-wizard | Geslaagd | `scripts/wizard-e2e-simulate.ts`: 7/7 configuraties, inclusief worst case, repair en null-output regressie. |
 | Publieke landing in productie | Geslaagd | Productie-UI geopend; facilitator- en deelnemersingang zichtbaar. |
 | Facilitator-gate in productie | Geslaagd | Klik op facilitator leidt naar `/login?callbackUrl=%2Fadmin`. |
 | Deelnemer UI → API in productie | Geslaagd | Naam + niet-bestaande code `ZZZZ` geeft zichtbaar `No active session. Ask the facilitator to create one.`; browserconsole toont de verwachte `POST /api/session/join 400`. |
-| Productie-AI fouten in logs | Geen recente match | Gerichte foutlogzoeking van 7 dagen op `ai-wizard` gaf geen resultaat. Dit is geen bewijs van een succesvolle wizard-run. |
+| Productie-AI fouten in logs | Geen recente match | Gerichte foutlogzoeking van 7 dagen op `ai-wizard` gaf geen resultaat. |
+| Live AI-wizard, geauthenticeerd | Ketting werkt, output afgekeurd | Een vier-ronden test ging door outline, generatie en repair; na circa 211 seconden faalde validatie omdat alle rondes een `discussionGoal` misten. Er is geen scenario opgeslagen of gepubliceerd. |
+| Live Event-sessie, één deelnemer | Deels geslaagd, blocker gevonden | Eén deelnemer kon een team kiezen, zag alle zes vereiste rollen in de rolswitcher en ontving beide injects. Inject → discussie werkte. Fase- en scoreacceptatie is niet geslaagd door inconsistente fase-state, zie hieronder. |
 
 ## Aangetroffen issues
 
@@ -38,16 +40,24 @@ injects en beslissing → facilitator lockt ronde → rapport/recap.
 2. **Next.js-waarschuwing.** De productiebuild meldt dat `middleware` is
    verouderd ten gunste van `proxy`. Geen buildbreker, wel gepland
    onderhoudswerk met auth-regressietest.
-3. **AI-wizard live nog niet bevestigd.** Vercel redigeert
-   productiegeheimen bewust als `[SENSITIVE]`, waardoor de echte
-   `ANTHROPIC_API_KEY` niet veilig naar deze werkruimte kan worden gehaald.
-   Zonder geauthenticeerde facilitator-sessie is de route terecht niet aan te
-   roepen. De route zelf valideert sleutel, config, rate limit en pipeline;
-   de offline keten slaagt.
-4. **Complete live sessie nog niet bevestigd.** Er is geen testevent
-   aangemaakt, omdat dit een echte productiesessie en geauthenticeerde mutaties
-   vereist. Daardoor zijn de succesvolle join, rolkeuze, besluit, lock,
-   reconnect en rapportweergave nog open.
+3. **AI-wizard faalt op een herstelbare omissie.** De geauthenticeerde live
+   run bewees de volledige browser → API → Anthropic-keten. De LLM leverde
+   echter vier verder bruikbare rondes zonder `discussionGoal`; de ene
+   repair-pass herstelde dat niet. De regressie is in deze branch afgedekt met
+   een inhoudsgebonden fallback uit `round.situation`. Het concept blijft een
+   draft en moet in de builder worden beoordeeld.
+4. **Fasestatus is live niet betrouwbaar genoeg voor acceptatie.** In een
+   wegwerp-Event-sessie werkte inject → discussie. Een daarna geklikte
+   discussie → beslissing-overgang reageerde niet op één van de twee zichtbare
+   faseknoppen; de andere werkte wel. Vervolgens verschilden facilitator en
+   deelnemer tijdelijk van fase en verscheen de sessie opnieuw als `discussion`.
+   Daardoor sloot de automatische beslisperiode zonder inzending en bleef de
+   review op 0% coverage / `Nog niet gemeten`. Dit is een blocker in
+   sessieopslag/realtime en lobbyflow, niet aangeraakt in deze branch.
+5. **Scorerekenwerk is getest, live scoreketen nog niet geaccepteerd.** De
+   unit/integratietests bevatten de solo-scoreberekening en slagen. Een live
+   besluit → lock → score → refresh → rapport-test blijft open totdat de
+   fasestatus persistent en eenduidig is.
 
 ## Benodigde afsluitende live test
 
@@ -56,11 +66,13 @@ gemarkeerde wegwerpsessie. Test vervolgens in aparte browsers:
 
 1. open `/admin/builder`, genereer een kleine wizardconfiguratie en bevestig
    dat een draftgraph in canvas verschijnt;
-2. start één sessie vanuit een bekend scenario;
-3. laat een deelnemer joinen, een rol ontvangen, injects zien en een besluit
-   indienen;
-4. lock de beslissing als facilitator, ga naar de volgende ronde en refresh
-   zowel facilitator als deelnemer;
+2. start één Event-sessie vanuit een voorbeeldscenario en laat één deelnemer
+   alle actieve rollen wisselen;
+3. laat de facilitator iedere fase precies één keer wijzigen; verifieer na
+   iedere wijziging dezelfde fase na twee polls én na refresh in facilitator
+   en deelnemer;
+4. dien als team minstens één keuze in, sluit de beslissing af, verifieer een
+   niet-nul score en controleer die na refresh in de review en het rapport;
 5. sluit af en controleer het sessierapport/export;
 6. verwijder of archiveer alleen de expliciet als test gemarkeerde sessie.
 
