@@ -130,12 +130,6 @@ function Shell({
             {inject.targetTeam === "technical_it" ? "IT" : "CRISIS"}
           </span>
         )}
-        {inject.classification && (
-          <span className="font-mono text-[8px] uppercase tracking-widest shrink-0 border border-tt-border px-1 py-px text-tt-dim"
-                title="Type informatie zoals aangemerkt door de auteur">
-            {inject.classification}
-          </span>
-        )}
         <span className="font-mono text-[10px] text-tt-dim truncate flex-1 min-w-0">
           {inject.senderName ?? inject.source}
           {inject.senderHandle && (
@@ -553,7 +547,6 @@ export function InjectFeed({
     : undefined
   const hiddenIds = new Set(myView?.hidden ?? [])
   const handledIds = new Set(myView?.handled ?? [])
-  const classFilter = myView?.filters?.classification ?? []
   const hideHandledFilter = myView?.filters?.hideHandled === true
 
   const visibleByRole = pushed.filter((p) => {
@@ -571,20 +564,14 @@ export function InjectFeed({
     return recipients.includes(participantRole)
   })
 
-  // Apply classification filter (if any active). Injects without classification
-  // stay visible only when the filter is empty.
-  const afterClassFilter = classFilter.length === 0
-    ? visibleByRole
-    : visibleByRole.filter(p => p.inject.classification && classFilter.includes(p.inject.classification))
-
   // Split: hidden vs shown. Sort newest-first.
   const afterHandledFilter = hideHandledFilter
-    ? afterClassFilter.filter(p => !handledIds.has(p.inject.id))
-    : afterClassFilter
+    ? visibleByRole.filter(p => !handledIds.has(p.inject.id))
+    : visibleByRole
   const shown = afterHandledFilter.filter(p => !hiddenIds.has(p.inject.id))
   const sorted = [...shown].sort((a, b) => b.pushedAt - a.pushedAt)
-  const hiddenCount = afterClassFilter.filter(p => hiddenIds.has(p.inject.id)).length
-  const handledCount = afterClassFilter.filter(p => handledIds.has(p.inject.id) && !hiddenIds.has(p.inject.id)).length
+  const hiddenCount = visibleByRole.filter(p => hiddenIds.has(p.inject.id)).length
+  const handledCount = visibleByRole.filter(p => handledIds.has(p.inject.id) && !hiddenIds.has(p.inject.id)).length
   const topRef = useRef<HTMLDivElement>(null)
 
   const prevCount = useRef(pushed.length)
@@ -607,7 +594,7 @@ export function InjectFeed({
     try {
       await api.updateMyView({
         participantId,
-        patch: { filters: { classification: classFilter, hideHandled: false } },
+        patch: { filters: { classification: [], hideHandled: false } },
       })
     } catch { /* ignore */ }
   }
@@ -651,27 +638,12 @@ export function InjectFeed({
     )
   }
 
-  const CLASSIFICATIONS: Array<'feit' | 'aanname'> = ['feit', 'aanname']
-
-  async function toggleClassFilter(v: 'feit' | 'aanname') {
-    if (!participantId) return
-    const next = classFilter.includes(v)
-      ? classFilter.filter(x => x !== v)
-      : [...classFilter, v]
-    try {
-      await api.updateMyView({
-        participantId,
-        patch: { filters: { classification: next, hideHandled: hideHandledFilter } },
-      })
-    } catch { /* ignore */ }
-  }
-
   async function toggleHideHandled() {
     if (!participantId) return
     try {
       await api.updateMyView({
         participantId,
-        patch: { filters: { classification: classFilter, hideHandled: !hideHandledFilter } },
+        patch: { filters: { classification: [], hideHandled: !hideHandledFilter } },
       })
     } catch { /* ignore */ }
   }
@@ -707,24 +679,8 @@ export function InjectFeed({
           {sorted.length}
         </span>
       </div>
-      {participantId && (
+      {participantId && (handledCount > 0 || hiddenCount > 0) && (
         <div className="flex flex-wrap items-center gap-2 px-1 text-[10px]">
-          <span className="font-mono uppercase tracking-widest text-tt-dim">Alleen tonen:</span>
-          {CLASSIFICATIONS.map(v => {
-            const on = classFilter.includes(v)
-            return (
-              <button
-                key={v}
-                type="button"
-                onClick={() => toggleClassFilter(v)}
-                className={`rounded-full border px-2 py-0.5 font-mono uppercase tracking-wider transition-colors ${
-                  on ? "border-tt-accent bg-tt-accent/10 text-tt-accent" : "border-tt-border text-tt-dim hover:border-tt-accent/40"
-                }`}
-              >
-                {v}
-              </button>
-            )
-          })}
           {handledCount > 0 && (
             <button
               type="button"
