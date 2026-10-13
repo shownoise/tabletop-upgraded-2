@@ -45,6 +45,36 @@ describe('AssessmentReport (Deel B §6)', () => {
     const md2 = renderAssessmentMarkdown(report)
     expect(md1).toBe(md2)
   })
+
+  it('meldt alleen onbeantwoorde optionele keuzes als overgeslagen bij een klein team', () => {
+    const input: ExerciseInput = {
+      mode: 'EVENT',
+      roster: { presentRoles: ['CRISIS_LEAD'] },
+      scenario: {
+        rounds: [{ number: 1, designTimeMinutes: 20 }],
+        decisionPoints: [
+          { id: 'answered', round: 1, domain: 'CONTAINMENT', designedOwner: 'CRISIS_LEAD', required: false, options: [
+            { id: 'act', outcomeVector: { CONT: 2, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 } },
+          ] },
+          { id: 'unanswered', round: 1, domain: 'JURIDISCH', designedOwner: 'CRISIS_LEAD', required: false, options: [
+            { id: 'wait', outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 } },
+          ] },
+        ],
+        injects: [],
+        optionalDecisionThreshold: 2,
+      },
+      events: [
+        { kind: 'session_start', t: 0 },
+        { kind: 'decision_submitted', t: 1, round: 1, decisionPointId: 'answered', optionId: 'act', by: 'CRISIS_LEAD' },
+        { kind: 'decision_submitted', t: 2, round: 1, decisionPointId: 'unanswered', optionId: '__implicit_unanswered', by: 'IMPLICIT' },
+      ],
+    }
+
+    const soloReport = buildAssessmentReport(input)
+    expect(soloReport.outcomes[0].hasSubmissions).toBe(true)
+    expect(soloReport.droppedOptionalDecisions).toEqual(['unanswered'])
+    expect(renderAssessmentMarkdown(soloReport)).toContain('1 optioneel beslispunt overgeslagen')
+  })
 })
 
 describe('EventReport (Deel B §6)', () => {

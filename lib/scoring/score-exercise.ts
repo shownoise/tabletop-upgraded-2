@@ -31,8 +31,9 @@ export function scoreExercise(input: ExerciseInput): ScoringOutput {
   const outcomes = scenario.rounds.map(r => computeRoundOutcome(scenario, events, r.number))
   const totalPoints = outcomes.reduce((s, o) => s + o.points, 0)
 
-  // Beslispunten die required=false zijn en moeten vervallen bij te weinig rolscheiding.
-  const droppedOptionalDecisions = dropOptionalDecisions(scenario, resolution)
+  // Een beantwoorde optionele keuze telt al mee in de score en mag in het rapport
+  // daarom niet als overgeslagen worden beschreven.
+  const droppedOptionalDecisions = dropOptionalDecisions(scenario, resolution, events)
 
   return {
     scoringVersion: SCORING_VERSION,
@@ -57,8 +58,17 @@ function firstStart(events: ExerciseInput['events']): number {
 function dropOptionalDecisions(
   scenario: ExerciseInput['scenario'],
   resolution: ReturnType<typeof resolveRoles>,
+  events: ExerciseInput['events'],
 ): string[] {
   const threshold = scenario.optionalDecisionThreshold ?? 3
   if (resolution.distinctOwners >= threshold) return []
-  return scenario.decisionPoints.filter(dp => dp.required === false).map(dp => dp.id)
+  return scenario.decisionPoints.filter(dp =>
+    dp.required === false && !events.some(ev =>
+      (ev.kind === 'decision_submitted' || ev.kind === 'decision_revised') &&
+      ev.round === dp.round &&
+      ev.decisionPointId === dp.id &&
+      ev.by !== 'IMPLICIT' &&
+      dp.options.some(option => option.id === ev.optionId && !option.implicit),
+    ),
+  ).map(dp => dp.id)
 }

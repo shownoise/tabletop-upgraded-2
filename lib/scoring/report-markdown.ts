@@ -13,8 +13,9 @@ export function renderAssessmentMarkdown(r: AssessmentReport): string {
   lines.push(`- Rolcoverage: **${(r.meta.rolCoverage * 100).toFixed(0)}%** (${r.meta.distinctOwners} verschillende eigenaren)`)
   lines.push(`- Totaal punten: **${r.totalPoints}**`)
   if (r.droppedOptionalDecisions.length > 0) {
+    const count = r.droppedOptionalDecisions.length
     lines.push(``)
-    lines.push(`> Verkorte versie gespeeld — ${r.droppedOptionalDecisions.length} optionele beslispunten overgeslagen wegens klein team.`)
+    lines.push(`> Verkorte versie gespeeld — ${count} ${count === 1 ? 'optioneel beslispunt' : 'optionele beslispunten'} overgeslagen wegens klein team.`)
   }
 
   lines.push(``)
