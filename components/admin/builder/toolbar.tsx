@@ -1,12 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { Loader2, Sparkles } from "lucide-react"
+import { ChevronDown, Loader2, Sparkles } from "lucide-react"
 import { AiWizardDialog } from "./ai-wizard-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Dialog,
   DialogContent,
@@ -128,18 +134,27 @@ export function Toolbar({
         <Button size="sm" variant="ghost" onClick={handleNew} title="Nieuw leeg canvas">Nieuw</Button>
         <Button size="sm" variant="ghost" onClick={() => setTemplatesOpen(true)} title="Kant-en-klare voorbeeldscenario's">Voorbeelden</Button>
         <Button size="sm" variant="ghost" onClick={openLoad} title="Laad opgeslagen scenario">Laden</Button>
-        <Button size="sm" variant="ghost" onClick={() => setRolesOpen(true)} title="Bewerk per-rol opening briefings en playbook-gaps">Rollen</Button>
-        <Button size="sm" variant="ghost" onClick={() => setLibraryOpen(true)} title="Beheer ad-hoc ruis-injects die de facilitator tijdens de discussie kan afvuren">Ruis-bibliotheek</Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="ghost" className="gap-1">
+              Meer <ChevronDown className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={() => setRolesOpen(true)}>Rolbriefings</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setLibraryOpen(true)}>Ruis-bibliotheek</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setDryRunOpen(true)}>Dry-run</DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <a href={`/admin/role-cards?graph=${graph.id}`} target="_blank" rel="noopener noreferrer">Rolkaarten</a>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Actions group — validate / preview / persist */}
       <div className="flex items-center gap-1 pl-2 border-l border-border">
         <Button size="sm" variant="ghost" onClick={handleValidate} title="Controleer graph op fouten">Validate</Button>
         <Button size="sm" variant="ghost" onClick={() => setPreviewOpen(true)} title="Bekijk hoe deelnemers dit zien">Preview</Button>
-        <Button size="sm" variant="ghost" onClick={() => setDryRunOpen(true)} title="Simuleer scenario en score de uitkomst">Dry-run</Button>
-        <Button size="sm" variant="ghost" asChild title="Print rolkaarten voor deze scenario">
-          <a href={`/admin/role-cards?graph=${graph.id}`} target="_blank" rel="noopener noreferrer">Rolkaarten</a>
-        </Button>
         <Button size="sm" variant="outline" onClick={onSave} disabled={saving} title="Sla wijzigingen op">
           {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
           Save
