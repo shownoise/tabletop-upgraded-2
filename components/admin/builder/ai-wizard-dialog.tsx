@@ -277,14 +277,6 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
             value={config.optionsPerRolePerRound}
             onChange={v => update('optionsPerRolePerRound', v)}
           />
-          <SliderRow
-            label={`Ruis ← ${config.factsNoiseRatio.toFixed(2)} → Feit`}
-            min={0}
-            max={1}
-            step={0.05}
-            value={config.factsNoiseRatio}
-            onChange={v => update('factsNoiseRatio', v)}
-          />
         </section>
 
         {/* ── Rollen ── */}
@@ -317,33 +309,45 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
           </select>
         </section>
 
-        {/* ── Bijzondere omstandigheden ── */}
-        <section className="space-y-3 pt-3 border-t">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bijzondere omstandigheden</h3>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {SPECIAL_CONDITIONS.map(sc => {
-              const checked = config.specialConditions.includes(sc.id)
-              return (
-                <label key={sc.id} className="flex items-start gap-2 text-xs cursor-pointer rounded-md border border-input px-2 py-1.5 hover:bg-muted/50">
-                  <Checkbox checked={checked} onCheckedChange={() => toggleSpecial(sc.id)} />
-                  <span>
-                    <span className="font-medium">{sc.label}</span>
-                    <span className="block text-muted-foreground">{sc.narrativePrompt}</span>
-                  </span>
-                </label>
-              )
-            })}
+        <details className="group border-t pt-3">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Extra instellingen{config.specialConditions.length > 0 ? ` · ${config.specialConditions.length} actief` : ""}
+          </summary>
+          <div className="space-y-5 pt-4">
+            <section className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bijzondere omstandigheden</h3>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {SPECIAL_CONDITIONS.map(sc => {
+                  const checked = config.specialConditions.includes(sc.id)
+                  return (
+                    <label key={sc.id} className="flex items-start gap-2 text-xs cursor-pointer rounded-md border border-input px-2 py-1.5 hover:bg-muted/50">
+                      <Checkbox checked={checked} onCheckedChange={() => toggleSpecial(sc.id)} />
+                      <span>
+                        <span className="font-medium">{sc.label}</span>
+                        <span className="block text-muted-foreground">{sc.narrativePrompt}</span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            </section>
+            <section className="space-y-3 border-t pt-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Generatie</h3>
+              <SliderRow
+                label={`Aandeel feiten: ${Math.round(config.factsNoiseRatio * 100)}%`}
+                min={0}
+                max={1}
+                step={0.05}
+                value={config.factsNoiseRatio}
+                onChange={v => update('factsNoiseRatio', v)}
+              />
+              <div className="flex flex-col gap-1.5 sm:max-w-sm">
+                <Label htmlFor="wz-seed">Seed (optioneel — voor reproduceerbare generatie)</Label>
+                <Input id="wz-seed" value={config.seed ?? ""} onChange={e => update('seed', e.target.value || undefined)} placeholder="willekeurig — laat leeg voor automatisch" />
+              </div>
+            </section>
           </div>
-        </section>
-
-        {/* ── Geavanceerd ── */}
-        <section className="space-y-3 pt-3 border-t">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Geavanceerd</h3>
-          <div className="flex flex-col gap-1.5 sm:max-w-sm">
-            <Label htmlFor="wz-seed">Seed (optioneel — voor reproduceerbare generatie)</Label>
-            <Input id="wz-seed" value={config.seed ?? ""} onChange={e => update('seed', e.target.value || undefined)} placeholder="willekeurig — laat leeg voor automatisch" />
-          </div>
-        </section>
+        </details>
 
         {error && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive whitespace-pre-wrap">
