@@ -17,6 +17,7 @@ interface StubResponses {
   briefings: string       // { roleBriefings }
   injects: string         // { injectLibrary }
   decisions?: string[]    // targeted retry when a round has no usable decision
+  lessons?: string[]      // targeted cross-round text repair
   repair?: string         // response for repair passes
 }
 
@@ -36,6 +37,11 @@ function buildStub(resp: StubResponses): { llm: (m: LlmMessage[]) => Promise<str
         const match = last.match(/^Genereer uitsluitend het keuzemoment voor ronde (\d+)/)
         const idx = match ? Math.max(0, Number(match[1]) - 1) : 0
         return resp.decisions?.[idx] ?? ""
+      }
+      if (last.startsWith("Herstel uitsluitend de rondetekst voor ronde ")) {
+        const match = last.match(/^Herstel uitsluitend de rondetekst voor ronde (\d+)/)
+        const idx = match ? Math.max(0, Number(match[1]) - 1) : 0
+        return resp.lessons?.[idx] ?? ""
       }
       if (last.startsWith("Genereer eerst een OUTLINE")) return resp.outline
       if (last.startsWith("De vorige plan overtreedt")) return resp.repair ?? ""
@@ -184,6 +190,45 @@ describe("wizard pipeline — happy path", () => {
 })
 
 describe("wizard pipeline — repair loop", () => {
+  it("repairs cross-round text without regenerating scored choices", async () => {
+    const plan = passingPlan()
+    const broken = JSON.parse(JSON.stringify(plan)) as WizardPlan
+    broken.rounds[1].situation = 'Een nieuwe escalatie zonder verwijzing naar de eerdere keuze.'
+    const stub = buildStub({
+      ...stubFromPlan(broken),
+      lessons: ['', JSON.stringify({ situation: plan.rounds[1].situation })],
+    })
+
+    const result = await runWizardPipeline(testConfig(), {
+      llm: stub.llm,
+      maxRepairAttempts: 0,
+      now: () => 1,
+    })
+    expect(result.graph.nodes.filter(node => node.type === 'decision')).toHaveLength(2)
+    expect(result.repairLog).toEqual([])
+    expect(stub.calls.some(call => call.startsWith('De vorige plan overtreedt'))).toBe(false)
+  })
+
+  it("preserves scored choices when a general repair omits them", async () => {
+    const good = passingPlan()
+    const broken = JSON.parse(JSON.stringify(good)) as WizardPlan
+    for (const round of broken.rounds) {
+      for (const inject of round.injects ?? []) inject.classification = undefined
+    }
+    const repair = { ...good, decisions: [] }
+    const stub = buildStub({
+      ...stubFromPlan(broken),
+      repair: JSON.stringify(repair),
+    })
+
+    const result = await runWizardPipeline(testConfig(), {
+      llm: stub.llm,
+      maxRepairAttempts: 1,
+      now: () => 1,
+    })
+    expect(result.graph.nodes.filter(node => node.type === 'decision')).toHaveLength(2)
+  })
+
   it("generates missing decisions separately and links them to their setup injects", async () => {
     const plan = passingPlan()
     const base = stubFromPlan(plan)

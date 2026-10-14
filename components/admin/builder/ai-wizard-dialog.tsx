@@ -199,7 +199,7 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
           </DialogTitle>
         </DialogHeader>
         <p className="text-xs text-muted-foreground -mt-2">
-          Vul de klantcontext in — AI produceert een compleet draft-scenario dat het framework valideert. Neemt ~1–3 minuten.
+          Vul de klantcontext in — AI maakt een draft-scenario en controleert de keuzes. Dit kan tot 5 minuten duren.
         </p>
 
         {/* ── Verhaal ── */}
