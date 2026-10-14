@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { GitBranch } from "lucide-react"
 import type { GraphBranchLogEntry, GraphRuntimeState, SessionState } from "@/lib/types"
+import { scoreCoverage, submissionsFromDecisions } from "@/lib/graph/outcome-selector"
 
 interface Props {
   lang?: string
@@ -24,6 +25,8 @@ export function GraphReportSection({}: Props) {
 
   const graph = session.graph
   const state = session.graphState as GraphRuntimeState
+  const coverage = scoreCoverage(graph, submissionsFromDecisions(session.submittedDecisions ?? []))
+  const outcomeUnreliable = coverage.submitted === 0 || coverage.scored < coverage.submitted
   const nodeById = new Map(graph.nodes.map(n => [n.id, n]))
 
   return (
@@ -33,7 +36,12 @@ export function GraphReportSection({}: Props) {
         <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Scenario graph path</h2>
       </div>
       <div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 flex flex-col gap-4">
-        {state.finalOutcome && (
+        {state.finalOutcome && outcomeUnreliable && (
+          <div role="status" className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+            Automatische uitkomst verborgen: niet alle ingediende keuzes zijn gescoord. De facilitator beoordeelt de effecten handmatig.
+          </div>
+        )}
+        {state.finalOutcome && !outcomeUnreliable && (
           <div className="rounded-md border border-primary/40 bg-primary/10 px-4 py-3">
             <span className="font-mono text-[10px] uppercase tracking-wider text-primary">Final outcome</span>
             <p className="mt-1 text-base font-semibold">{state.finalOutcome.label}</p>

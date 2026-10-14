@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server"
 import type { GovernanceFlag, LearningObjective, SessionReport, SubmittedDecision } from "@/lib/types"
 import { requireFacilitator } from "@/lib/auth-guard"
+import { scoreCoverage, submissionsFromDecisions } from "@/lib/graph/outcome-selector"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
-function generateRecommendations(flags: GovernanceFlag[], hasIrPlan: boolean): string[] {
+function generateRecommendations(flags: GovernanceFlag[], hasIrPlan: boolean, graphScoring?: SessionReport['graphScoring']): string[] {
   const recs: string[] = []
+  if (graphScoring) {
+    recs.push(graphScoring.submitted === 0 || graphScoring.scored < graphScoring.submitted
+      ? "Niet alle ingediende keuzes zijn aan een scorevector gekoppeld. Bespreek deze keuzes handmatig; gebruik het automatische eindoordeel niet als beoordeling."
+      : "Bespreek per keuze de effecten op containment, forensiek, bedrijfscontinuïteit, juridisch, verantwoording en kosten.")
+    return recs
+  }
   const wrongRoleCount = flags.filter(f => f.type === "wrong_role").length
   const irDeviationCount = flags.filter(f => f.type === "ir_plan_deviation").length
 
@@ -51,6 +58,9 @@ export async function GET() {
   const specialScores = session.specialScores ?? []
 
   const totalDecisions = decisions.length
+  const graphScoring = session.graph
+    ? scoreCoverage(session.graph, submissionsFromDecisions(decisions))
+    : undefined
   const recommendedCount = decisions.filter(d => {
     const round = rounds[d.roundIndex]
     const action = round?.roleActions?.find(a => a.id === d.actionId)
@@ -88,7 +98,7 @@ export async function GET() {
 
   const hasIrPlan = !!(session.config.irTemplateText) || (session.config.existingPlans?.includes("ir_plan") ?? false)
   const topFlags = flags.slice(0, 10)
-  const recommendations = generateRecommendations(flags, hasIrPlan)
+  const recommendations = generateRecommendations(flags, hasIrPlan, graphScoring)
 
   const report: SessionReport = {
     sessionId: session.id,
@@ -96,6 +106,7 @@ export async function GET() {
     mode: session.mode ?? "training",
     totalRounds: rounds.length,
     totalDecisions,
+    graphScoring,
     scores: { decisionQuality, processAdherence, roleCompliance, objectivesAchieved, objectivesTotal },
     perRound,
     perObjective,

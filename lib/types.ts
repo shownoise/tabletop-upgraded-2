@@ -244,6 +244,7 @@ export interface SessionReport {
   mode: SimulationMode
   totalRounds: number
   totalDecisions: number
+  graphScoring?: { scored: number; submitted: number }
   scores: {
     decisionQuality: number
     processAdherence: number
