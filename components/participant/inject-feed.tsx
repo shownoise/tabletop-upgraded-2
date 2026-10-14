@@ -545,9 +545,10 @@ export function InjectFeed({
   const myView = participantId
     ? session?.participantViewState?.[participantId]
     : undefined
+  const isCoreEvent = session?.mode === 'event' && !!session.graph
   const hiddenIds = new Set(myView?.hidden ?? [])
   const handledIds = new Set(myView?.handled ?? [])
-  const hideHandledFilter = myView?.filters?.hideHandled === true
+  const hideHandledFilter = !isCoreEvent && myView?.filters?.hideHandled === true
 
   const visibleByRole = pushed.filter((p) => {
     if (p.pushedAt > now) return false
@@ -568,10 +569,10 @@ export function InjectFeed({
   const afterHandledFilter = hideHandledFilter
     ? visibleByRole.filter(p => !handledIds.has(p.inject.id))
     : visibleByRole
-  const shown = afterHandledFilter.filter(p => !hiddenIds.has(p.inject.id))
+  const shown = isCoreEvent ? visibleByRole : afterHandledFilter.filter(p => !hiddenIds.has(p.inject.id))
   const sorted = [...shown].sort((a, b) => b.pushedAt - a.pushedAt)
-  const hiddenCount = visibleByRole.filter(p => hiddenIds.has(p.inject.id)).length
-  const handledCount = visibleByRole.filter(p => handledIds.has(p.inject.id) && !hiddenIds.has(p.inject.id)).length
+  const hiddenCount = isCoreEvent ? 0 : visibleByRole.filter(p => hiddenIds.has(p.inject.id)).length
+  const handledCount = isCoreEvent ? 0 : visibleByRole.filter(p => handledIds.has(p.inject.id) && !hiddenIds.has(p.inject.id)).length
   const topRef = useRef<HTMLDivElement>(null)
 
   const prevCount = useRef(pushed.length)
@@ -721,12 +722,14 @@ export function InjectFeed({
             p.inject.urgency === "critical" ? "var(--tt-red)" :
             p.inject.urgency === "high"     ? "var(--tt-warn)" :
             p.inject.urgency === "medium"   ? "var(--tt-accent)" : "var(--tt-dim)"
-          const isFactCheckTarget = p.inject.reliability !== undefined
+          const isFactCheckTarget = !isCoreEvent && p.inject.reliability !== undefined
           const reviewPhase = session?.roundPhase === "review"
-          const { totalTags, hasSplit, myTag } = computeTagStats(p.inject.id, session?.factChecks, participantId)
+          const { totalTags, hasSplit, myTag } = isCoreEvent
+            ? { totalTags: 0, hasSplit: false, myTag: undefined }
+            : computeTagStats(p.inject.id, session?.factChecks, participantId)
           const isHandled = handledIds.has(p.inject.id)
           // Unread = not marked handled and not hidden (hidden ones are already gone).
-          const isUnread = !isHandled
+          const isUnread = !isCoreEvent && !isHandled
           return (
             <li
               key={`${p.inject.id}-${p.pushedAt}`}
@@ -752,7 +755,7 @@ export function InjectFeed({
                 <span className="ml-auto font-mono text-[9px] text-tt-dim">
                   {formatTime(p.pushedAt)}
                 </span>
-                {participantId && (
+                {!isCoreEvent && participantId && (
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
@@ -783,7 +786,7 @@ export function InjectFeed({
                 size={size}
                 myTag={myTag}
                 participantId={participantId}
-                myAnnotations={(session?.injectAnnotations ?? []).filter(a => a.injectId === p.inject.id && a.participantId === participantId).map(a => ({ id: a.id, start: a.start, end: a.end, tag: a.tag }))}
+                myAnnotations={isCoreEvent ? [] : (session?.injectAnnotations ?? []).filter(a => a.injectId === p.inject.id && a.participantId === participantId).map(a => ({ id: a.id, start: a.start, end: a.end, tag: a.tag }))}
                 reviewPhase={reviewPhase}
                 isFactCheckTarget={isFactCheckTarget}
                 lang={lang}
