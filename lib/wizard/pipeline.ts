@@ -1,5 +1,6 @@
 import type { ScenarioGraph } from "@/lib/graph/types"
 import { planToGraph, type WizardPlan } from "@/lib/graph/wizard-plan"
+import { validateGraph } from "@/lib/graph/validate"
 import { validateFramework, type RuleFailure } from "./framework"
 import type { WizardConfig } from "./config"
 import { specialConditionById } from "./config"
@@ -14,11 +15,11 @@ import { REGULATORY_REGIMES } from "@/lib/regulatory/regimes"
 //   3. Per-round generation — LLM produces situation + injects + decisions +
 //      facilitator guidance for each round, given the outline and prior rounds.
 //   4. Compile the assembled WizardPlan → ScenarioGraph via planToGraph.
-//   5. Framework validation — run all 10 rules from framework.ts.
-//   6. If failures: send the LLM the specific rule + hint + current plan;
+//   5. Framework and graph validation.
+//   6. If blocking failures: send the LLM the specific rule + hint + current plan;
 //      request a minimal fix; replace affected nodes only; retry.
-//   7. On repeated failure: throw with the list of un-fixable rules. The
-//      wizard NEVER writes a graph that violates the framework.
+//   7. On repeated blocking failure: throw. Editorial score-dominance and
+//      round-continuity findings may instead accompany a draft as warnings.
 //
 // The compiled graph is always publishStatus='draft' — the wizard never
 // publishes directly; the builder promotes explicitly.
@@ -55,6 +56,34 @@ export interface PipelineResult {
   graph: ScenarioGraph
   seed: string
   repairLog: RepairLogEntry[]
+  warnings: RuleFailure[]
+}
+
+const DRAFT_WARNING_RULES = new Set(['rule3_no_dominant', 'rule5_cross_round_lesson'])
+
+function validateWizardGraph(graph: ScenarioGraph, config: WizardConfig): RuleFailure[] {
+  const frameworkFailures = validateFramework(graph, config).failures
+  const graphFailures = validateGraph(graph)
+    .filter(issue => {
+      if (issue.severity !== 'error') return false
+      // Score-range outcomes do not need a branch edge: the score engine can
+      // select them. A role without a choice in every round can be intentional
+      // when another mandate role owns that round's decision.
+      const node = graph.nodes.find(candidate => candidate.id === issue.nodeId)
+      if (node?.type === 'outcome' && issue.message.includes('unreachable')) return false
+      if (node?.type === 'round' && issue.message.startsWith('Rol "')) return false
+      return true
+    })
+    .map(issue => ({
+      ruleId: 'graph_invalid',
+      violation: issue.message,
+      hint: 'Herstel alle ontbrekende of ongeldige verbindingen tussen start, rondes, injects, keuzes en uitkomsten.',
+    }))
+  return [...frameworkFailures, ...graphFailures]
+}
+
+function blockingFailures(failures: RuleFailure[]): RuleFailure[] {
+  return failures.filter(failure => !DRAFT_WARNING_RULES.has(failure.ruleId))
 }
 
 // Extract the last JSON object from a text response. LLMs sometimes wrap
@@ -282,17 +311,17 @@ async function repairCrossRoundLessons(plan: WizardPlan, llm: WizardLlm, systemP
     const previousDecision = plan.decisions?.find(decision => decision.afterRoundIndex === index)
     if (!previousDecision?.options?.length || referencesPriorChoice(round.situation, previousDecision.options)) return
     const prompt = `Herstel uitsluitend de rondetekst voor ronde ${index + 2}. Huidige situatie: ${round.situation}\nKeuzemogelijkheden uit ronde ${index + 1}: ${JSON.stringify(previousDecision.options.map(option => option.label))}\n\nGeef alleen JSON { "situation": "..." }. Behoud de feiten en schrijf Nederlands. Verwijs herkenbaar naar de afweging rond één van de gegeven keuzelabels, maar beweer niet dat het team een specifieke optie heeft gekozen: de sessie is nog niet gespeeld. Laat alle keuzes en scores ongemoeid.`
-    const raw = await llm([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: prompt },
-    ], { stage: `lesson-${index + 2}`, maxTokens: 3000 })
     try {
+      const raw = await llm([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ], { stage: `lesson-${index + 2}`, maxTokens: 3000 })
       const response = JSON.parse(extractJson(raw)) as { situation?: string }
       if (typeof response.situation === 'string' && referencesPriorChoice(response.situation, previousDecision.options)) {
         round.situation = response.situation
       }
     } catch (err) {
-      console.warn(`[wizard] Ronde ${index + 2}: tekstherstel gaf geen bruikbare JSON:`, err instanceof Error ? err.message : String(err))
+      console.warn(`[wizard] Ronde ${index + 2}: tekstherstel niet bruikbaar:`, err instanceof Error ? err.message : String(err))
     }
   }))
 }
@@ -424,24 +453,25 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
 
   // ── 3-4. Compile + validate ─────────────────────────────────────────
   let graph = planToGraph(plan, { seed, now, publishStatus: 'draft' })
-  let result = validateFramework(graph, config)
+  let failures = validateWizardGraph(graph, config)
   const repairLog: RepairLogEntry[] = []
 
   // Parallel gegenereerde rondes kennen de vorige keuze nog niet. Repareer
   // alleen hun situatie-tekst; een volledige plan-rewrite is hier te traag
   // en kan de gescoorde decisions uit de response laten verdwijnen.
-  if (result.failures.some(failure => failure.ruleId === 'rule5_cross_round_lesson')) {
+  if (failures.some(failure => failure.ruleId === 'rule5_cross_round_lesson')) {
     await repairCrossRoundLessons(plan, opts.llm, systemPrompt)
     graph = planToGraph(plan, { seed, now, publishStatus: 'draft' })
-    result = validateFramework(graph, config)
+    failures = validateWizardGraph(graph, config)
   }
 
   // ── 5. Repair loop ──────────────────────────────────────────────────
   let attempt = 0
-  while (!result.ok && attempt < maxRepair) {
+  while (blockingFailures(failures).length > 0 && attempt < maxRepair) {
     attempt += 1
     // Feed all outstanding failures at once so the LLM can align its edits.
-    const failuresText = result.failures.map(f => `- [${f.ruleId}] ${f.violation}\n  Hint: ${f.hint}`).join("\n")
+    const hardFailures = blockingFailures(failures)
+    const failuresText = hardFailures.map(f => `- [${f.ruleId}] ${f.violation}\n  Hint: ${f.hint}`).join("\n")
     // Repair moet het HELE plan teruggeven — bij grote configs (7+ rondes,
     // 6 opties, 8 rollen) is dat 30k-80k tokens. Cap zit dicht bij Sonnet
     // 4.6's max_tokens-plafond (64k). 60k dekt default + typicalLarge (6 rondes)
@@ -451,7 +481,7 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `De vorige plan overtreedt deze framework-regels:\n${failuresText}\n\nHuidig plan (JSON):\n${JSON.stringify(plan).slice(0, 12000)}\n\nGeef een aangepast plan als JSON. Verander ALLEEN wat nodig is om de genoemde regels te herstellen — behoud de rest.` },
     ], { stage: `repair-${attempt}`, maxTokens: 60000 })
-    for (const f of result.failures) {
+    for (const f of hardFailures) {
       repairLog.push({ attempt, ruleId: f.ruleId, violation: f.violation })
     }
     try {
@@ -460,20 +490,21 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
       throw new Error(`Repair pass ${attempt}: LLM gaf ongeldige JSON (${err instanceof Error ? err.message : String(err)}).`)
     }
     graph = planToGraph(plan, { seed, now, publishStatus: 'draft' })
-    result = validateFramework(graph, config)
+    failures = validateWizardGraph(graph, config)
   }
 
-  if (!result.ok) {
-    const remaining = result.failures.map(f => `[${f.ruleId}] ${f.violation}`).join("; ")
+  const remainingHardFailures = blockingFailures(failures)
+  if (remainingHardFailures.length > 0) {
+    const remaining = remainingHardFailures.map(f => `[${f.ruleId}] ${f.violation}`).join("; ")
     throw new WizardPipelineError(
       `Wizard kon na ${maxRepair} repair-passes niet aan het framework voldoen. Overgebleven schendingen: ${remaining}`,
-      result.failures,
+      remainingHardFailures,
       repairLog,
       seed,
     )
   }
 
-  return { graph, seed, repairLog }
+  return { graph, seed, repairLog, warnings: failures.filter(failure => DRAFT_WARNING_RULES.has(failure.ruleId)) }
 }
 
 // Distinct error type so the API route can surface repair-log context without

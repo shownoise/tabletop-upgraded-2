@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import type { PremadeInject, RoleBriefing, ScenarioGraph } from "@/lib/graph/types"
 import type { GraphIssue } from "@/lib/graph/validate"
+import type { RuleFailure } from "@/lib/wizard/framework"
 import type { Role, ScenarioType } from "@/lib/types"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { PreviewDialog } from "./preview-dialog"
@@ -36,6 +37,7 @@ interface Props {
   onPlaybookChange: (playbook: string | undefined) => void
   onSave: () => Promise<void>
   onLoad: (g: ScenarioGraph) => void
+  onWizardGenerated: (g: ScenarioGraph, meta: { warnings: RuleFailure[] }) => void
   onNew: () => void
   onValidate: () => GraphIssue[]
   onPublish: () => Promise<void>
@@ -58,6 +60,7 @@ export function Toolbar({
   onPlaybookChange,
   onSave,
   onLoad,
+  onWizardGenerated,
   onNew,
   onValidate,
   onPublish,
@@ -193,7 +196,7 @@ export function Toolbar({
 
       <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} graph={graph} />
       <DryRunDialog open={dryRunOpen} onOpenChange={setDryRunOpen} graph={graph} />
-      <AiWizardDialog open={aiWizardOpen} onOpenChange={setAiWizardOpen} onGenerated={onLoad} />
+      <AiWizardDialog open={aiWizardOpen} onOpenChange={setAiWizardOpen} onGenerated={onWizardGenerated} />
       {onRoleBriefingsChange && (
         <RoleBriefingsPanel
           open={rolesOpen}

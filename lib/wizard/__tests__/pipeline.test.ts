@@ -190,6 +190,74 @@ describe("wizard pipeline — happy path", () => {
 })
 
 describe("wizard pipeline — repair loop", () => {
+  it("returns a draft with warnings when only score dominance and round continuity fail", async () => {
+    const plan = passingPlan()
+    plan.rounds[1].situation = 'Een nieuwe escalatie zonder verwijzing naar de eerdere afweging.'
+    plan.decisions![0].options[0].outcomeVector = { CONT: 2, FOR: 2, BC: 2, JUR: 2, VER: 2, KOS: 2 }
+    const stub = buildStub({ ...stubFromPlan(plan), lessons: ['', '{}'] })
+
+    const result = await runWizardPipeline(testConfig(), {
+      llm: stub.llm,
+      maxRepairAttempts: 1,
+      now: () => 1,
+    })
+
+    expect(result.graph.publishStatus).toBe('draft')
+    expect(result.warnings.map(warning => warning.ruleId)).toEqual(expect.arrayContaining([
+      'rule3_no_dominant',
+      'rule5_cross_round_lesson',
+    ]))
+    expect(stub.calls.some(call => call.startsWith('De vorige plan overtreedt'))).toBe(false)
+  })
+
+  it("keeps a draft when the optional round-text repair request fails", async () => {
+    const plan = passingPlan()
+    plan.rounds[1].situation = 'Een nieuwe escalatie zonder verwijzing naar de eerdere afweging.'
+    const stub = buildStub(stubFromPlan(plan))
+
+    const result = await runWizardPipeline(testConfig(), {
+      llm: (messages, options) => {
+        if (options?.stage?.startsWith('lesson-')) throw new Error('tekstherstel niet beschikbaar')
+        return stub.llm(messages)
+      },
+      maxRepairAttempts: 0,
+      now: () => 1,
+    })
+
+    expect(result.graph.publishStatus).toBe('draft')
+    expect(result.warnings.map(warning => warning.ruleId)).toContain('rule5_cross_round_lesson')
+  })
+
+  it("keeps a missing six-dimensional score a hard failure", async () => {
+    const plan = passingPlan()
+    delete (plan.decisions![0].options[0].outcomeVector as { KOS?: number }).KOS
+    const stub = buildStub(stubFromPlan(plan))
+
+    await expect(runWizardPipeline(testConfig(), {
+      llm: stub.llm,
+      maxRepairAttempts: 0,
+      now: () => 1,
+    })).rejects.toMatchObject({
+      name: 'WizardPipelineError',
+      failures: expect.arrayContaining([expect.objectContaining({ ruleId: 'rule6_dimension_mapped' })]),
+    })
+  })
+
+  it("rejects a broken choice-to-next-round connection", async () => {
+    const plan = passingPlan()
+    plan.decisions![0].options[0].leadsTo = 'round:99'
+    const stub = buildStub(stubFromPlan(plan))
+
+    await expect(runWizardPipeline(testConfig(), {
+      llm: stub.llm,
+      maxRepairAttempts: 0,
+      now: () => 1,
+    })).rejects.toMatchObject({
+      name: 'WizardPipelineError',
+      failures: [expect.objectContaining({ ruleId: 'graph_invalid' })],
+    })
+  })
+
   it("repairs cross-round text without regenerating scored choices", async () => {
     const plan = passingPlan()
     const broken = JSON.parse(JSON.stringify(plan)) as WizardPlan
