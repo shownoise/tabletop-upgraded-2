@@ -24,6 +24,7 @@ import type {
 
 export interface GraphToScoringOptions {
   mode?: Mode
+  includeRoundActions?: boolean
   // Als undefined proberen we designTimeMinutes uit RoundNodeData.timerMinutes te lezen
   // en anders default 20 min.
   defaultDesignTimeMinutes?: number
@@ -61,11 +62,26 @@ export function graphToScenarioSpec(graph: ScenarioGraph, opts: GraphToScoringOp
     injects.push(injectFromNode(n.id, d.inject, parentRound, 'facilitator'))
   }
 
-  // Beslispunten: DecisionNode + RoleAction-per-ronde als virtuele beslispunten.
+  // Partner Event scores only the graph decisions shown to participants.
   const decisionPoints: DecisionPointSpec[] = []
   for (const n of decisionNodes) {
     const dd = n.data as DecisionNodeData
     const parentRound = findParentRoundNumber(graph, n.id, roundNumberByNodeId) ?? 1
+    if (opts.mode === 'EVENT' && dd.perRole) {
+      const roles = [...new Set(dd.options.filter(option => !option.implicit && option.allowedRole).map(option => option.allowedRole!))]
+      for (const role of roles) {
+        decisionPoints.push({
+          id: `${n.id}::${role}`,
+          round: parentRound,
+          domain: dd.scoringDomain ?? inferDomainFromDecision(dd),
+          designedOwner: toSpecRole(role),
+          consulted: (dd.scoringConsulted ?? []).map(item => toSpecRole(item)),
+          required: dd.advancesGraph !== false,
+          options: dd.options.filter(option => option.allowedRole === role || (option.implicit && !option.allowedRole)).map(optionFromDecision),
+        })
+      }
+      continue
+    }
     decisionPoints.push({
       id: n.id,
       round: parentRound,
@@ -78,11 +94,13 @@ export function graphToScenarioSpec(graph: ScenarioGraph, opts: GraphToScoringOp
       options: dd.options.map(o => optionFromDecision(o)),
     })
   }
-  for (const n of roundNodes) {
-    const rd = n.data as RoundNodeData
-    const parentRound = roundNumberByNodeId.get(n.id) ?? 1
-    for (const action of rd.roleActions ?? []) {
-      decisionPoints.push(decisionPointFromRoleAction(action, parentRound))
+  if (opts.includeRoundActions !== false) {
+    for (const n of roundNodes) {
+      const rd = n.data as RoundNodeData
+      const parentRound = roundNumberByNodeId.get(n.id) ?? 1
+      for (const action of rd.roleActions ?? []) {
+        decisionPoints.push(decisionPointFromRoleAction(action, parentRound))
+      }
     }
   }
 
@@ -157,7 +175,12 @@ export function sessionToEvents(session: SessionState): ExerciseEvent[] {
 export function sessionToScoringInput(session: SessionState, opts: GraphToScoringOptions = {}): ExerciseInput | null {
   const graph = session.graph
   if (!graph) return null
-  const scenario = graphToScenarioSpec(graph, opts)
+  const mode = opts.mode ?? (session.mode === 'event' ? 'EVENT' : 'ASSESSMENT')
+  const scenario = graphToScenarioSpec(graph, {
+    ...opts,
+    mode,
+    includeRoundActions: opts.includeRoundActions ?? session.mode !== 'event',
+  })
   const specPresent = session.participants
     .map(p => (p.role ? toSpecRole(p.role) : undefined))
     .filter((s): s is string => !!s)
@@ -170,7 +193,7 @@ export function sessionToScoringInput(session: SessionState, opts: GraphToScorin
     participantIds: session.participants.filter(p => p.groupId === g.id).map(p => p.id),
   }))
   return {
-    mode: opts.mode ?? 'ASSESSMENT',
+    mode,
     scenario,
     roster: { presentRoles: specPresent, groups: groups.length > 0 ? groups : undefined },
     events: sessionToEvents(session),
@@ -284,16 +307,14 @@ function inferOwnerFromOptions(dd: DecisionNodeData): string {
   return 'CRISIS_LEAD'
 }
 
-// Options first look for a vector in the central override tabel
-// (lib/scoring/vector-overrides.ts) so authors kunnen scores aanpassen zonder
-// scenario-data te editen. Als er geen override bestaat: inline outcomeVector,
-// dan qualityRank-fallback.
+// The builder's authored vector is authoritative. Older graphs can still use
+// the central override or quality-rank fallback outside Partner Event.
 function optionFromDecision(o: DecisionNodeData['options'][number]): OptionSpec {
   const override = vectorOverrideFor(o.allowedRole, o.label)
   return {
     id: o.id,
     label: o.label,
-    outcomeVector: override ?? o.outcomeVector ?? qualityRankToVector(o.qualityRank),
+    outcomeVector: o.outcomeVector ?? override ?? qualityRankToVector(o.qualityRank),
     debriefNote: o.lessonLearned ?? o.facilitatorCommentary,
     implicit: o.implicit,
   }
@@ -373,7 +394,7 @@ function submittedDecisionToEvent(d: SubmittedDecision, session: SessionState): 
   // Resolve which case this is by walking the graph. Without this resolution
   // DecisionNode submissions never match a decision point in the scoring
   // engine and silently fall through to NO_DECISION_FALLBACK_VECTOR.
-  const decisionPointId = resolveDecisionPointId(d.actionId, session) ?? d.actionId
+  const decisionPointId = resolveDecisionPointId(d.actionId, session, d.role) ?? d.actionId
   return {
     kind: 'decision_submitted',
     t: Date.parse(d.submittedAt) || session.startedAt || session.createdAt,
@@ -386,13 +407,15 @@ function submittedDecisionToEvent(d: SubmittedDecision, session: SessionState): 
   }
 }
 
-function resolveDecisionPointId(actionId: string, session: SessionState): string | null {
+function resolveDecisionPointId(actionId: string, session: SessionState, role: Role): string | null {
   const graph = session.graph
   if (!graph) return null
   for (const node of graph.nodes) {
     if (node.type !== 'decision') continue
     const dd = node.data as DecisionNodeData
-    if (dd.options.some(o => o.id === actionId)) return node.id
+    if (dd.options.some(o => o.id === actionId)) {
+      return session.mode === 'event' && dd.perRole ? `${node.id}::${role}` : node.id
+    }
   }
   return null
 }

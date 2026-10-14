@@ -34,7 +34,7 @@ import { computeAuthoredWorkload, distributeRoles, effectiveRolesForParticipant 
 import { plotInjectRoutes } from "./inject-routing"
 import { buildTeamRoles } from "./team-roster"
 import { computeRoundPhaseDurations, PHASE_ORDER, nextPhase } from "./engine/round-phases"
-import { describeNextAction as _describeNextAction, missingDecisionRoles } from "./session-next-action"
+import { currentDecisionNode, describeNextAction as _describeNextAction, missingDecisionRoles, missingEventDecisionAssignments } from "./session-next-action"
 
 // Migration: legacy `system_admin` role was merged into `it_manager`. Applied on
 // any scenario data flowing through the store so old graphs / templates keep working.
@@ -127,6 +127,7 @@ function tickRoundPhase(session: SessionState): SessionState {
     // REVIEW → next round is facilitator-driven, never auto. Return with REVIEW
     // still active until goToNextRound() is called.
     if (next === 'next_round') return s
+    if (cur.currentPhase === 'decision' && next === 'review' && missingDecisionRoles(s).length > 0) return s
     const nextStart = cur.phaseStartedAt + durationMs
     s = {
       ...s,
@@ -255,11 +256,15 @@ export function toParticipantState(session: SessionState, forParticipantId?: str
         return { ...p, inject: stripInjectGroundTruth(p.inject, isReviewRound) }
       }),
     governanceFlags: [],
-    submittedDecisions: (session.submittedDecisions ?? []).map(d => ({
-      ...d,
-      isWrongRole: false,
-      isIrDeviation: false,
-    })),
+    submittedDecisions: (session.submittedDecisions ?? [])
+      .filter(decision => {
+        if (session.mode !== 'event') return true
+        const participant = session.participants.find(item => item.id === forParticipantId)
+        return participant?.groupId
+          ? decision.groupId === participant.groupId
+          : decision.participantId === forParticipantId
+      })
+      .map(decision => ({ ...decision, isWrongRole: false, isIrDeviation: false })),
     specialEvents: session.specialEvents ?? [],
     documents: session.documents ?? [],
     // Hide the raw graph from participants; the engine-computed activeDecision
@@ -280,7 +285,9 @@ export function toParticipantState(session: SessionState, forParticipantId?: str
         } as SessionState["graph"])
       : undefined,
     graphState: undefined,
-    activeDecision: projectActiveDecision(session),
+    activeDecision: session.mode === 'event' && session.roundPhase !== 'decision' && session.roundPhase !== 'review'
+      ? undefined
+      : projectActiveDecision(session),
     // Phase 6 — participant sees only their own view state entry (if forParticipantId
     // is provided). When we don't know the caller, hide the collection entirely
     // rather than leak other participants' hidden/handled sets.
@@ -314,9 +321,7 @@ function projectActiveDecision(session: SessionState): import("./types").ActiveD
   const current = nodeById.get(currentId)
   if (!current) return undefined
 
-  // Peek in ALLE fases zodat keuzes direct zichtbaar zijn bij ronde-start.
-  // Participants kunnen alvast de opties zien tijdens briefing/discussion;
-  // submit-decision blokkeert nog wel inzenden buiten discussion/decision.
+  // The participant UI reveals these options in the decision phase only.
   const isReview = session.roundPhase === 'review'
 
   let dnode: import("./graph/types").GraphNode | undefined
@@ -342,7 +347,8 @@ function projectActiveDecision(session: SessionState): import("./types").ActiveD
   const flags = session.flags ?? {}
   const submittedOptionIds = new Set((session.submittedDecisions ?? []).map(d => d.actionId))
   const visibleOptions = dd.options.filter(o => {
-    if (o.consumesOptionAfterUse && submittedOptionIds.has(o.id)) return false
+    if (o.implicit) return false
+    if (session.mode !== 'event' && o.consumesOptionAfterUse && submittedOptionIds.has(o.id)) return false
     if (o.requiresCapability && !flags[o.requiresCapability]) return false
     return true
   })
@@ -1039,9 +1045,23 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
   if (!session) return { ok: false, error: "No active session." }
 
   if (session.graph && session.graphState) {
+    if (session.roundPhase !== 'review') {
+      return { ok: false, error: "Ronde kan pas worden afgesloten vanuit de Review-fase." }
+    }
+    if (missingDecisionRoles(session).length > 0) {
+      return { ok: false, error: "Er staan nog rolkeuzes open. Rond die af of gebruik Fase forceren." }
+    }
     let updated: SessionState
     try {
       updated = triggerEngine(session, { kind: "facilitator_next" })
+      // The per-role decision was collected during this round. Its graph node
+      // is a routing waypoint, not a second facilitator step.
+      if (updated.graphState && updated.currentRound === session.currentRound) {
+        const current = updated.graph?.nodes.find(n => n.id === updated.graphState!.currentNodeId)
+        if (current?.type === 'decision' && (current.data as DecisionNodeData).perRole === true) {
+          updated = triggerEngine(updated, { kind: "facilitator_next" })
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       return { ok: false, error: msg }
@@ -1288,42 +1308,36 @@ export async function joinGroup(input: { participantId: string; groupId: string 
 // atomically. `lock` is no longer a UI phase — it's this transition.
 export async function finalizeDecision(): Promise<{ ok: boolean; error?: string }> {
   const result = await mutate(s => {
-    if (!s.graph) return s
+    if (!s.graph || s.roundPhase !== 'decision') return { error: 'Er is geen actieve beslisfase.' }
+    const node = currentDecisionNode(s)
+    if (!node) return { error: 'Geen actief beslispunt gevonden.' }
+    const dd = node.data as DecisionNodeData
     const roundIdx = s.currentRound
     const now = Date.now()
-    const groups = s.groups ?? []
-    const decisionNodes = s.graph.nodes.filter(n => n.type === 'decision')
     const submissions = s.submittedDecisions ?? []
     const missing: SubmittedDecision[] = []
-    for (const node of decisionNodes) {
-      const dd = node.data as DecisionNodeData
-      const scoringUnits = groups.length > 0
-        ? groups.map(g => ({ groupId: g.id, name: g.name }))
-        : [{ groupId: undefined as string | undefined, name: 'single' }]
-      for (const unit of scoringUnits) {
-        const already = submissions.some(d =>
-          d.roundIndex === roundIdx
-          && dd.options.some(o => o.id === d.actionId)
-          && (unit.groupId ? d.groupId === unit.groupId : !d.groupId),
-        )
-        if (already) continue
-        const implicit = dd.options.find(o => o.implicit)
-        const optId = implicit?.id ?? `__implicit_${node.id}`
-        const optLabel = implicit?.label ?? 'Geen besluit binnen de tijd'
-        missing.push({
-          participantId: 'IMPLICIT',
-          participantName: unit.name,
-          role: 'ceo',
-          roundIndex: roundIdx,
-          actionId: optId,
-          actionLabel: optLabel,
-          reasoning: 'Geen besluit binnen de tijd — impliciete keuze bij afronding beslissing',
-          submittedAt: new Date(now).toISOString(),
-          isWrongRole: false,
-          isIrDeviation: false,
-          groupId: unit.groupId,
-        })
+    const assignments = s.mode === 'event'
+      ? missingEventDecisionAssignments(s)
+      : missingDecisionRoles(s).map(role => ({ groupId: undefined, role }))
+    for (const assignment of assignments) {
+      const implicit = dd.options.find(option => option.implicit && option.allowedRole === assignment.role)
+        ?? dd.options.find(option => option.implicit && !option.allowedRole)
+      if (!implicit?.outcomeVector) {
+        return { error: `Geen gescoorde impliciete keuze voor ${ROLE_META[assignment.role]?.label ?? assignment.role}. Rond de keuze handmatig af.` }
       }
+      missing.push({
+        participantId: 'IMPLICIT',
+        participantName: s.groups?.find(group => group.id === assignment.groupId)?.name ?? 'Geen besluit',
+        role: assignment.role,
+        roundIndex: roundIdx,
+        actionId: implicit.id,
+        actionLabel: implicit.label,
+        reasoning: 'Geen besluit binnen de tijd — impliciete keuze bij afronding beslissing',
+        submittedAt: new Date(now).toISOString(),
+        isWrongRole: false,
+        isIrDeviation: false,
+        groupId: assignment.groupId,
+      })
     }
     const nextSubmissions = [...submissions, ...missing]
     // Atomic transition DECISION → REVIEW.
@@ -1411,10 +1425,38 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
   const round = session.scenario.rounds[input.roundIndex]
   if (!round) return { ok: false, error: "Invalid round." }
 
+  if (session.mode === 'event' && session.graph) {
+    if (!participant.groupId || !(session.groups ?? []).some(group => group.id === participant.groupId)) {
+      return { ok: false, error: 'Kies eerst een geldig team voordat je een rolkeuze indient.' }
+    }
+    if (session.status !== 'active' || input.roundIndex !== session.currentRound || session.roundPhase !== 'decision') {
+      return { ok: false, error: 'Keuzes kunnen alleen in de actuele beslisfase worden ingediend.' }
+    }
+    if ((session.submittedDecisions ?? []).some(decision =>
+      decision.groupId === participant.groupId && decision.roundIndex === input.roundIndex && decision.role === activeRole,
+    )) {
+      return { ok: false, error: 'Dit team heeft voor deze rol al een keuze ingediend.' }
+    }
+    const active = projectActiveDecision(session)
+    const visible = active?.options.find(option => option.optionId === input.actionId)
+    if (!visible || (visible.allowedRole && visible.allowedRole !== activeRole)) {
+      return { ok: false, error: 'Deze keuze hoort niet bij het actuele mandaat.' }
+    }
+    const node = session.graph.nodes.find(item => item.id === active?.nodeId)
+    const scoredOption = node?.type === 'decision'
+      ? (node.data as DecisionNodeData).options.find(option => option.id === input.actionId)
+      : undefined
+    if (!scoredOption?.outcomeVector) {
+      return { ok: false, error: 'Deze keuze heeft geen scorevector en kan niet worden ingediend.' }
+    }
+  }
+
   // Lookup #1: legacy roleAction op de ronde. Lookup #2: option in ÉLKE
   // DecisionNode in de graph (option-ids zijn uniek, dus dit is veilig en
   // ondersteunt het peek-ahead scenario waarin het huidige node nog de round is).
-  let action: RoleAction | undefined = round.roleActions?.find(a => a.id === input.actionId)
+  let action: RoleAction | undefined = session.mode === 'event' && session.graph
+    ? undefined
+    : round.roleActions?.find(a => a.id === input.actionId)
   // Phase 3 — also capture the raw DecisionNode option so downstream side-effects
   // (capabilityFlag, retainerActivation snapshot) can read authoring fields that
   // the RoleAction adapter above does not expose.
@@ -1576,25 +1618,16 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
 
   // Event-mode: if every group has submitted for this round, finalize the
   // decision atomically (DECISION → REVIEW via finalizeDecision-equivalent).
-  if (updated.mode === 'event' && updated.graph && updated.roundPhase === 'decision') {
-    const groups = updated.groups ?? []
-    if (groups.length > 0) {
-      const submitsThisRound = updated.submittedDecisions ?? []
-      const allGroupsSubmitted = groups.every(g =>
-        submitsThisRound.some(d => d.groupId === g.id && d.roundIndex === input.roundIndex),
-      )
-      if (allGroupsSubmitted) {
-        const now = Date.now()
-        updated = {
-          ...updated,
-          roundPhase: 'review',
-          activeRoundPhaseState: updated.activeRoundPhaseState
-            ? { ...updated.activeRoundPhaseState, currentPhase: 'review', phaseStartedAt: now }
-            : updated.activeRoundPhaseState,
-        }
-        updated = pushTimeline(updated, 'phase_changed', { from: 'decision', to: 'review', reason: 'all_groups_submitted' })
-      }
+  if (updated.mode === 'event' && updated.graph && updated.roundPhase === 'decision' && missingDecisionRoles(updated).length === 0) {
+    const now = Date.now()
+    updated = {
+      ...updated,
+      roundPhase: 'review',
+      activeRoundPhaseState: updated.activeRoundPhaseState
+        ? { ...updated.activeRoundPhaseState, currentPhase: 'review', phaseStartedAt: now }
+        : updated.activeRoundPhaseState,
     }
+    updated = pushTimeline(updated, 'phase_changed', { from: 'decision', to: 'review', reason: 'all_roles_submitted' })
   }
 
   // Push a response inject when action has one (e.g. "Consult IR retainer")

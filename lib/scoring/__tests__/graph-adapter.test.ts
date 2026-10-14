@@ -3,6 +3,7 @@ import { graphToScenarioSpec, sessionToEvents, sessionToScoringInput } from '../
 import { scoreExercise } from '../score-exercise'
 import { schoolverenigingScenario as meldplichtPressureExample } from '@/lib/graph/examples-schoolvereniging'
 import type { SessionState } from '@/lib/types'
+import type { DecisionNodeData } from '@/lib/graph/types'
 
 describe('graph-adapter — bridge tussen ScenarioGraph en scoring input', () => {
   const graph = meldplichtPressureExample()
@@ -30,6 +31,27 @@ describe('graph-adapter — bridge tussen ScenarioGraph en scoring input', () =>
         expect(Object.keys(opt.outcomeVector)).toHaveLength(6)
       }
     }
+  })
+
+  it('scores only graph decisions in Partner Event, never stored round-actions', () => {
+    const session = {
+      graph, mode: 'event', createdAt: 0, timeline: [], submittedDecisions: [], participants: [], groups: [],
+    } as unknown as SessionState
+    const input = sessionToScoringInput(session)
+    const expected = graph.nodes.filter(node => node.type === 'decision').reduce((count, node) =>
+      count + new Set((node.data as DecisionNodeData).options.filter(option => !option.implicit).map(option => option.allowedRole)).size, 0)
+    expect(input?.scenario.decisionPoints).toHaveLength(expected)
+    expect(input?.scenario.decisionPoints.every(point => point.id.includes('::'))).toBe(true)
+  })
+
+  it('uses an explicitly authored zero vector instead of a label-based override', () => {
+    const authored = structuredClone(graph)
+    const decision = authored.nodes.find(node => node.type === 'decision')!
+    const option = (decision.data as DecisionNodeData).options.find(item => !!item.allowedRole)!
+    option.outcomeVector = { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 }
+    const spec = graphToScenarioSpec(authored)
+    const mapped = spec.decisionPoints.find(point => point.id === decision.id)?.options.find(item => item.id === option.id)
+    expect(mapped?.outcomeVector).toEqual(option.outcomeVector)
   })
 
   it('graphToScenarioSpec: nis2Relevant injects → importance=crucial', () => {

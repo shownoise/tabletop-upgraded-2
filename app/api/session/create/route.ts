@@ -519,6 +519,14 @@ export async function POST(req: Request) {
             send({ stage: "error", message: "Scenario graph not found — probeer eerst 'Save' in de builder." })
             return
           }
+          if (mode === 'event') {
+            const { validateDecisionScoring } = await import('@/lib/graph/validate')
+            const scoringError = validateDecisionScoring(graph).find(issue => issue.severity === 'error')
+            if (scoringError) {
+              send({ stage: 'error', message: `Partner Event kan niet starten: ${scoringError.message}` })
+              return
+            }
+          }
           // Persist inline graph so subsequent server-side lookups work (e.g. debrief).
           if (body.graph) {
             try { await saveScenarioGraph(body.graph) } catch { /* ignore */ }

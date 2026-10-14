@@ -60,7 +60,9 @@ describe("legacyTemplateToScenarioGraph", () => {
     expect(graph.publishStatus).toBe("draft")
     expect(graph.scenarioType).toBe("bec_cfo_fraud")
     expect(graph.features).toEqual({ reliability: false, compliance: false, scoring: false })
-    expect(validateGraph(graph).filter(issue => issue.severity === "error")).toEqual([])
+    const errors = validateGraph(graph).filter(issue => issue.severity === "error")
+    expect(errors).toHaveLength(2)
+    expect(errors.every(issue => issue.message.includes('geen score per dimensie'))).toBe(true)
     expect(template.rounds[0].injects[0].htmlContent).toContain("<script>")
   })
 

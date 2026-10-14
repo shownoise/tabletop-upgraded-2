@@ -59,4 +59,18 @@ describe('phase-0: describeNextAction never offers end_session while unplayed ro
     expect(na.action).toBe('next_round')
     expect(na.labelNL).toContain('4')
   })
+
+  it('graph with only the reached round loaded still offers the next authored round', () => {
+    const graph = schoolverenigingScenario()
+    const firstRound = graph.nodes.find(n => n.type === 'round')!
+    const s = baseSession({
+      scenario: { scenario_title: 'test', scenario_summary: '', rounds: [{ round_number: 1, title: 'R1', situation_update: '', injects: [] }] },
+      graphState: { currentNodeId: firstRound.id, pathHistory: [firstRound.id], branchLog: [] },
+      currentRound: 0,
+      roundPhase: 'review',
+    })
+    const next = describeNextAction(s)
+    expect(next.action).toBe('next_round')
+    expect(next.labelNL).toContain('2')
+  })
 })

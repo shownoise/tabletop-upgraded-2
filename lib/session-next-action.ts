@@ -1,4 +1,4 @@
-import type { DecisionNodeData } from "./graph/types"
+import type { DecisionNodeData, GraphNode } from "./graph/types"
 import type { Role, RoundPhase, SessionState } from "./types"
 import { ROLE_META } from "./types"
 import { effectiveRolesForParticipant } from "./engine/distribute-roles"
@@ -16,8 +16,9 @@ export interface NextActionDescriptor {
 
 export function describeNextAction(session: SessionState): NextActionDescriptor {
   const currentPhase = session.roundPhase ?? 'inject'
-  const totalRounds = session.scenario.rounds.length
-  const isLastRound = session.currentRound >= totalRounds - 1
+  const isLastRound = session.graph && session.graphState
+    ? !hasFutureRound(session)
+    : session.currentRound >= session.scenario.rounds.length - 1
 
   if (currentPhase === 'review') {
     if (isLastRound) return { action: 'end_session', labelNL: 'Sessie afronden' }
@@ -49,20 +50,72 @@ export function describeNextAction(session: SessionState): NextActionDescriptor 
   return { action: 'advance_phase', labelNL: nextLabels[currentPhase] }
 }
 
-export function missingDecisionRoles(session: SessionState): Role[] {
-  if (!session.graph || !session.graphState) return []
+function hasFutureRound(session: SessionState): boolean {
+  if (!session.graph || !session.graphState) return false
+  const visited = new Set<string>()
+  const played = new Set(session.graphState.pathHistory)
+  const nodes = new Map(session.graph.nodes.map(node => [node.id, node]))
+  const queue = [session.graphState.currentNodeId]
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    if (visited.has(id)) continue
+    visited.add(id)
+    const node = nodes.get(id)
+    if (node?.type === 'round' && !played.has(id)) return true
+    for (const edge of session.graph.edges) {
+      if (edge.source === id && edge.type !== 'inject') queue.push(edge.target)
+    }
+  }
+  return false
+}
+
+export function currentDecisionNode(session: SessionState): GraphNode | undefined {
+  if (!session.graph || !session.graphState) return undefined
   const nodeById = new Map(session.graph.nodes.map(n => [n.id, n]))
   const current = nodeById.get(session.graphState.currentNodeId)
-  if (!current) return []
-  const decisionNode = current.type === 'decision'
+  if (!current) return undefined
+  return current.type === 'decision'
     ? current
     : session.graph.edges
         .filter(e => e.source === current.id && e.type === 'sequence')
         .map(e => nodeById.get(e.target))
         .find(n => n?.type === 'decision')
+}
+
+export function missingEventDecisionAssignments(session: SessionState): Array<{ groupId?: string; role: Role }> {
+  const decisionNode = currentDecisionNode(session)
   if (!decisionNode) return []
   const dd = decisionNode.data as DecisionNodeData
   if (dd.perRole !== true) return []
+  const roles = [...new Set(dd.options
+    .filter(option => !option.implicit && (!option.requiresCapability || session.flags?.[option.requiresCapability]))
+    .map(option => option.allowedRole)
+    .filter((role): role is Role => !!role))]
+  const implicitIds = new Set(dd.options.filter(option => option.implicit).map(option => option.id))
+  const units = session.groups?.length ? session.groups.map(group => group.id) : [undefined]
+  const missing: Array<{ groupId?: string; role: Role }> = []
+  for (const groupId of units) {
+    for (const role of roles) {
+      const optionIds = new Set(dd.options.filter(option => option.allowedRole === role).map(option => option.id))
+      const submitted = (session.submittedDecisions ?? []).some(decision =>
+        decision.roundIndex === session.currentRound && decision.role === role &&
+        (optionIds.has(decision.actionId) || implicitIds.has(decision.actionId)) && decision.groupId === groupId,
+      )
+      if (!submitted) missing.push({ groupId, role })
+    }
+  }
+  return missing
+}
+
+export function missingDecisionRoles(session: SessionState): Role[] {
+  const decisionNode = currentDecisionNode(session)
+  if (!decisionNode) return []
+  const dd = decisionNode.data as DecisionNodeData
+  if (dd.perRole !== true) return []
+
+  if (session.mode === 'event') {
+    return missingEventDecisionAssignments(session).map(assignment => assignment.role)
+  }
 
   const dist = session.roleDistribution
   if (!dist) return []

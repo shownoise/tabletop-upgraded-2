@@ -238,7 +238,7 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
             className="font-mono text-[10px] font-bold tracking-widest shrink-0"
             style={{ color: severityColor }}
           >
-            {tr(lang, "round").toUpperCase()} {roundIdx + 1}/{session.scenario.rounds.length}
+            {tr(lang, "round").toUpperCase()} {roundIdx + 1}{session.mode === 'event' ? '' : `/${session.scenario.rounds.length}`}
           </span>
           <span className="font-mono text-[10px] text-tt-dim truncate">{currentRound.title}</span>
           <span
@@ -277,7 +277,7 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
             </div>
           )}
 
-          {currentRound.learningObjectives && currentRound.learningObjectives.length > 0 && (
+          {session.mode !== 'event' && currentRound.learningObjectives && currentRound.learningObjectives.length > 0 && (
             <div className="flex flex-col gap-1.5 border-t border-tt-border pt-3">
               <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
                 Ronde doelen
@@ -465,24 +465,35 @@ function RoleDocumentsPanel({ docs }: { docs: RoleDocument[] }) {
 // every role of the team gets its own decision on this same device.
 function TeamRoleSwitcher({
   session,
+  participantId,
   activeRole,
   onPick,
 }: {
   session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>
+  participantId?: string
   activeRole?: Role
   onPick: (r: Role) => void
 }) {
   const roles: Role[] = useMemo(() => {
-    // Use the facilitator-configured roles when present; otherwise everything the
-    // current participants have collectively claimed.
+    // Graph options define the actual mandates in this round, including roles
+    // without a separately joined participant on the team device.
+    const decisionRoles = new Set<Role>()
+    for (const option of session.activeDecision?.options ?? []) {
+      if (option.allowedRole) decisionRoles.add(option.allowedRole)
+    }
+    for (const decision of session.submittedDecisions ?? []) {
+      if (decision.roundIndex === session.currentRound) decisionRoles.add(decision.role)
+    }
+    if (decisionRoles.size > 0) return ROLE_ORDER.filter(role => decisionRoles.has(role))
     const configured = session.config.selectedRoles ?? []
     if (configured.length) return configured
     const claimed = new Set<Role>()
     for (const p of session.participants) if (p.role) claimed.add(p.role)
     return [...claimed]
-  }, [session.config.selectedRoles, session.participants])
+  }, [session.activeDecision?.options, session.submittedDecisions, session.currentRound, session.config.selectedRoles, session.participants])
   const submitted = session.submittedDecisions ?? []
   const round = session.currentRound
+  const groupId = session.participants.find(participant => participant.id === participantId)?.groupId
 
   if (roles.length === 0) return null
 
@@ -502,7 +513,7 @@ function TeamRoleSwitcher({
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
         {roles.map(r => {
-          const hasSubmission = submitted.some(d => d.roundIndex === round && d.role === r)
+          const hasSubmission = submitted.some(d => d.roundIndex === round && d.role === r && (groupId ? d.groupId === groupId : d.participantId === participantId))
           const isActive = activeRole === r
           return (
             <button
@@ -585,9 +596,10 @@ function DecisionTicket({
   const queueDone = !!pending && pending.completed >= pending.total
 
   // In event mode fall back to the legacy per-round already-submitted lookup.
+  const groupId = session.participants.find(p => p.id === participantId)?.groupId
   const already = isEventMode
     ? (session.submittedDecisions ?? []).find(
-        d => d.participantId === participantId
+        d => (groupId ? d.groupId === groupId : d.participantId === participantId)
           && d.roundIndex === roundIndex
           && d.role === participantRole,
       )
@@ -596,12 +608,11 @@ function DecisionTicket({
   // Pick the option to present. In queue mode: the option whose allowedRole
   // matches the current role in the sequence. Otherwise fall back to the
   // legacy filter (options the acting role is allowed to submit).
-  let visibleOptions = pending
+  const visibleOptions = pending
     ? ad.options.filter(o => o.allowedRole === queueCurrentRole)
     : (activeRole
       ? ad.options.filter(o => !o.allowedRole || o.allowedRole === activeRole)
       : ad.options)
-  if (!pending && visibleOptions.length === 0) visibleOptions = ad.options
 
   async function pick(optionId: string) {
     if (!participantId || !canSubmit || !activeRole) return
@@ -1075,7 +1086,7 @@ export function PlayView() {
       )}
 
       {/* Special event modal */}
-      {activeSpecial && participantId && (
+      {!isEventMode && activeSpecial && participantId && (
         <SpecialModal
           special={activeSpecial}
           participantId={participantId}
@@ -1095,7 +1106,7 @@ export function PlayView() {
       )}
 
       {/* Escalation overlay */}
-      {session.status === "active" && session.currentRound >= 0 && (
+      {!isEventMode && session.status === "active" && session.currentRound >= 0 && (
         <EscalationOverlay roundIndex={session.currentRound} />
       )}
 
@@ -1118,8 +1129,8 @@ export function PlayView() {
               timerMinutes={currentRound.timerMinutes ?? 10}
               status={status}
               lang={lang}
-              paused={session.roundPhase === "discussion" ? timerPaused : undefined}
-              onTogglePause={session.roundPhase === "discussion" ? () => setTimerPaused(p => !p) : undefined}
+              paused={!isEventMode && session.roundPhase === "discussion" ? timerPaused : undefined}
+              onTogglePause={!isEventMode && session.roundPhase === "discussion" ? () => setTimerPaused(p => !p) : undefined}
             />
             {banner && (
               <div className={`flex items-center gap-2 rounded-md px-3 py-1.5 border font-mono text-xs animate-fade-in ${
@@ -1146,7 +1157,7 @@ export function PlayView() {
             <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               {status === "lobby" ? tr(lang, "waitingToStart") :
                status === "ended" ? tr(lang, "exerciseEnded") :
-               tr(lang, "roundOf", { n: String(session.currentRound + 1), total: String(session.scenario.rounds.length) })}
+               isEventMode ? `Ronde ${session.currentRound + 1}` : tr(lang, "roundOf", { n: String(session.currentRound + 1), total: String(session.scenario.rounds.length) })}
             </div>
             </div>
           </div>
@@ -1169,16 +1180,8 @@ export function PlayView() {
 
             {/* Team role-switcher — in EVENT mode this one device answers for every role.
                 The team picks which role they're acting as before each decision. */}
-            {isEventMode && status === "active" && (
-              <TeamRoleSwitcher
-                session={session}
-                activeRole={activeRole}
-                onPick={setActiveRole}
-              />
-            )}
-
             {/* Pacing banner — appears at 40%/80%/95% of round timer */}
-            {currentRound && status === "active" && (
+            {!isEventMode && currentRound && status === "active" && (
               <PacingBanner
                 roundStartedAt={session.roundStartedAt}
                 timerMinutes={currentRound.timerMinutes ?? 10}
@@ -1187,12 +1190,12 @@ export function PlayView() {
 
             {/* Opening briefing — per-role mandate + playbook gaps. Shown once at
                 session start; retrievable mid-session from the collapse panel. */}
-            {status === "active" && (
+            {!isEventMode && status === "active" && (
               <OpeningBriefing session={session} participantId={participantId ?? undefined} />
             )}
 
             {/* Soft-decision ticket — shown when graph is on a Decision node */}
-            {status === "active" && <DecisionTicket session={session} participantId={participantId ?? undefined} participantRole={effectiveRole} />}
+            {!isEventMode && status === "active" && session.roundPhase === "decision" && <DecisionTicket session={session} participantId={participantId ?? undefined} participantRole={effectiveRole} />}
 
             {/* Round situation */}
             {currentRound ? (
@@ -1221,8 +1224,18 @@ export function PlayView() {
               </div>
             )}
 
+            {isEventMode && status === 'active' && (
+              <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} session={session} participantId={participantId ?? undefined} />
+            )}
+            {isEventMode && status === 'active' && session.roundPhase === 'decision' && (
+              <>
+                <TeamRoleSwitcher session={session} participantId={participantId ?? undefined} activeRole={activeRole} onPick={setActiveRole} />
+                <DecisionTicket session={session} participantId={participantId ?? undefined} participantRole={effectiveRole} />
+              </>
+            )}
+
             {/* DECISION PHASE — pinned to top on mobile, natural order on desktop */}
-            {session.roundPhase === "decision" && currentRound?.roleActions && participantId && (() => {
+            {session.roundPhase === "decision" && currentRound?.roleActions && participantId && !(isEventMode && session.graph) && (() => {
               const roundDecisions = (session.submittedDecisions ?? []).filter(d => d.roundIndex === session.currentRound)
               return (
                 <div className="order-first lg:order-none flex flex-col gap-2">
@@ -1254,28 +1267,28 @@ export function PlayView() {
             {/* BOB/OODA discussion prompts + prep uitgezet voor cleane story-modus */}
 
             {/* Fact-check review — shown when the current round reaches the review phase */}
-            {session.roundPhase === "review" && participantId && (
+            {!isEventMode && session.roundPhase === "review" && participantId && (
               <FactCheckReview session={session} participantId={participantId} roundIndex={session.currentRound} />
             )}
             {/* IR-retainer commentary op ingediende keuzes tijdens review */}
-            {session.roundPhase === "review" && participantId && (
+            {!isEventMode && session.roundPhase === "review" && participantId && (
               <ReviewCommentary session={session} participantId={participantId} roundIndex={session.currentRound} />
             )}
             {/* Confidence-tally — persoonlijk overzicht van eigen zekerheid per ronde */}
-            {(session.roundPhase === "review") && participantId && (
+            {!isEventMode && (session.roundPhase === "review") && participantId && (
               <ConfidenceTally session={session} participantId={participantId} />
             )}
 
             {/* Regulatory notification — appears when a data-driven regime obligation opens. */}
-            {participantId && <RegulatoryNotificationButton session={session} participantId={participantId} />}
+            {!isEventMode && participantId && <RegulatoryNotificationButton session={session} participantId={participantId} />}
 
             {/* Melding button — participant-initiated escalation. Visible only when a moment is open for this role. */}
-            {participantId && participantRole && (
+            {!isEventMode && participantId && participantRole && (
               <MeldingButton session={session} participantId={participantId} participantRole={participantRole} />
             )}
 
             {/* Inject feed — always shown for context */}
-            <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} session={session} participantId={participantId ?? undefined} />
+            {!isEventMode && <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} session={session} participantId={participantId ?? undefined} />}
           </div>
 
           {/* Sidebar */}
@@ -1311,16 +1324,16 @@ export function PlayView() {
             </div>
 
             {/* IR / Crisis Playbook — always shown when authored on the scenario graph */}
-            <IrPlaybookPanel session={session} participantRole={participantRole} />
+            {!isEventMode && <IrPlaybookPanel session={session} participantRole={participantRole} />}
 
             {/* Documents — filtered to this participant's role */}
-            {participantRole && (() => {
+            {!isEventMode && participantRole && (() => {
               const myDocs = (session.documents ?? []).filter(d => d.targetRole === participantRole)
               return <RoleDocumentsPanel docs={myDocs} />
             })()}
 
             {/* Role authorities card — shown when participant has a role */}
-            {participantRole && (() => {
+            {!isEventMode && participantRole && (() => {
               const meta = ROLE_META[participantRole]
               return (
                 <div className="rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
@@ -1347,7 +1360,7 @@ export function PlayView() {
             })()}
 
             {/* Session info */}
-            <div className="rounded-xl border border-border bg-card px-4 py-4 flex flex-col gap-3">
+            {!isEventMode && <div className="rounded-xl border border-border bg-card px-4 py-4 flex flex-col gap-3">
               <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "eventLog")}</span>
               <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
                 {[...session.timeline].reverse().slice(0, 20).map((ev) => (
@@ -1362,7 +1375,7 @@ export function PlayView() {
                   </div>
                 ))}
               </div>
-            </div>
+            </div>}
           </aside>
         </div>
       </main>

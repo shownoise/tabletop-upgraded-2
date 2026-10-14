@@ -811,6 +811,14 @@ function OptionEditor({
         <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
           Impact op de 6 dimensies (−2 slecht … +2 goed)
         </div>
+        {!option.outcomeVector && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-800 dark:text-amber-300">
+            <span>Score ontbreekt. Getoonde nullen zijn nog niet opgeslagen.</span>
+            <button type="button" className="shrink-0 underline" onClick={() => onChange({ outcomeVector: { ...vec } })}>
+              Alles 0: geen effect
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-6 gap-1">
           {DIMS.map(d => (
             <label key={d.key} className="text-center" title={d.hint}>
@@ -853,7 +861,7 @@ function formatVector(v: OutcomeVector | undefined): string {
     if (typeof n !== "number" || n === 0) continue
     parts.push(`${k}${n > 0 ? "+" : ""}${n}`)
   }
-  return parts.length > 0 ? parts.join(" ") : "—"
+  return parts.length > 0 ? parts.join(" ") : "0 (geen effect)"
 }
 
 function truncate(s: string, max: number): string {
