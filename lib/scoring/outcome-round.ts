@@ -14,19 +14,21 @@ export function computeRoundOutcome(
   scenario: ScenarioSpec,
   events: ExerciseEvent[],
   round: number,
+  groupAware = false,
 ): RoundOutcome {
   const roundSpec = scenario.rounds.find(r => r.number === round)
   if (!roundSpec) {
     return { round, normalized: 0, perDimension: emptyVector(), points: 50, hasSubmissions: false }
   }
   const decisionsThisRound = scenario.decisionPoints.filter(d => d.round === round)
-  // Latest submission per (decisionPointId).
-  const submissionsById = new Map<string, string>()  // decisionPointId → optionId
+  // Assessment keeps the latest decision per point; Event keeps the latest
+  // decision per point and group so each team's authored choice contributes.
+  const submissionsById = new Map<string, { decisionPointId: string; optionId: string }>()
   for (const ev of events) {
     if (ev.kind === 'decision_submitted' && ev.round === round) {
-      submissionsById.set(ev.decisionPointId, ev.optionId)
+      submissionsById.set(`${ev.decisionPointId}::${groupAware ? ev.groupId ?? 'single' : 'all'}`, ev)
     } else if (ev.kind === 'decision_revised' && ev.round === round) {
-      submissionsById.set(ev.decisionPointId, ev.optionId)
+      submissionsById.set(`${ev.decisionPointId}::${groupAware ? ev.groupId ?? 'single' : 'all'}`, ev)
     }
   }
 
@@ -35,10 +37,11 @@ export function computeRoundOutcome(
   // finalizeDecision aangevuld met impliciete submissions bij LOCK.
   const sums = emptyVector()
   let n = 0
-  for (const dp of decisionsThisRound) {
-    const optId = submissionsById.get(dp.id)
-    if (!optId) continue  // geen submission — skip tijdens live compute
-    let vec = dp.options.find(o => o.id === optId)?.outcomeVector
+  const decisionById = new Map(decisionsThisRound.map(decision => [decision.id, decision]))
+  for (const submission of submissionsById.values()) {
+    const dp = decisionById.get(submission.decisionPointId)
+    if (!dp) continue
+    let vec = dp.options.find(option => option.id === submission.optionId)?.outcomeVector
     if (!vec) {
       // Impliciete submission (van finalizeDecision) zonder authored implicit-option:
       // val terug op de scenario-implicit vector, anders de "geen besluit" default.

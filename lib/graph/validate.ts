@@ -12,8 +12,34 @@ export interface GraphIssue {
   message: string
 }
 
+const SCORE_DIMENSIONS = ['CONT', 'FOR', 'BC', 'JUR', 'VER', 'KOS'] as const
+
+export function validateDecisionScoring(graph: ScenarioGraph): GraphIssue[] {
+  const issues: GraphIssue[] = []
+  for (const node of graph.nodes) {
+    if (node.type !== 'decision') continue
+    const decision = node.data as DecisionNodeData
+    for (const option of decision.options) {
+      if (!option.outcomeVector) {
+        issues.push({ severity: 'error', nodeId: node.id, message: `Optie "${option.label}" heeft geen score per dimensie. Vul bewust 0 in als de keuze geen effect heeft.` })
+        continue
+      }
+      for (const dimension of SCORE_DIMENSIONS) {
+        const value = option.outcomeVector[dimension]
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          issues.push({ severity: 'error', nodeId: node.id, message: `Optie "${option.label}" mist een geldige numerieke score voor ${dimension}.` })
+        } else if (value < -3 || value > 3) {
+          issues.push({ severity: 'warning', nodeId: node.id, message: `Optie "${option.label}" — score ${value} voor ${dimension} valt buiten de aanbevolen −2..+2 range.` })
+        }
+      }
+    }
+  }
+  return issues
+}
+
 export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
   const issues: GraphIssue[] = []
+  issues.push(...validateDecisionScoring(graph))
   const nodesById = new Map<string, GraphNode>(graph.nodes.map(n => [n.id, n]))
 
   const starts = graph.nodes.filter(n => n.type === "start")
@@ -241,33 +267,6 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
           nodeId: round.id,
           message: `Rol "${ROLE_META[role]?.label ?? role}" heeft geen beslisoptie in ronde "${rd.title || round.id.slice(0, 8)}". Elke rol die ergens in het scenario voorkomt moet in elke ronde iets te beslissen hebben.`,
         })
-      }
-    }
-  }
-
-  // ── Decision options must carry outcomeVector (Phase E scoring) ──
-  for (const n of graph.nodes) {
-    if (n.type !== "decision") continue
-    const dd = n.data as DecisionNodeData
-    for (const o of dd.options) {
-      if (o.implicit) continue  // "geen besluit" — implicit vector handled by engine
-      if (!o.outcomeVector) {
-        issues.push({
-          severity: "warning",
-          nodeId: n.id,
-          message: `Optie "${o.label}" heeft geen outcomeVector — zonder trade-off op de 6 dimensies vervalt de scoring naar de qualityRank-fallback.`,
-        })
-      } else {
-        // Sanity check on values.
-        const dims: Array<'CONT' | 'FOR' | 'BC' | 'JUR' | 'VER' | 'KOS'> = ['CONT', 'FOR', 'BC', 'JUR', 'VER', 'KOS']
-        for (const d of dims) {
-          const v = o.outcomeVector[d]
-          if (typeof v !== "number") {
-            issues.push({ severity: "error", nodeId: n.id, message: `Optie "${o.label}" mist een numerieke waarde op dimensie ${d}.` })
-          } else if (v < -3 || v > 3) {
-            issues.push({ severity: "warning", nodeId: n.id, message: `Optie "${o.label}" — waarde ${v} op ${d} valt buiten de aanbevolen −2..+2 range.` })
-          }
-        }
       }
     }
   }

@@ -27,16 +27,13 @@ const DIMS: readonly (keyof OutcomeVector)[] = ['CONT', 'FOR', 'BC', 'JUR', 'VER
 // Sum outcome-vectors from every decision option that was selected. Options
 // without an explicit outcomeVector contribute zero.
 function collectOutcomeVectors(graph: ScenarioGraph, submissions: SubmissionRef[]): OutcomeVector[] {
-  const optionIds = new Set(submissions.map(s => s.optionId).filter(Boolean) as string[])
-  const actionIds = new Set(submissions.map(s => s.actionId).filter(Boolean) as string[])
   const vectors: OutcomeVector[] = []
-  for (const n of graph.nodes) {
-    if (n.type !== 'decision') continue
-    const d = n.data as DecisionNodeData
-    for (const opt of d.options) {
-      const matched = optionIds.has(opt.id) || actionIds.has(opt.id) || (opt.roleActionId ? actionIds.has(opt.roleActionId) : false)
-      if (!matched) continue
-      if (opt.outcomeVector) vectors.push(opt.outcomeVector)
+  const options = graph.nodes
+    .filter(n => n.type === 'decision')
+    .flatMap(n => (n.data as DecisionNodeData).options)
+  for (const submission of submissions) {
+    for (const option of options) {
+      if (option.outcomeVector && matchesOption(option, submission)) vectors.push(option.outcomeVector)
     }
   }
   return vectors

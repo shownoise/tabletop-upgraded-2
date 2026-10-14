@@ -28,8 +28,8 @@ export function scoreExercise(input: ExerciseInput): ScoringOutput {
   const { scenario, roster, events, mode } = input
   const resolution = resolveRoles(roster, scenario, firstStart(events))
 
-  const outcomes = scenario.rounds.map(r => computeRoundOutcome(scenario, events, r.number))
-  const totalPoints = outcomes.reduce((s, o) => s + o.points, 0)
+  const outcomes = scenario.rounds.map(r => computeRoundOutcome(scenario, events, r.number, mode === 'EVENT'))
+  const totalPoints = outcomes.reduce((total, outcome) => total + (outcome.hasSubmissions ? outcome.points : 0), 0)
 
   // Een beantwoorde optionele keuze telt al mee in de score en mag in het rapport
   // daarom niet als overgeslagen worden beschreven.

@@ -28,7 +28,8 @@ export async function GET(req: Request) {
   }
   const url = new URL(req.url)
   const format = url.searchParams.get('format') ?? 'json'
-  const mode = url.searchParams.get('mode') === 'EVENT' ? 'EVENT' : 'ASSESSMENT'
+  const mode = url.searchParams.get('mode') === 'EVENT' || (url.searchParams.get('mode') === null && state.session.mode === 'event')
+    ? 'EVENT' : 'ASSESSMENT'
   const byGroup = url.searchParams.get('byGroup') === 'true'
 
   const input = sessionToScoringInput(state.session, { mode })

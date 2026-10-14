@@ -21,4 +21,11 @@ describe('graph outcome scoring', () => {
     expect(scoreCoverage(graph, submissions)).toEqual({ scored: 0, submitted: 1 })
     expect(scoreByDimension(graph, submissions)).toEqual({ CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 })
   })
+
+  it('counts the same authored option once for each submitted team', () => {
+    const submissions = [{ actionId: option.id }, { actionId: option.id }]
+    expect(scoreCoverage(graph, submissions)).toEqual({ scored: 2, submitted: 2 })
+    const doubled = Object.fromEntries(Object.entries(option.outcomeVector!).map(([dim, value]) => [dim, value * 2]))
+    expect(scoreByDimension(graph, submissions)).toEqual(doubled)
+  })
 })

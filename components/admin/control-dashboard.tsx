@@ -108,10 +108,13 @@ export function ControlDashboard() {
   const [copied, setCopied] = useState(false)
   const [decisionsOpen, setDecisionsOpen] = useState(false)
   const session = state.session
-  const totalRounds = session?.scenario.rounds.length ?? 0
+  const totalRounds = session?.graph
+    ? session.graph.nodes.filter(node => node.type === 'round').length
+    : session?.scenario.rounds.length ?? 0
   const currentIndex = session?.currentRound ?? -1
   const currentRound = session && currentIndex >= 0 ? session.scenario.rounds[currentIndex] : null
   const currentPhase: RoundPhase = session?.roundPhase ?? "inject"
+  const isCoreEvent = session?.mode === 'event' && !!session.graph
   const escalationIndex = Math.min(Math.max(currentIndex, 0), 3)
 
   async function advancePhase() {
@@ -318,9 +321,9 @@ export function ControlDashboard() {
               )}
               {isActive && (
                 <>
-                  <Button size="sm" variant="outline" onClick={() => run("prev", () => api.prevRound())} disabled={working !== null || currentIndex <= 0} className="gap-1.5 font-mono uppercase tracking-wider">
+                  {!isCoreEvent && <Button size="sm" variant="outline" onClick={() => run("prev", () => api.prevRound())} disabled={working !== null || currentIndex <= 0} className="gap-1.5 font-mono uppercase tracking-wider">
                     <ChevronLeft className="size-3.5" />{tr(lang, "prevRound")}
-                  </Button>
+                  </Button>}
                   {/* Finalize decision — server-side transition from DECISION to REVIEW. Missing participants get an implicit "no decision". */}
                   {session.roundPhase === "decision" && (
                     <Button
@@ -382,7 +385,7 @@ export function ControlDashboard() {
           <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "currentPhase")}</span>
-              <div className="flex items-center gap-1.5">
+              {!isCoreEvent && <div className="flex items-center gap-1.5">
                 <Button
                   size="sm"
                   variant="outline"
@@ -401,7 +404,7 @@ export function ControlDashboard() {
                 >
                   Volgende fase <PhaseArrow className="size-3" />
                 </Button>
-              </div>
+              </div>}
             </div>
             {/* Phase progress indicator */}
             <div className="flex items-center gap-2">
@@ -425,7 +428,7 @@ export function ControlDashboard() {
               })}
             </div>
             {/* Decisions toggle — show in review or decision phase */}
-            {(currentPhase === "decision" || currentPhase === "review") && currentRound && (
+            {!isCoreEvent && (currentPhase === "decision" || currentPhase === "review") && currentRound && (
               <button
                 onClick={() => setDecisionsOpen(v => !v)}
                 className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-2.5 hover:bg-card transition-colors"
@@ -447,7 +450,7 @@ export function ControlDashboard() {
                 <ChevronRight className={`size-4 text-muted-foreground transition-transform ${decisionsOpen ? "rotate-90" : ""}`} />
               </button>
             )}
-            {decisionsOpen && currentRound && (
+            {!isCoreEvent && decisionsOpen && currentRound && (
               <div className="rounded-xl border border-border bg-card p-4">
                 <DecisionsView
                   decisions={(session.submittedDecisions ?? []).filter(d => d.roundIndex === currentIndex)}
@@ -466,7 +469,7 @@ export function ControlDashboard() {
         )}
 
         {/* Facilitator notes — shown when current round has AI-generated guidance */}
-        {isActive && currentRound?.facilitatorNotes && (() => {
+        {!isCoreEvent && isActive && currentRound?.facilitatorNotes && (() => {
           const notes = currentRound.facilitatorNotes!
           return (
             <div
@@ -522,19 +525,19 @@ export function ControlDashboard() {
         })()}
 
         {/* DISCUSSION-phase static hint — BOB as suggested working method, no engine state. */}
-        {isActive && session.roundPhase === "discussion" && <DiscussionHelper />}
+        {!isCoreEvent && isActive && session.roundPhase === "discussion" && <DiscussionHelper />}
 
         {/* Phase 5 — noise-inject library. Only visible during DISCUSSION. Never scored. */}
-        {isActive && session.roundPhase === "discussion" && <PremadeInjectPanel session={session} />}
+        {!isCoreEvent && isActive && session.roundPhase === "discussion" && <PremadeInjectPanel session={session} />}
 
         {/* Toezichthouder-rapport — beschikbaar zodra sessie loopt */}
-        <ToezichthouderReportPanel />
+        {!isCoreEvent && <ToezichthouderReportPanel />}
 
         {/* Regulatory obligations — data-driven meldplicht state, real-time */}
-        <RegulatoryObligationsPanel session={session} />
+        {!isCoreEvent && <RegulatoryObligationsPanel session={session} />}
 
         {/* Participant-filed meldingen — only renders if any have been filed. */}
-        <MeldingenPanel session={session} />
+        {!isCoreEvent && <MeldingenPanel session={session} />}
 
         {/* Main layout: inject controls + sidebar */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -592,10 +595,10 @@ export function ControlDashboard() {
             </div>
 
             {/* Graph path panel — only for graph-driven sessions */}
-            {session.graph && <GraphPathPanel session={session} />}
+            {!isCoreEvent && session.graph && <GraphPathPanel session={session} />}
 
             {/* Event mode help — verschijnt in lobby en actieve sessie */}
-            {session.mode === "event" && (isActive || isLobby) && (
+            {session.mode === "event" && isLobby && (
               <EventModeHelp joinCode={session.joinCode} />
             )}
 
@@ -610,12 +613,12 @@ export function ControlDashboard() {
             )}
 
             {/* Phase 7 — facilitator-only round-review narrative. Renders during REVIEW. */}
-            {isActive && session.roundPhase === "review" && (
+            {!isCoreEvent && isActive && session.roundPhase === "review" && (
               <RoundReviewNarrativePanel session={session} roundIndex={currentIndex} />
             )}
 
             {/* Locked-at-start inject → recipient routing */}
-            {(session.injectRoutePlan || session.status === "active") && (
+            {!isCoreEvent && (session.injectRoutePlan || session.status === "active") && (
               <InjectRoutePlan
                 session={session}
                 teamRoles={buildTeamRoles()}
@@ -624,18 +627,18 @@ export function ControlDashboard() {
             )}
 
             {/* Fact-check panel — live tag distribution + ground truth (facilitator-only) */}
-            <FactCheckPanel session={session} />
+            {!isCoreEvent && <FactCheckPanel session={session} />}
 
             {/* Specials panel — shown when mode is not off */}
-            {session.config.specialsMode && session.config.specialsMode !== "off" && (
+            {!isCoreEvent && session.config.specialsMode && session.config.specialsMode !== "off" && (
               <SpecialsPanel session={session} />
             )}
 
             {/* Scenario summary */}
-            <div className="rounded-xl border border-border bg-card px-4 py-4">
+            {!isCoreEvent && <div className="rounded-xl border border-border bg-card px-4 py-4">
               <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "scenarioSummary")}</span>
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground line-clamp-4">{session.scenario.scenario_summary}</p>
-            </div>
+            </div>}
 
             {/* Timeline */}
             <details className="group rounded-xl border border-border bg-card">

@@ -49,7 +49,7 @@ import type {
   StartNodeData,
 } from "@/lib/graph/types"
 import { EYE_SECURITY_RETAINER, DEFAULT_FEATURES } from "@/lib/graph/types"
-import { validateGraph } from "@/lib/graph/validate"
+import { validateDecisionScoring, validateGraph } from "@/lib/graph/validate"
 import type { ScenarioType } from "@/lib/types"
 import type { WizardConfig, CompanySize } from "@/lib/wizard/config"
 import type { AdminClient } from "@/lib/admin/clients"
@@ -631,8 +631,12 @@ function InnerCanvas() {
 
   const handlePublish = useCallback(async () => {
     const graph = buildGraph()
-    // Validate voor informatie — laat de builder zelf beslissen. Onvolledige
-    // graphs mogen publiceren; de facilitator vangt gaten tijdens de sessie op.
+    const scoringErrors = validateDecisionScoring(graph).filter(issue => issue.severity === 'error')
+    if (scoringErrors.length > 0) {
+      setStatus({ kind: 'error', text: `Publiceren geblokkeerd: ${scoringErrors.length} keuze${scoringErrors.length === 1 ? '' : 's'} zonder geldige zesdimensionale score. ${scoringErrors[0].message}` })
+      return
+    }
+    // Other validation findings remain visible to the author.
     const issues = validateGraph(graph)
     const errors = issues.filter(i => i.severity === "error")
     const res = await fetch("/api/scenario-graph", {
