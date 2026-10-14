@@ -1,5 +1,6 @@
 import { ROLE_META } from "@/lib/types"
 import type { SessionState } from "@/lib/types"
+import { scoreCoverage, submissionsFromDecisions } from "@/lib/graph/outcome-selector"
 
 function fmt(ts: number): string {
   return new Date(ts).toLocaleString("nl-NL", {
@@ -15,6 +16,8 @@ export function exportReportMarkdown(session: SessionState): string {
   const graph = session.graph
   const state = session.graphState
   const nodeById = graph ? new Map(graph.nodes.map(n => [n.id, n])) : new Map()
+  const coverage = graph ? scoreCoverage(graph, submissionsFromDecisions(session.submittedDecisions ?? [])) : null
+  const outcomeUnreliable = !!coverage && (coverage.submitted === 0 || coverage.scored < coverage.submitted)
 
   lines.push(`# ${session.scenario.scenario_title ?? "Cyber Crisis Rapport"}`)
   lines.push("")
@@ -23,7 +26,11 @@ export function exportReportMarkdown(session: SessionState): string {
   lines.push("")
 
   lines.push("## Uitkomst")
-  if (state?.finalOutcome) {
+  if (outcomeUnreliable) {
+    lines.push(`Automatische uitkomst niet betrouwbaar: ${coverage?.scored} van ${coverage?.submitted} keuzes zijn aan een scorevector gekoppeld.`)
+    lines.push("Bespreek de effecten per dimensie handmatig; ontbrekende punten betekenen niet nul impact.")
+    lines.push("")
+  } else if (state?.finalOutcome) {
     lines.push(`### ${state.finalOutcome.label}`)
     lines.push(state.finalOutcome.narrative)
     lines.push("")

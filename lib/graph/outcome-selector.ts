@@ -6,6 +6,21 @@ interface SubmissionRef {
   optionId?: string
 }
 
+function matchesOption(option: DecisionNodeData['options'][number], submission: SubmissionRef): boolean {
+  return submission.optionId === option.id || submission.actionId === option.id ||
+    (option.roleActionId !== undefined && submission.actionId === option.roleActionId)
+}
+
+export function scoreCoverage(graph: ScenarioGraph, submissions: SubmissionRef[]): { scored: number; submitted: number } {
+  const options = graph.nodes
+    .filter(n => n.type === 'decision')
+    .flatMap(n => (n.data as DecisionNodeData).options)
+  return {
+    scored: submissions.filter(submission => options.some(option => option.outcomeVector && matchesOption(option, submission))).length,
+    submitted: submissions.length,
+  }
+}
+
 // The 6 outcome dimensions — CONT/FOR/BC/JUR/VER/KOS.
 const DIMS: readonly (keyof OutcomeVector)[] = ['CONT', 'FOR', 'BC', 'JUR', 'VER', 'KOS'] as const
 
@@ -19,7 +34,7 @@ function collectOutcomeVectors(graph: ScenarioGraph, submissions: SubmissionRef[
     if (n.type !== 'decision') continue
     const d = n.data as DecisionNodeData
     for (const opt of d.options) {
-      const matched = optionIds.has(opt.id) || (opt.roleActionId ? actionIds.has(opt.roleActionId) : false)
+      const matched = optionIds.has(opt.id) || actionIds.has(opt.id) || (opt.roleActionId ? actionIds.has(opt.roleActionId) : false)
       if (!matched) continue
       if (opt.outcomeVector) vectors.push(opt.outcomeVector)
     }

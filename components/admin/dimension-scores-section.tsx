@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { TrendingUp } from "lucide-react"
 import type { SessionState } from "@/lib/types"
 import type { ScenarioGraph, OutcomeVector } from "@/lib/graph/types"
-import { cumulativeScore, scoreByDimension, submissionsFromDecisions } from "@/lib/graph/outcome-selector"
+import { cumulativeScore, scoreByDimension, scoreCoverage, submissionsFromDecisions } from "@/lib/graph/outcome-selector"
 
 // The 6 canonical outcome dimensions — trade-off axes. Each is a tension, not
 // a "good/bad" scale; the value reflects how the team's decisions have loaded
@@ -40,6 +40,13 @@ export function DimensionScoresSection() {
   if (!session?.graph || !session.submittedDecisions?.length) return null
   const graph = session.graph as ScenarioGraph
   const subs = submissionsFromDecisions(session.submittedDecisions)
+  const coverage = scoreCoverage(graph, subs)
+  if (coverage.scored === 0) {
+    return <section className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 text-sm">
+      <h2 className="font-semibold">Punten per dimensie niet vastgesteld</h2>
+      <p className="mt-1 text-muted-foreground">Geen van de {coverage.submitted} ingediende keuzes is gekoppeld aan een scorevector. Bespreek de effecten van elke keuze handmatig.</p>
+    </section>
+  }
   const total = cumulativeScore(graph, subs)
   const byDim = scoreByDimension(graph, subs)
 
@@ -48,6 +55,9 @@ export function DimensionScoresSection() {
 
   return (
     <section className="flex flex-col gap-5">
+      {coverage.scored < coverage.submitted && <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+        De punten hieronder zijn onvolledig: {coverage.scored} van {coverage.submitted} keuzes zijn meegeteld.
+      </p>}
       <div>
         <div className="flex items-center gap-2 mb-3">
           <TrendingUp className="size-4 text-primary" />

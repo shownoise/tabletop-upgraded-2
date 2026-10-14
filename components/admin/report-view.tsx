@@ -2,14 +2,36 @@
 
 import { useEffect, useState } from "react"
 import { FileText, AlertTriangle, AlertCircle, CheckCircle, TrendingUp, Clock, BookOpen, Wrench, Target } from "lucide-react"
-import type { SessionReport, GovernanceFlag, TimelineEvent } from "@/lib/types"
+import type { SessionReport, GovernanceFlag, TimelineEvent, SessionState } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
+import type { OutcomeVector, ScenarioGraph } from "@/lib/graph/types"
+import { scoreByDimension, scoreCoverage } from "@/lib/graph/outcome-selector"
 import { api } from "@/lib/api-client"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
 import { GraphReportSection } from "./graph-report-section"
 import { LessonsLearnedSection } from "./lessons-learned-section"
 import { DimensionScoresSection } from "./dimension-scores-section"
+
+const DIMENSION_LABELS: Record<keyof OutcomeVector, string> = {
+  CONT: "Containment", FOR: "Forensiek", BC: "Continuïteit",
+  JUR: "Juridisch", VER: "Verantwoording", KOS: "Kosten",
+}
+
+function DecisionImpact({ graph, actionId }: { graph: ScenarioGraph; actionId: string }) {
+  const submission = [{ actionId }]
+  if (scoreCoverage(graph, submission).scored === 0) {
+    return <span className="text-xs text-amber-600">Punten niet vastgesteld — bespreek de impact handmatig</span>
+  }
+  const vector = scoreByDimension(graph, submission)
+  return <div className="flex flex-wrap gap-1.5" aria-label="Impact per scoringsdimensie">
+    {(Object.entries(DIMENSION_LABELS) as Array<[keyof OutcomeVector, string]>).map(([dim, label]) => (
+      <span key={dim} className="rounded border border-border bg-background px-2 py-0.5 font-mono text-[10px]">
+        {label} {vector[dim] > 0 ? "+" : ""}{vector[dim]}
+      </span>
+    ))}
+  </div>
+}
 
 function ScoreCard({ label, value, color }: { label: string; value: number; color: "primary" | "amber" | "destructive" }) {
   const colorClass = {
@@ -30,6 +52,13 @@ function ScoreCard({ label, value, color }: { label: string; value: number; colo
 
 function generateExecutiveSummary(report: SessionReport): string {
   const n = report.perRound.reduce((s, r) => s + r.decisions.length, 0)
+  if (report.graphScoring) {
+    return `Tijdens deze oefening zijn ${n} keuzes vastgelegd over ${report.totalRounds} rondes. ` +
+      `${report.graphScoring.scored} van ${report.graphScoring.submitted} keuzes zijn aan een scorevector gekoppeld. ` +
+      (report.graphScoring.scored < report.graphScoring.submitted || report.graphScoring.submitted === 0
+        ? `De overige keuzes vragen om handmatige bespreking door de facilitator.`
+        : `Bespreek de afweging per dimensie met de deelnemers.`)
+  }
   const flags = report.topFlags
   const wrongRole = flags.filter(f => f.type === "wrong_role").length
   const irDev = flags.filter(f => f.type === "ir_plan_deviation").length
@@ -57,7 +86,7 @@ function generateExecutiveSummary(report: SessionReport): string {
   return summary
 }
 
-function generateImprovements(flags: GovernanceFlag[]): string[] {
+function generateImprovements(flags: GovernanceFlag[], graphScoring?: SessionReport['graphScoring']): string[] {
   const improvements: string[] = []
   const wrongRoleFlags = flags.filter(f => f.type === "wrong_role")
   const irDevFlags = flags.filter(f => f.type === "ir_plan_deviation")
@@ -81,7 +110,7 @@ function generateImprovements(flags: GovernanceFlag[]): string[] {
     improvements.push("Document a ransomware decision process with clear role responsibilities for payment authorization before the next exercise.")
   }
 
-  if (wrongRoleFlags.length === 0 && irDevFlags.length === 0) {
+  if (!graphScoring && wrongRoleFlags.length === 0 && irDevFlags.length === 0) {
     improvements.push("Team correctly followed role boundaries and best practice — no governance flags recorded. Excellent exercise discipline.")
   }
 
@@ -112,6 +141,7 @@ interface Props {
 export function ReportView({ lang }: Props) {
   const [report, setReport] = useState<SessionReport | null>(null)
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
+  const [session, setSession] = useState<SessionState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -130,8 +160,11 @@ export function ReportView({ lang }: Props) {
   useEffect(() => {
     fetch("/api/session/state")
       .then(r => r.json())
-      .then((data: { session?: { timeline?: TimelineEvent[] } }) => {
-        if (data?.session?.timeline) setTimeline(data.session.timeline)
+      .then((data: { session?: SessionState }) => {
+        if (data?.session) {
+          setSession(data.session)
+          setTimeline(data.session.timeline ?? [])
+        }
       })
       .catch(() => {})
   }, [])
@@ -161,8 +194,10 @@ export function ReportView({ lang }: Props) {
   const scoreColor = (v: number): "primary" | "amber" | "destructive" =>
     v >= 70 ? "primary" : v >= 40 ? "amber" : "destructive"
 
+  const scoringIncomplete = !!report.graphScoring &&
+    (report.graphScoring.submitted === 0 || report.graphScoring.scored < report.graphScoring.submitted)
   const executiveSummary = generateExecutiveSummary(report)
-  const improvements = generateImprovements(report.topFlags)
+  const improvements = generateImprovements(report.topFlags, report.graphScoring)
   const wrongRoleFlags = report.topFlags.filter(f => f.type === "wrong_role")
   const irDevFlags = report.topFlags.filter(f => f.type === "ir_plan_deviation")
   const sortedTimeline = [...timeline].sort((a, b) => a.timestamp - b.timestamp)
@@ -191,6 +226,16 @@ export function ReportView({ lang }: Props) {
         </div>
       </div>
 
+      {scoringIncomplete && (
+        <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 text-sm">
+          <p className="font-semibold">Automatische score en uitkomst niet betrouwbaar</p>
+          <p className="mt-1 text-muted-foreground">
+            {report.graphScoring?.scored} van {report.graphScoring?.submitted} ingediende keuzes hebben een gekoppelde scorevector.
+            Bespreek de afweging per dimensie handmatig; ontbrekende punten betekenen niet nul impact.
+          </p>
+        </div>
+      )}
+
       {/* Scenario graph path (only when session was graph-driven) */}
       <GraphReportSection />
 
@@ -212,7 +257,7 @@ export function ReportView({ lang }: Props) {
       </section>
 
       {/* Score summary */}
-      <section>
+      {!report.graphScoring && <section>
         <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-3">Summary Scores</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <ScoreCard label={tr(lang, "decisionQuality")} value={report.scores.decisionQuality} color={scoreColor(report.scores.decisionQuality)} />
@@ -224,7 +269,7 @@ export function ReportView({ lang }: Props) {
           <p className="text-xs text-muted-foreground">% of decisions aligned with IR plan</p>
           <p className="text-xs text-muted-foreground">% of decisions by authorized role</p>
         </div>
-      </section>
+      </section>}
 
       {/* Learning Objectives */}
       {(report.perObjective?.length ?? 0) > 0 && (
@@ -382,6 +427,7 @@ export function ReportView({ lang }: Props) {
                             )}
                           </div>
                           <span className="text-sm text-foreground">{d.actionLabel}</span>
+                          {session?.graph && <DecisionImpact graph={session.graph} actionId={d.actionId} />}
                           {d.reasoning && <span className="text-xs text-muted-foreground italic">"{d.reasoning}"</span>}
                         </div>
                         {!d.isWrongRole && !d.isIrDeviation && (
