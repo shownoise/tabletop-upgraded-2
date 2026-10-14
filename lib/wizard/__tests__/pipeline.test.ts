@@ -11,7 +11,9 @@ import type { InjectNodeData } from "@/lib/graph/types"
 
 interface StubResponses {
   outline: string
+  outlineRetry?: string
   rounds: string[]        // one per round index
+  roundRetries?: string[] // second response when the first round JSON is malformed
   // Closer is nu opgesplitst in 3 aparte calls.
   meta: string            // { name, scenarioType, irPlaybook, outcomes }
   briefings: string       // { roleBriefings }
@@ -23,6 +25,8 @@ interface StubResponses {
 
 function buildStub(resp: StubResponses): { llm: (m: LlmMessage[]) => Promise<string>; calls: string[] } {
   const calls: string[] = []
+  const roundCallCounts = new Map<number, number>()
+  let outlineCalls = 0
   return {
     calls,
     async llm(messages) {
@@ -31,6 +35,9 @@ function buildStub(resp: StubResponses): { llm: (m: LlmMessage[]) => Promise<str
       if (last.startsWith("Genereer ronde ")) {
         const match = last.match(/^Genereer ronde (\d+)/)
         const idx = match ? Math.max(0, Number(match[1]) - 1) : 0
+        const count = roundCallCounts.get(idx) ?? 0
+        roundCallCounts.set(idx, count + 1)
+        if (count > 0 && resp.roundRetries?.[idx]) return resp.roundRetries[idx]
         return resp.rounds[idx] ?? resp.rounds[resp.rounds.length - 1]
       }
       if (last.startsWith("Genereer uitsluitend het keuzemoment voor ronde ")) {
@@ -43,7 +50,10 @@ function buildStub(resp: StubResponses): { llm: (m: LlmMessage[]) => Promise<str
         const idx = match ? Math.max(0, Number(match[1]) - 1) : 0
         return resp.lessons?.[idx] ?? ""
       }
-      if (last.startsWith("Genereer eerst een OUTLINE")) return resp.outline
+      if (last.startsWith("Genereer eerst een OUTLINE")) {
+        outlineCalls += 1
+        return outlineCalls > 1 && resp.outlineRetry ? resp.outlineRetry : resp.outline
+      }
       if (last.startsWith("De vorige plan overtreedt")) return resp.repair ?? ""
       // Closer-splits: match op de meest onderscheidende key in de prompt.
       if (last.includes('"roleBriefings"')) return resp.briefings
@@ -431,6 +441,30 @@ describe("wizard pipeline — draft status + seed on graph", () => {
 })
 
 describe("wizard pipeline — defensive parsing", () => {
+  it("retries malformed outline JSON before generating any rounds", async () => {
+    const plan = passingPlan()
+    const base = stubFromPlan(plan)
+    const stub = buildStub({ ...base, outline: '{ "rounds": [ }', outlineRetry: base.outline })
+
+    const result = await runWizardPipeline(testConfig(), { llm: stub.llm, maxRepairAttempts: 0, now: () => 1 })
+    expect(result.graph.nodes.filter(node => node.type === 'round')).toHaveLength(2)
+    expect(stub.calls.filter(call => call.startsWith('Genereer eerst een OUTLINE'))).toHaveLength(2)
+  })
+
+  it("retries malformed JSON from one round without restarting the whole wizard", async () => {
+    const plan = passingPlan()
+    const base = stubFromPlan(plan)
+    const stub = buildStub({
+      ...base,
+      rounds: ['{ "round": { "title": "R1" "situation": "broken" } }', base.rounds[1]],
+      roundRetries: [base.rounds[0]],
+    })
+
+    const result = await runWizardPipeline(testConfig(), { llm: stub.llm, maxRepairAttempts: 0, now: () => 1 })
+    expect(result.graph.nodes.filter(node => node.type === 'decision')).toHaveLength(2)
+    expect(stub.calls.filter(call => call.startsWith('Genereer ronde 1'))).toHaveLength(2)
+  })
+
   it("does not crash with 'options.map' TypeError when decision.options is not an array", async () => {
     const plan = passingPlan()
     const base = stubFromPlan(plan)
