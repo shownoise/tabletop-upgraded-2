@@ -52,6 +52,7 @@ import { EYE_SECURITY_RETAINER, DEFAULT_FEATURES } from "@/lib/graph/types"
 import { validateDecisionScoring, validateGraph } from "@/lib/graph/validate"
 import type { ScenarioType } from "@/lib/types"
 import type { WizardConfig, CompanySize } from "@/lib/wizard/config"
+import type { RuleFailure } from "@/lib/wizard/framework"
 import type { AdminClient } from "@/lib/admin/clients"
 
 function companySizeFromEmployees(n: number): CompanySize {
@@ -228,6 +229,7 @@ function InnerCanvas() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState<{ kind: "info" | "error"; text: string } | null>(null)
+  const [wizardWarnings, setWizardWarnings] = useState<RuleFailure[]>([])
   // Als er ?wizard=1 in de URL staat (vanuit /admin/quality "Genereer via wizard")
   // slaan we de startup-dialog over. De wizard-dialoog opent pas nadat een
   // eventuele klant-prefill binnen is (useEffect verderop). window.location is
@@ -452,6 +454,7 @@ function InnerCanvas() {
     setNodes(toFlowNodes(g))
     setEdges([])
     setSelectedId(null)
+    setWizardWarnings([])
   }, [setNodes, setEdges])
 
   const handleLoad = useCallback((g: ScenarioGraph) => {
@@ -468,7 +471,16 @@ function InnerCanvas() {
     setNodes(toFlowNodes(g))
     setEdges(toFlowEdges(g))
     setSelectedId(null)
+    setWizardWarnings([])
   }, [setNodes, setEdges])
+
+  const handleWizardGenerated = useCallback((g: ScenarioGraph, meta: { warnings: RuleFailure[] }) => {
+    handleLoad(g)
+    setWizardWarnings(meta.warnings)
+    setStatus({ kind: 'info', text: meta.warnings.length > 0
+      ? `Concept geopend met ${meta.warnings.length} kwaliteitswaarschuwing${meta.warnings.length === 1 ? '' : 'en'}. Controleer deze voor gebruik.`
+      : 'AI-concept geopend. Controleer de inhoud en scores voor gebruik.' })
+  }, [handleLoad])
 
   // Auto-load on mount als de URL ?id=<graphId> bevat (vanuit de admin
   // scenario-list of klant-detail). Idempotent per graphId zodat we niet in
@@ -667,6 +679,7 @@ function InnerCanvas() {
         onPlaybookChange={p => setGraphMeta(g => ({ ...g, irPlaybook: p }))}
         onSave={handleSave}
         onLoad={handleLoad}
+        onWizardGenerated={handleWizardGenerated}
         onNew={handleNew}
         onValidate={handleValidate}
         onPublish={handlePublish}
@@ -684,6 +697,19 @@ function InnerCanvas() {
         >
           {status.text}
         </div>
+      )}
+      {wizardWarnings.length > 0 && (
+        <section aria-label="Kwaliteitswaarschuwingen AI-concept" className="border-b border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          <p className="font-semibold">AI-concept: controleer deze punten voordat je het scenario gebruikt</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {wizardWarnings.map(warning => (
+              <li key={warning.ruleId}>
+                <span className="font-medium">{warning.ruleId === 'rule3_no_dominant' ? 'Score-afweging' : 'Overgang tussen rondes'}:</span>{' '}
+                {warning.violation}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       <div className="flex flex-1 overflow-hidden">
         <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card overflow-y-auto">
@@ -835,7 +861,7 @@ function InnerCanvas() {
       <AiWizardDialog
         open={aiWizardOpen}
         onOpenChange={setAiWizardOpen}
-        onGenerated={handleLoad}
+        onGenerated={handleWizardGenerated}
         initialConfig={wizardPrefill}
       />
     </div>

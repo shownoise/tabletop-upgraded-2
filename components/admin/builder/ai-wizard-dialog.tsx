@@ -21,11 +21,12 @@ import {
 import type { Role } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import { REGULATORY_REGIMES } from "@/lib/regulatory/regimes"
+import type { RuleFailure } from "@/lib/wizard/framework"
 
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onGenerated: (graph: ScenarioGraph, meta: { seed: string; repairLog: RepairLogEntry[] }) => void
+  onGenerated: (graph: ScenarioGraph, meta: { seed: string; repairLog: RepairLogEntry[]; warnings: RuleFailure[] }) => void
   // Optionele voor-invulling — bijv. vanuit /admin/quality met ?clientId=… naar de builder.
   // Wordt toegepast bij elke open-transition (false→true), overschrijft user-edits pas
   // bij volgende opening.
@@ -138,18 +139,19 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
         graph?: ScenarioGraph
         seed?: string
         repairLog?: RepairLogEntry[]
+        warnings?: RuleFailure[]
         error?: string
         failures?: Array<{ ruleId: string; violation: string; hint: string }>
       }
       if (controller.signal.aborted) return
       if (!res.ok || !data.ok || !data.graph) {
         const failMsg = data.failures?.map(f => `[${f.ruleId}] ${f.violation}`).join("; ")
-        setError(failMsg ? `${data.error ?? "Wizard fout"} — ${failMsg}` : (data.error ?? `HTTP ${res.status}`))
+        setError(data.error ?? failMsg ?? `HTTP ${res.status}`)
         if (data.seed && data.repairLog) setLastLog({ seed: data.seed, repairLog: data.repairLog })
         return
       }
       setLastLog({ seed: data.seed ?? "", repairLog: data.repairLog ?? [] })
-      onGenerated(data.graph, { seed: data.seed ?? "", repairLog: data.repairLog ?? [] })
+      onGenerated(data.graph, { seed: data.seed ?? "", repairLog: data.repairLog ?? [], warnings: data.warnings ?? [] })
       onOpenChange(false)
     } catch (err) {
       if (controller.signal.aborted) return
@@ -381,7 +383,7 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
 
         <div className="flex items-center justify-between gap-3 pt-1">
           <p className="text-[11px] text-muted-foreground">
-            Het framework wordt strikt afgedwongen — bij overtredingen doet de wizard één herstelpoging en toont daarna wat nog ontbreekt.
+            Keuzes, scores en verbindingen zijn verplicht. Redactionele aandachtspunten verschijnen als waarschuwing bij het concept.
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="ghost" onClick={loading ? cancel : () => onOpenChange(false)}>{loading ? 'Stop wachten' : 'Annuleren'}</Button>

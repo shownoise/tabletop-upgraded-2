@@ -171,6 +171,7 @@ export async function POST(req: Request) {
       graph: result.graph,
       seed: result.seed,
       repairLog: result.repairLog,
+      warnings: result.warnings,
     })
   } catch (err) {
     if (err instanceof WizardPipelineError) {
