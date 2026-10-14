@@ -166,7 +166,7 @@ function baseGraph(): ScenarioGraph {
 }
 
 describe("wizard framework — passing baseline", () => {
-  it("baseGraph + baseConfig passes all 12 rules", () => {
+  it("baseGraph + baseConfig passes all 13 rules", () => {
     const graph = baseGraph()
     const config = baseConfig()
     const result = validateFramework(graph, config)
@@ -174,7 +174,7 @@ describe("wizard framework — passing baseline", () => {
       throw new Error(`baseline expected to pass but got: ${result.failures.map(f => f.ruleId + ': ' + f.violation).join(' | ')}`)
     }
     expect(result.ok).toBe(true)
-    expect(FRAMEWORK_RULE_IDS.length).toBe(12)
+    expect(FRAMEWORK_RULE_IDS.length).toBe(13)
   })
 })
 
@@ -279,6 +279,14 @@ describe("rule 6 — every option maps to a dimension", () => {
     expect(res.ok).toBe(false)
     if (!res.ok) expect(res.violation).toContain('alle-nul')
     void AXES  // touch import
+  })
+  it("fails when a score vector omits a dimension", () => {
+    const g = baseGraph()
+    const d = g.nodes.find(n => n.id === 'D1')!.data as DecisionNodeData
+    d.options[0].outcomeVector = { CONT: 2 } as OutcomeVector
+    const res = ruleEveryDecisionMapsToDimension(g)
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.violation).toContain('FOR')
   })
 })
 

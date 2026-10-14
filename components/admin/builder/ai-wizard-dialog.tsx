@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -47,19 +47,13 @@ const COMPANY_SIZES: Array<{ id: CompanySize; label: string }> = [
 // AI wizard for creating a client-tailored starting scenario. The full
 // WizardConfig is exposed here — every field steers both the generation
 // prompt and the framework validation. The wizard always writes drafts.
-const PROGRESS_STEPS = [
-  { label: "Outline uitwerken…", estSeconds: 8 },
-  { label: "Rondes + closer parallel genereren…", estSeconds: 25 },
-  { label: "Framework valideren en repareren…", estSeconds: 15 },
-]
-
 export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig }: Props) {
   const [config, setConfig] = useState<WizardConfig>(() => ({ ...defaultWizardConfig(), ...initialConfig }))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastLog, setLastLog] = useState<{ seed: string; repairLog: RepairLogEntry[] } | null>(null)
-  const [progressStep, setProgressStep] = useState(0)
   const [elapsedSec, setElapsedSec] = useState(0)
+  const requestController = useRef<AbortController | null>(null)
 
   // Reset config bij open-transition zodat een nieuwe klant of nieuwe prefill
   // niet blijft hangen op de vorige state. User-edits binnen de dialoog blijven
@@ -69,25 +63,14 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  // Voortgangsanimatie tijdens loading — tijdgebaseerd (server heeft geen
-  // streaming events). Stap-labels rouleren op basis van geschatte tijden;
-  // elapsedSec drijft de progress-bar aan.
+  // Server stuurt geen voortgangsevents. Toon alleen verstreken tijd; een
+  // tijdgebaseerde stap of percentage zou ten onrechte echte voortgang lijken.
   useEffect(() => {
-    if (!loading) { setProgressStep(0); setElapsedSec(0); return }
+    if (!loading) { setElapsedSec(0); return }
     const startedAt = Date.now()
     const tick = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startedAt) / 1000)
-      setElapsedSec(elapsed)
-      // Bepaal huidige stap op basis van cumulatieve tijden.
-      let cum = 0
-      let step = 0
-      for (let i = 0; i < PROGRESS_STEPS.length; i++) {
-        cum += PROGRESS_STEPS[i].estSeconds
-        if (elapsed < cum) { step = i; break }
-        step = PROGRESS_STEPS.length - 1
-      }
-      setProgressStep(step)
-    }, 500)
+      setElapsedSec(Math.floor((Date.now() - startedAt) / 1000))
+    }, 1000)
     return () => clearInterval(tick)
   }, [loading])
 
@@ -122,6 +105,8 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
   ), [loading, config])
 
   async function submit() {
+    const controller = new AbortController()
+    requestController.current = controller
     setLoading(true)
     setError(null)
     setLastLog(null)
@@ -130,6 +115,7 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
+        signal: controller.signal,
       })
       // Bij platform-fouten (504 gateway timeout, 500 zonder body, edge-error)
       // komt hier HTML terug in plaats van JSON. res.json() gooit dan een
@@ -155,6 +141,7 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
         error?: string
         failures?: Array<{ ruleId: string; violation: string; hint: string }>
       }
+      if (controller.signal.aborted) return
       if (!res.ok || !data.ok || !data.graph) {
         const failMsg = data.failures?.map(f => `[${f.ruleId}] ${f.violation}`).join("; ")
         setError(failMsg ? `${data.error ?? "Wizard fout"} — ${failMsg}` : (data.error ?? `HTTP ${res.status}`))
@@ -165,6 +152,7 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
       onGenerated(data.graph, { seed: data.seed ?? "", repairLog: data.repairLog ?? [] })
       onOpenChange(false)
     } catch (err) {
+      if (controller.signal.aborted) return
       // Netwerk-fout, client cancel, of onverwachte parse. Log naar console
       // zodat je in devtools de exacte oorzaak ziet.
       console.error("Wizard submit failed:", err)
@@ -173,8 +161,18 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
         : "Onbekende fout — check browser-console."
       )
     } finally {
-      setLoading(false)
+      if (requestController.current === controller) {
+        requestController.current = null
+        setLoading(false)
+      }
     }
+  }
+
+  const cancel = () => {
+    requestController.current?.abort()
+    requestController.current = null
+    setLoading(false)
+    onOpenChange(false)
   }
 
   // Tijdens loading mag de dialog niet dismissible zijn — anders is de
@@ -371,36 +369,22 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
           </div>
         )}
 
-        {loading && (() => {
-          const totalEst = PROGRESS_STEPS.reduce((sum, s) => sum + s.estSeconds, 0)
-          // Progress-bar zit vast op 95% zodra we voorbij de geschatte tijd komen —
-          // vermijdt "100% maar wacht nog".
-          const pct = Math.min(95, Math.round((elapsedSec / totalEst) * 100))
-          return (
-            <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-3 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-foreground">{PROGRESS_STEPS[progressStep].label}</span>
-                <span className="font-mono text-muted-foreground">{elapsedSec}s</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-primary transition-all duration-500 ease-linear"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <div className="text-[10px] text-muted-foreground">
-                Stap {progressStep + 1} van {PROGRESS_STEPS.length}. Verwachte totale duur: ~{totalEst}s. Kan langer duren bij veel rondes of als de LLM extra repair-passes doet.
-              </div>
+        {loading && (
+          <div role="status" aria-live="polite" className="rounded-md border border-primary/30 bg-primary/5 px-3 py-3 text-xs">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium text-foreground">AI maakt en controleert het scenario…</span>
+              <span className="font-mono text-muted-foreground">{Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, '0')}</span>
             </div>
-          )
-        })()}
+            <p className="mt-1 text-muted-foreground">Dit kan 1–5 minuten duren. Er is nog geen echte voortgangsmeting; de teller toont alleen de verstreken tijd.</p>
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-3 pt-1">
           <p className="text-[11px] text-muted-foreground">
             Het framework wordt strikt afgedwongen — bij overtredingen doet de wizard één herstelpoging en toont daarna wat nog ontbreekt.
           </p>
           <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>Annuleren</Button>
+            <Button type="button" variant="ghost" onClick={loading ? cancel : () => onOpenChange(false)}>{loading ? 'Stop wachten' : 'Annuleren'}</Button>
             <Button type="button" onClick={submit} disabled={!canSubmit} className="gap-2">
               {loading ? <><Loader2 className="size-3.5 animate-spin" /> Genereren…</> : <><Sparkles className="size-3.5" /> Genereer</>}
             </Button>
