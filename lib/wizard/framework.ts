@@ -81,6 +81,21 @@ function decisionsInRound(graph: ScenarioGraph, roundNumber: number): Array<Grap
 // ───────────────────────────────────────────────────────────────────────────
 // Rule 1 — every decision has a setup-inject in same or previous round
 // ───────────────────────────────────────────────────────────────────────────
+export function ruleDecisionPerRound(graph: ScenarioGraph, config: WizardConfig): RuleResult {
+  const rounds = orderedRounds(graph)
+  const missing = rounds
+    .filter(({ roundNumber }) => decisionsInRound(graph, roundNumber).length !== 1)
+    .map(({ roundNumber }) => roundNumber)
+  if (rounds.length !== config.rounds || missing.length > 0) {
+    return {
+      ok: false,
+      violation: `Verwacht ${config.rounds} rondes met precies één gescoord keuzemoment per ronde; gevonden ${rounds.length} rondes, afwijking in ronde(s): ${missing.join(', ') || 'geen'}.`,
+      hint: `Voeg in elke ronde precies één perRole-decision toe voor de betrokken mandaatrollen uit ${config.rolesIncluded.join(', ')}. Iedere optie heeft een expliciete outcomeVector met CONT/FOR/BC/JUR/VER/KOS (nul is toegestaan als er geen effect is).`,
+    }
+  }
+  return { ok: true }
+}
+
 export function ruleEveryDecisionHasSetupInject(graph: ScenarioGraph): RuleResult {
   const map = buildRoundIndexMap(graph)
   const decisions = decisionNodes(graph)
@@ -119,9 +134,8 @@ export function ruleOptionsPerRoleMatchConfig(graph: ScenarioGraph, config: Wiza
       if (!opt.allowedRole) continue
       byRole.set(opt.allowedRole, (byRole.get(opt.allowedRole) ?? 0) + 1)
     }
-    // Only fail for roles that appear at all (an unhandled role is a different
-    // problem — see rule 10 / coverage warnings). Count must match the target
-    // exactly; off-by-one fails.
+    // Only roles that have mandate at this decision need options. Other
+    // selected roles may receive their own decisions elsewhere in the graph.
     for (const [role, count] of byRole) {
       if (count !== target) {
         problems.push(`${d.id} ${role}=${count}(target ${target})`)
@@ -288,15 +302,20 @@ export function ruleEveryDecisionMapsToDimension(graph: ScenarioGraph): RuleResu
         problems.push(`${d.id}: "${opt.label}" zonder outcomeVector`)
         continue
       }
-      const allZero = OUTCOME_AXES.every(ax => (v[ax] ?? 0) === 0)
+      const invalidAxes = OUTCOME_AXES.filter(ax => !Number.isInteger(v[ax]) || v[ax] < -2 || v[ax] > 2)
+      if (invalidAxes.length > 0) {
+        problems.push(`${d.id}: "${opt.label}" ongeldige score op ${invalidAxes.join(', ')}`)
+        continue
+      }
+      const allZero = OUTCOME_AXES.every(ax => v[ax] === 0)
       if (allZero) problems.push(`${d.id}: "${opt.label}" alle-nul vector`)
     }
   }
   if (problems.length === 0) return { ok: true }
   return {
     ok: false,
-    violation: `Opties zonder impact op enige as: ${problems.join('; ')}`,
-    hint: 'Elke decision-optie moet minstens één van CONT/FOR/BC/JUR/VER/KOS bewegen (waarde in -2..+2). Kies voor elke optie welke dimensie het duidelijkst raakt en zet daar minstens ±1.',
+    violation: `Ongeldige scorevectoren: ${problems.join('; ')}`,
+    hint: 'Elke optie heeft alle zes assen CONT/FOR/BC/JUR/VER/KOS met gehele waarden in -2..+2. Nul betekent geen effect op die as; minstens één as heeft een niet-nul waarde.',
   }
 }
 
@@ -550,6 +569,7 @@ export interface FrameworkResult {
 }
 
 const RULES: Array<{ id: string; fn: (g: ScenarioGraph, c: WizardConfig) => RuleResult }> = [
+  { id: 'rule0_decision_per_round',     fn: (g, c)  => ruleDecisionPerRound(g, c) },
   { id: 'rule1_setup_inject',           fn: (g)     => ruleEveryDecisionHasSetupInject(g) },
   { id: 'rule2_options_per_role',       fn: (g, c)  => ruleOptionsPerRoleMatchConfig(g, c) },
   { id: 'rule3_no_dominant',            fn: (g)     => ruleNoDominantOption(g) },

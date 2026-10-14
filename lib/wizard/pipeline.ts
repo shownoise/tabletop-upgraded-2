@@ -226,7 +226,22 @@ function buildRoundPrompt(config: WizardConfig, roundIdx: number, outline: Outli
 
 Consistentie: hou rekening met de outline van vorige én latere rondes zodat het narratief samenhangt.
 
-Geef als JSON: { "round": WizardPlanRound, "decision": WizardPlanDecision | null } — de decision hoort bij deze ronde (afterRoundIndex=${roundIdx}). Gebruik author-id's zoals "r${roundIdx + 1}-d1" voor decision en "r${roundIdx + 1}-i1", "r${roundIdx + 1}-i2" voor injects. Elke inject die een decision opzet, zet setsUpDecisionNodeId op de decision's author-id.`
+Geef als JSON: { "round": WizardPlanRound, "decision": WizardPlanDecision } — decision is VERPLICHT, nooit null. De decision hoort bij deze ronde (afterRoundIndex=${roundIdx}) en heeft perRole=true. Kies de rol(len) uit ${config.rolesIncluded.join(', ')} die hier mandaat hebben; alleen die rollen krijgen elk precies ${config.optionsPerRolePerRound} opties. Elke optie heeft allowedRole en een expliciete outcomeVector met de zes numerieke assen CONT/FOR/BC/JUR/VER/KOS; 0 betekent geen effect op die as. Gebruik author-id's zoals "r${roundIdx + 1}-d1" voor decision en "r${roundIdx + 1}-i1", "r${roundIdx + 1}-i2" voor injects. Elke inject die een decision opzet, zet setsUpDecisionNodeId op de decision's author-id.`
+}
+
+function buildDecisionRetryPrompt(config: WizardConfig, roundIdx: number, round: WizardPlan['rounds'][number]): string {
+  return `Genereer uitsluitend het keuzemoment voor ronde ${roundIdx + 1}. De ronde en injects bestaan al: ${JSON.stringify(round)}\n\nGeef uitsluitend JSON { "decision": { "afterRoundIndex": ${roundIdx}, "authorId": "r${roundIdx + 1}-d1", "prompt": "...", "perRole": true, "options": [...] }, "setupInjectId": "..." }. setupInjectId moet de id van één bestaande inject hierboven zijn die het dilemma introduceert. Kies uit ${config.rolesIncluded.join(', ')} de rol(len) met mandaat voor dit dilemma; elke gekozen rol krijgt precies ${config.optionsPerRolePerRound} eigen opties. Elke optie bevat label, allowedRole en outcomeVector met numerieke CONT/FOR/BC/JUR/VER/KOS in -2..+2. Nul op een as betekent geen effect. Geen null, geen extra tekst.`
+}
+
+function hasUsableDecision(decision: RoundGeneratedBlock['decision'], config: WizardConfig): boolean {
+  if (!decision || !Array.isArray(decision.options)) return false
+  if (decision.options.length === 0 || decision.perRole === false) return false
+  const counts = new Map<string, number>()
+  for (const option of decision.options) {
+    if (!option.allowedRole || !config.rolesIncluded.includes(option.allowedRole) || !option.outcomeVector) return false
+    counts.set(option.allowedRole, (counts.get(option.allowedRole) ?? 0) + 1)
+  }
+  return [...counts.values()].every(count => count === config.optionsPerRolePerRound)
 }
 
 interface OutlineRound {
@@ -285,21 +300,35 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     opts.llm([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: buildRoundPrompt(config, i, outlineParsed.rounds, [], []) },
-    ], { stage: `round-${i + 1}`, maxTokens: 14000 }).then(raw => {
+    ], { stage: `round-${i + 1}`, maxTokens: 14000 }).then(async raw => {
       const block = JSON.parse(extractJson(raw)) as RoundGeneratedBlock
       if (!block.round) throw new Error(`Ronde ${i + 1}: LLM gaf geen 'round' terug`)
-      // Defensief: als de LLM een decision teruggaf zonder valid options-array,
-      // gooi hem weg (behandel als "geen decision deze ronde"). De repair-loop
-      // of latere framework-check kan het aanvullen. Beter dan een hard crash
-      // in planToGraph.
-      if (block.decision && !Array.isArray(block.decision.options)) {
-        console.warn(`[wizard] Ronde ${i + 1}: decision gooit weg — options is geen array (kreeg: ${typeof block.decision.options})`)
-        block.decision = null
-      }
       // Zelfde voor round.injects: LLM moet een array geven.
       if (block.round && !Array.isArray(block.round.injects)) {
         console.warn(`[wizard] Ronde ${i + 1}: injects geen array (kreeg: ${typeof block.round.injects}) — leeg gemaakt`)
         block.round.injects = []
+      }
+      if (!hasUsableDecision(block.decision, config)) {
+        const retryRaw = await opts.llm([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: buildDecisionRetryPrompt(config, i, block.round) },
+        ], { stage: `decision-${i + 1}`, maxTokens: 16000 })
+        try {
+          const retry = JSON.parse(extractJson(retryRaw)) as {
+            decision?: RoundGeneratedBlock['decision']
+            setupInjectId?: string
+          }
+          if (hasUsableDecision(retry.decision ?? null, config)) {
+            block.decision = retry.decision!
+            const setup = block.round.injects?.find(inject => inject.id === retry.setupInjectId)
+            if (setup) setup.setsUpDecisionNodeId = block.decision.authorId
+          } else {
+            block.decision = null
+          }
+        } catch (err) {
+          console.warn(`[wizard] Ronde ${i + 1}: losse decision-herkansing gaf geen bruikbare JSON:`, err instanceof Error ? err.message : String(err))
+          block.decision = null
+        }
       }
       return { i, block }
     })
