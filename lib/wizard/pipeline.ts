@@ -75,6 +75,31 @@ function parsePlan(text: string): WizardPlan {
   return normalizePlan(JSON.parse(json) as WizardPlan)
 }
 
+// A full-plan repair response can omit large arrays (especially decisions).
+// Keep existing authored content unless the response supplies a replacement
+// for that same round/decision; never turn a text repair into deleted choices.
+function mergeRepairPlan(previous: WizardPlan, repaired: WizardPlan): WizardPlan {
+  const replacementDecisions = new Map((repaired.decisions ?? []).map(decision => [decision.afterRoundIndex, decision]))
+  const oldDecisions = previous.decisions ?? []
+  return normalizePlan({
+    ...previous,
+    ...repaired,
+    name: repaired.name || previous.name,
+    scenarioType: repaired.scenarioType || previous.scenarioType,
+    rounds: previous.rounds.map((round, index) => repaired.rounds[index] ?? round),
+    decisions: [
+      ...oldDecisions.map(decision => replacementDecisions.get(decision.afterRoundIndex) ?? decision),
+      ...(repaired.decisions ?? []).filter(decision => !oldDecisions.some(old => old.afterRoundIndex === decision.afterRoundIndex)),
+    ],
+    outcomes: repaired.outcomes?.length ? repaired.outcomes : previous.outcomes,
+    roleBriefings: repaired.roleBriefings && Object.keys(repaired.roleBriefings).length > 0
+      ? repaired.roleBriefings
+      : previous.roleBriefings,
+    injectLibrary: repaired.injectLibrary?.length ? repaired.injectLibrary : previous.injectLibrary,
+    irPlaybook: repaired.irPlaybook || previous.irPlaybook,
+  })
+}
+
 // Tolerante parser voor de 3 closer-deelcalls (meta / briefings / injects).
 // Als de LLM iets terug gaf dat niet parseerbaar is: return leeg object met
 // warning. De rest van de pipeline gaat dan door met zonder-briefings/leeg-
@@ -244,6 +269,34 @@ function hasUsableDecision(decision: RoundGeneratedBlock['decision'], config: Wi
   return [...counts.values()].every(count => count === config.optionsPerRolePerRound)
 }
 
+function referencesPriorChoice(situation: string, options: NonNullable<WizardPlan['decisions']>[number]['options']): boolean {
+  const text = typeof situation === 'string' ? situation.toLowerCase() : ''
+  return options.some(option => [option.label, option.lessonLearned].some(value => {
+    const key = value?.toLowerCase().trim().slice(0, 12)
+    return !!key && key.length >= 4 && text.includes(key)
+  }))
+}
+
+async function repairCrossRoundLessons(plan: WizardPlan, llm: WizardLlm, systemPrompt: string): Promise<void> {
+  await Promise.all(plan.rounds.slice(1).map(async (round, index) => {
+    const previousDecision = plan.decisions?.find(decision => decision.afterRoundIndex === index)
+    if (!previousDecision?.options?.length || referencesPriorChoice(round.situation, previousDecision.options)) return
+    const prompt = `Herstel uitsluitend de rondetekst voor ronde ${index + 2}. Huidige situatie: ${round.situation}\nKeuzemogelijkheden uit ronde ${index + 1}: ${JSON.stringify(previousDecision.options.map(option => option.label))}\n\nGeef alleen JSON { "situation": "..." }. Behoud de feiten en schrijf Nederlands. Verwijs herkenbaar naar de afweging rond één van de gegeven keuzelabels, maar beweer niet dat het team een specifieke optie heeft gekozen: de sessie is nog niet gespeeld. Laat alle keuzes en scores ongemoeid.`
+    const raw = await llm([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt },
+    ], { stage: `lesson-${index + 2}`, maxTokens: 3000 })
+    try {
+      const response = JSON.parse(extractJson(raw)) as { situation?: string }
+      if (typeof response.situation === 'string' && referencesPriorChoice(response.situation, previousDecision.options)) {
+        round.situation = response.situation
+      }
+    } catch (err) {
+      console.warn(`[wizard] Ronde ${index + 2}: tekstherstel gaf geen bruikbare JSON:`, err instanceof Error ? err.message : String(err))
+    }
+  }))
+}
+
 interface OutlineRound {
   title: string
   situation: string
@@ -374,6 +427,15 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
   let result = validateFramework(graph, config)
   const repairLog: RepairLogEntry[] = []
 
+  // Parallel gegenereerde rondes kennen de vorige keuze nog niet. Repareer
+  // alleen hun situatie-tekst; een volledige plan-rewrite is hier te traag
+  // en kan de gescoorde decisions uit de response laten verdwijnen.
+  if (result.failures.some(failure => failure.ruleId === 'rule5_cross_round_lesson')) {
+    await repairCrossRoundLessons(plan, opts.llm, systemPrompt)
+    graph = planToGraph(plan, { seed, now, publishStatus: 'draft' })
+    result = validateFramework(graph, config)
+  }
+
   // ── 5. Repair loop ──────────────────────────────────────────────────
   let attempt = 0
   while (!result.ok && attempt < maxRepair) {
@@ -393,7 +455,7 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
       repairLog.push({ attempt, ruleId: f.ruleId, violation: f.violation })
     }
     try {
-      plan = parsePlan(repairRaw)
+      plan = mergeRepairPlan(plan, parsePlan(repairRaw))
     } catch (err) {
       throw new Error(`Repair pass ${attempt}: LLM gaf ongeldige JSON (${err instanceof Error ? err.message : String(err)}).`)
     }
