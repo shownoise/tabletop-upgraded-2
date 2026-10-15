@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ScenarioGraph } from '@/lib/graph/types'
 
 const vector = { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 }
@@ -144,5 +144,22 @@ describe('Event decision flow', () => {
     expect(session?.submittedDecisions?.map(d => [d.actionId, d.role])).toEqual([
       ['ceo-a', 'ceo'], ['implicit-a', 'ciso'],
     ])
+  })
+
+  // Issue #58 — settleAndGetState() (called on every participant/facilitator poll)
+  // used to read-modify-write the session without the shared session lock that
+  // mutate() uses. A poll's stale read could land between a facilitator's
+  // setPhase() read and write, overwriting the new phase with a tick computed
+  // from the old one — the "discussion reappears after review" bug. Fix:
+  // settleAndGetState() must go through the same withSessionLock as mutate().
+  it('runs settleAndGetState through the shared session lock, like mutate()', async () => {
+    const db = await import('@/lib/db')
+    const lockSpy = vi.spyOn(db, 'withSessionLock')
+    const { settleAndGetState } = await import('@/lib/session-store')
+
+    await settleAndGetState()
+
+    expect(lockSpy).toHaveBeenCalled()
+    lockSpy.mockRestore()
   })
 })

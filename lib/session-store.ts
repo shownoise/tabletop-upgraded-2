@@ -451,15 +451,23 @@ export async function getState(): Promise<PublicState> {
 // Tick round-phase auto-advance + persist als er iets veranderd is.
 // Wordt aangeroepen door de state-route zodat fases automatisch verlopen ook
 // zonder mutations van gebruikers.
+//
+// Dit is een read-modify-write, net als mutate() — zonder withSessionLock kon
+// een poll die hier tegelijk met een facilitator-actie (setPhase, finalizeDecision)
+// doorheen liep een net gezette fase overschrijven met een stale snapshot
+// (de "discussion komt terug na review"-bug uit issue #58).
 export async function settleAndGetState(): Promise<PublicState> {
-  const session = await dbGetSession()
-  if (!session) return { session: null }
-  const ticked = tickRoundPhase(session)
-  if (ticked !== session && ticked.roundPhase !== session.roundPhase) {
-    await dbSetSession(ticked)
-    broadcastState(ticked)
-  }
-  return { session: ticked }
+  return withSessionLock(async () => {
+    const session = await dbGetSession()
+    if (!session) return { session: null }
+    const ticked = tickRoundPhase(session)
+    if (ticked !== session && ticked.roundPhase !== session.roundPhase) {
+      ticked.version = (session.version ?? 0) + 1
+      await dbSetSession(ticked)
+      broadcastState(ticked)
+    }
+    return { session: ticked }
+  })
 }
 
 export async function getSession(): Promise<SessionState | null> {
