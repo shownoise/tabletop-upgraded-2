@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { schoolverenigingScenario } from '../examples-schoolvereniging'
 import { scoreByDimension, scoreCoverage } from '../outcome-selector'
+import { validateGraph } from '../validate'
 import type { DecisionNodeData } from '../types'
 
 describe('graph outcome scoring', () => {
@@ -27,5 +28,16 @@ describe('graph outcome scoring', () => {
     expect(scoreCoverage(graph, submissions)).toEqual({ scored: 2, submitted: 2 })
     const doubled = Object.fromEntries(Object.entries(option.outcomeVector!).map(([dim, value]) => [dim, value * 2]))
     expect(scoreByDimension(graph, submissions)).toEqual(doubled)
+  })
+
+  it('does not flag score-selected outcomes as unreachable when no branch points to them', () => {
+    const scoreSelectedGraph = structuredClone(graph)
+    const scoreOnlyOutcome = scoreSelectedGraph.nodes
+      .filter(node => node.type === 'outcome')
+      .at(-1)!
+    scoreSelectedGraph.edges = scoreSelectedGraph.edges.filter(edge => edge.target !== scoreOnlyOutcome.id)
+
+    const issues = validateGraph(scoreSelectedGraph)
+    expect(issues.filter(issue => issue.nodeId === scoreOnlyOutcome.id)).toEqual([])
   })
 })

@@ -14,6 +14,12 @@ export interface GraphIssue {
 
 const SCORE_DIMENSIONS = ['CONT', 'FOR', 'BC', 'JUR', 'VER', 'KOS'] as const
 
+function isScoreSelectedOutcome(node: GraphNode): boolean {
+  if (node.type !== 'outcome') return false
+  const scoreRange = (node.data as { scoreRange?: { min?: number; max?: number } }).scoreRange
+  return scoreRange?.min !== undefined || scoreRange?.max !== undefined
+}
+
 export function validateDecisionScoring(graph: ScenarioGraph): GraphIssue[] {
   const issues: GraphIssue[] = []
   for (const node of graph.nodes) {
@@ -88,6 +94,9 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
     }
     for (const node of graph.nodes) {
       if (!reachable.has(node.id)) {
+        // A score-selected outcome is reached through cumulative decision
+        // scoring, not a drawn branch edge. It is a legitimate terminal node.
+        if (isScoreSelectedOutcome(node)) continue
         const hint = node.type === "outcome"
           ? "Connect it with a sequence or branch edge from a Round, Decision, or Special so participants can reach it."
           : node.type === "inject"
@@ -219,10 +228,11 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
   const outcomeNodes = graph.nodes.filter(n => n.type === "outcome")
   for (const o of outcomeNodes) {
     const incoming = graph.edges.filter(e => e.target === o.id)
-    if (incoming.length === 0) {
+    const od = o.data as { scoreRange?: { min?: number; max?: number } }
+    const isScoreSelected = od.scoreRange?.min !== undefined || od.scoreRange?.max !== undefined
+    if (incoming.length === 0 && !isScoreSelected) {
       issues.push({ severity: "warning", nodeId: o.id, message: "Outcome heeft geen inkomende decision-paden — onbereikbaar bij spel." })
     }
-    const od = o.data as { scoreRange?: { min?: number; max?: number } }
     if (!od.scoreRange || (od.scoreRange.min === undefined && od.scoreRange.max === undefined)) {
       issues.push({ severity: "warning", nodeId: o.id, message: "Outcome heeft geen scoreRange — de engine kan niet automatisch tussen outcomes kiezen op basis van cumulatieve score." })
     }
