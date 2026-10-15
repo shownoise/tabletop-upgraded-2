@@ -347,12 +347,26 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
   const systemPrompt = buildSystemPrompt({ ...config, seed })
 
   // ── 1. Outline pass ──────────────────────────────────────────────────
+  const outlinePrompt = buildOutlinePrompt(config)
   const outlineRaw = await opts.llm([
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: buildOutlinePrompt(config) },
+    { role: 'user', content: outlinePrompt },
   ], { stage: 'outline', maxTokens: 2000 })
-  const outlineParsed = JSON.parse(extractJson(outlineRaw)) as { rounds: OutlineRound[] }
-  if (!outlineParsed.rounds || outlineParsed.rounds.length !== config.rounds) {
+  let outlineParsed: { rounds: OutlineRound[] }
+  try {
+    outlineParsed = JSON.parse(extractJson(outlineRaw)) as { rounds: OutlineRound[] }
+  } catch (err) {
+    const retryRaw = await opts.llm([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `${outlinePrompt}\n\nJe vorige antwoord was ongeldige JSON (${err instanceof Error ? err.message : String(err)}). Herhaal de volledige outline als één geldig JSON-object, zonder markdown of toelichting.` },
+    ], { stage: 'outline-json-retry', maxTokens: 2000 })
+    try {
+      outlineParsed = JSON.parse(extractJson(retryRaw)) as { rounds: OutlineRound[] }
+    } catch (retryErr) {
+      throw new Error(`Outline: AI gaf tweemaal ongeldige JSON (${retryErr instanceof Error ? retryErr.message : String(retryErr)}).`)
+    }
+  }
+  if (!Array.isArray(outlineParsed.rounds) || outlineParsed.rounds.length !== config.rounds) {
     throw new Error(`Outline pass produced ${outlineParsed.rounds?.length ?? 0} rondes, verwacht ${config.rounds}.`)
   }
 
@@ -378,13 +392,29 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
     { role: 'user', content: `Geef nu als JSON (beknopt): { "injectLibrary": [ { "id":"…", "label":"…", "channel":"…", "urgency":"…", "classification":"feit|aanname", "title":"…", "content":"max 2 zinnen" } ] }. Max 4 items. Geen andere velden.` },
   ], { stage: 'injects', maxTokens: 3000 })
 
-  const roundPromises = Array.from({ length: config.rounds }, (_, i) =>
-    opts.llm([
+  const roundPromises = Array.from({ length: config.rounds }, (_, i) => {
+    const roundPrompt = buildRoundPrompt(config, i, outlineParsed.rounds, [], [])
+    return opts.llm([
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: buildRoundPrompt(config, i, outlineParsed.rounds, [], []) },
+      { role: 'user', content: roundPrompt },
     ], { stage: `round-${i + 1}`, maxTokens: 14000 }).then(async raw => {
-      const block = JSON.parse(extractJson(raw)) as RoundGeneratedBlock
-      if (!block.round) throw new Error(`Ronde ${i + 1}: LLM gaf geen 'round' terug`)
+      let block: RoundGeneratedBlock
+      try {
+        block = JSON.parse(extractJson(raw)) as RoundGeneratedBlock
+      } catch (err) {
+        // Only retry the malformed round. The other rounds and the three
+        // closer calls may already have completed successfully in parallel.
+        const retryRaw = await opts.llm([
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `${roundPrompt}\n\nJe vorige antwoord was ongeldige JSON (${err instanceof Error ? err.message : String(err)}). Genereer de volledige ronde opnieuw als één geldig JSON-object, zonder markdown of toelichting.` },
+        ], { stage: `round-${i + 1}-json-retry`, maxTokens: 14000 })
+        try {
+          block = JSON.parse(extractJson(retryRaw)) as RoundGeneratedBlock
+        } catch (retryErr) {
+          throw new Error(`Ronde ${i + 1}: AI gaf tweemaal ongeldige JSON (${retryErr instanceof Error ? retryErr.message : String(retryErr)}).`)
+        }
+      }
+      if (!block?.round) throw new Error(`Ronde ${i + 1}: LLM gaf geen 'round' terug`)
       // Zelfde voor round.injects: LLM moet een array geven.
       if (block.round && !Array.isArray(block.round.injects)) {
         console.warn(`[wizard] Ronde ${i + 1}: injects geen array (kreeg: ${typeof block.round.injects}) — leeg gemaakt`)
@@ -414,7 +444,7 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
       }
       return { i, block }
     })
-  )
+  })
 
   const [roundResults, metaRaw, briefingsRaw, injectsRaw] = await Promise.all([
     Promise.all(roundPromises),
