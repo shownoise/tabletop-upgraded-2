@@ -620,8 +620,9 @@ export function ControlDashboard() {
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground line-clamp-4">{session.scenario.scenario_summary}</p>
             </div>}
 
-            {/* Timeline */}
-            <details className="group rounded-xl border border-border bg-card">
+            {/* Timeline — ruwe event-log, telt als "overige paneel" dat de keuze
+                verdringt in Partner Event (issue #60 live-observatie). */}
+            {!isCoreEvent && <details className="group rounded-xl border border-border bg-card">
               <summary className="cursor-pointer px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground select-none list-none flex items-center justify-between">
                 {tr(lang, "eventLog")}
                 <span className="text-[8px] opacity-50 group-open:hidden">▶ expand</span>
@@ -640,7 +641,7 @@ export function ControlDashboard() {
                   </div>
                 ))}
               </div>
-            </details>
+            </details>}
 
             {/* Danger zone */}
             <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 flex items-center justify-between">
