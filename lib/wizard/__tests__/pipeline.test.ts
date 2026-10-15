@@ -332,6 +332,22 @@ describe("wizard pipeline — repair loop", () => {
     expect(result.repairLog).toEqual([])
   })
 
+  it("retries a decision with an incomplete option instead of crashing the graph compiler", async () => {
+    const plan = passingPlan()
+    const base = stubFromPlan(plan)
+    const malformedDecision = JSON.parse(JSON.stringify(plan.decisions![0])) as NonNullable<WizardPlan['decisions']>[number]
+    delete (malformedDecision.options[0] as { label?: string }).label
+    const stub = buildStub({
+      ...base,
+      rounds: [JSON.stringify({ round: plan.rounds[0], decision: malformedDecision }), base.rounds[1]],
+      decisions: [JSON.stringify({ decision: plan.decisions![0], setupInjectId: 'i1' })],
+    })
+
+    const result = await runWizardPipeline(testConfig(), { llm: stub.llm, maxRepairAttempts: 0, now: () => 1 })
+    expect(result.graph.nodes.filter(node => node.type === 'decision')).toHaveLength(2)
+    expect(stub.calls.some(call => call.startsWith('Genereer uitsluitend het keuzemoment voor ronde 1'))).toBe(true)
+  })
+
   it("rejects an AI response with no choices instead of returning an unusable draft", async () => {
     const plan = passingPlan()
     const base = stubFromPlan(plan)
