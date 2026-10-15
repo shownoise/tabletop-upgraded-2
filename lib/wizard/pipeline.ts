@@ -292,7 +292,14 @@ function hasUsableDecision(decision: RoundGeneratedBlock['decision'], config: Wi
   if (decision.options.length === 0 || decision.perRole === false) return false
   const counts = new Map<string, number>()
   for (const option of decision.options) {
-    if (!option.allowedRole || !config.rolesIncluded.includes(option.allowedRole) || !option.outcomeVector) return false
+    if (
+      !option ||
+      typeof option.label !== 'string' ||
+      option.label.trim().length === 0 ||
+      !option.allowedRole ||
+      !config.rolesIncluded.includes(option.allowedRole) ||
+      !option.outcomeVector
+    ) return false
     counts.set(option.allowedRole, (counts.get(option.allowedRole) ?? 0) + 1)
   }
   return [...counts.values()].every(count => count === config.optionsPerRolePerRound)
