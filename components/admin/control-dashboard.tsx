@@ -6,7 +6,7 @@ import { useEffect, useState } from "react"
 import {
   ArrowLeft, ChevronLeft, ChevronRight, Copy, Play, Power,
   ShieldAlert, FileText, Square, Users, Clock, Wifi, WifiOff, CheckCircle,
-  Monitor, ChevronRight as PhaseArrow, Flag
+  Monitor, Flag
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -116,17 +116,6 @@ export function ControlDashboard() {
   const currentPhase: RoundPhase = session?.roundPhase ?? "inject"
   const isCoreEvent = session?.mode === 'event' && !!session.graph
   const escalationIndex = Math.min(Math.max(currentIndex, 0), 3)
-
-  async function advancePhase() {
-    if (!session) return
-    const na = describeNextAction(session)
-    if (na.action === "advance_phase") {
-      const idx = PHASE_ORDER.indexOf(currentPhase)
-      if (idx < PHASE_ORDER.length - 1) await run("phase", () => api.setPhase(PHASE_ORDER[idx + 1]))
-    } else if (na.action === "next_round" || na.action === "end_session") {
-      await run("next", () => api.nextRound())
-    }
-  }
 
   async function retreatPhase() {
     const idx = PHASE_ORDER.indexOf(currentPhase)
@@ -385,7 +374,7 @@ export function ControlDashboard() {
           <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "currentPhase")}</span>
-              {!isCoreEvent && <div className="flex items-center gap-1.5">
+              {!isCoreEvent && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -395,16 +384,7 @@ export function ControlDashboard() {
                 >
                   <ChevronLeft className="size-3" /> Vorige fase
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={advancePhase}
-                  disabled={working !== null || (session ? describeNextAction(session).action === "blocked" : false)}
-                  className="gap-1.5 font-mono uppercase tracking-wider text-[10px]"
-                >
-                  Volgende fase <PhaseArrow className="size-3" />
-                </Button>
-              </div>}
+              )}
             </div>
             {/* Phase progress indicator */}
             <div className="flex items-center gap-2">
