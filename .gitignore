@@ -37,3 +37,7 @@ next-env.d.ts
 
 # Local, redacted handover archives generated from tracked source.
 /exports/
+
+# Playwright E2E output
+/test-results/
+/playwright-report/
