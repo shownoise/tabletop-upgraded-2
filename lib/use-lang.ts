@@ -6,7 +6,7 @@ import type { Lang } from "./i18n"
 const LANG_KEY = "ctt:lang"
 
 export function useLang(): [Lang, (l: Lang) => void] {
-  const [lang, setLangState] = useState<Lang>("en")
+  const [lang, setLangState] = useState<Lang>("nl")
 
   useEffect(() => {
     try {

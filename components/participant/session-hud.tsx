@@ -5,10 +5,9 @@ import { ShieldAlert, Wifi, WifiOff, Users } from "lucide-react"
 import type { Role, SessionState } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import type { Lang } from "@/lib/i18n"
-import { tr } from "@/lib/i18n"
+import { tr, ESCALATION_KEYS } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { ESCALATION_LABELS } from "@/lib/config/texts"
 
 const ESCALATION_BADGE = [
   "border-tt-dim/40 bg-tt-dim/10 text-tt-dim",
@@ -103,7 +102,7 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
           {isActive && (
             <div className={`hidden items-center border px-2.5 py-1 md:flex ${ESCALATION_BADGE[escalationIndex]}`}>
               <span className="font-mono text-[9px] uppercase tracking-widest">
-                {tr(lang, "escalationLevel")}: {tr(lang, `escalation_${ESCALATION_LABELS[escalationIndex]}` as Parameters<typeof tr>[1])}
+                {tr(lang, "escalationLevel")}: {tr(lang, ESCALATION_KEYS[escalationIndex])}
               </span>
             </div>
           )}

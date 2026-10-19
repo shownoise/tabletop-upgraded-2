@@ -30,7 +30,7 @@ import { GroupProgress } from "./group-progress"
 import { EventModeHelp } from "./event-mode-help"
 import { buildTeamRoles } from "@/lib/team-roster"
 import { useLang } from "@/lib/use-lang"
-import { tr } from "@/lib/i18n"
+import { tr, ESCALATION_KEYS } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
 import { ThemeToggle } from "@/components/theme-toggle"
 import type { RoundPhase } from "@/lib/types"
@@ -53,7 +53,6 @@ function DiscussionHelper() {
     </div>
   )
 }
-const ESCALATION_LABELS = ["Normal", "Elevated", "High", "Critical"]
 const ESCALATION_CLASSES = [
   "border-border text-muted-foreground",
   "border-amber-500/40 text-amber-600",
@@ -192,7 +191,7 @@ export function ControlDashboard() {
             {/* Escalation badge */}
             {isActive && (
               <div className={`hidden items-center rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider md:flex ${ESCALATION_CLASSES[escalationIndex]}`}>
-                {ESCALATION_LABELS[escalationIndex]}
+                {tr(lang, ESCALATION_KEYS[escalationIndex])}
               </div>
             )}
             <div className={`flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-xs uppercase tracking-wider ${
