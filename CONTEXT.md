@@ -125,8 +125,7 @@ label in een Nederlands scherm — dat komt terug in P2.
   optioneel decision, opening prompts, meldingsmomenten, review-vragen.
 - **Scenario** — het uitgeschreven verhaal met rondes, injects en beslissingen.
   Opgeslagen als `ScenarioGraph` (`lib/graph/types.ts`). Templates:
-  `lib/builtin-templates.ts`, `lib/graph/examples-*.ts`. Legacy
-  template-generator: `lib/scenario-generator.ts`.
+  `lib/builtin-templates.ts`, `lib/graph/examples-*.ts`.
 - **Scenariobuilder** — de visuele editor waar de scenario-graph wordt getekend.
   Pagina: `app/admin/builder/page.tsx`. Componenten:
   `components/admin/builder/canvas.tsx` + `inspector.tsx` + `editors/*` +
