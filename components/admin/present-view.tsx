@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, ShieldAlert } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
+import { useLang } from "@/lib/use-lang"
+import { tr, ESCALATION_KEYS } from "@/lib/i18n"
 import type { AssessmentReport } from "@/lib/scoring"
 
 const PHASE_LABELS: Record<string, string> = {
@@ -14,7 +16,6 @@ const PHASE_LABELS: Record<string, string> = {
   review: "REVEAL",
 }
 
-const ESCALATION_LABELS = ["NORMAL", "ELEVATED", "HIGH", "CRITICAL"]
 const ESCALATION_COLORS = ["text-primary", "text-amber-400", "text-orange-500", "text-destructive"]
 
 function RoundCountdown({ roundStartedAt, timerMinutes }: { roundStartedAt?: number; timerMinutes: number }) {
@@ -40,6 +41,7 @@ function RoundCountdown({ roundStartedAt, timerMinutes }: { roundStartedAt?: num
 
 export function PresentView() {
   const { state, connected } = useSessionStream()
+  const [lang] = useLang()
   const session = state.session
 
   const currentRound = useMemo(() => {
@@ -100,10 +102,10 @@ export function PresentView() {
         </div>
       ) : session.status === "ended" ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-6 px-8">
-          <span className="font-mono text-sm uppercase tracking-wider text-primary">Exercise Complete</span>
-          <h1 className="text-5xl font-bold tracking-tight">SESSION ENDED</h1>
+          <span className="font-mono text-sm uppercase tracking-wider text-primary">{tr(lang, "exerciseComplete")}</span>
+          <h1 className="text-5xl font-bold tracking-tight uppercase">{tr(lang, "sessionEnded")}</h1>
           <Link href="/admin/report" className="font-mono text-sm uppercase tracking-wider text-primary hover:underline">
-            View Report →
+            {tr(lang, "viewReport")} →
           </Link>
         </div>
       ) : (
@@ -112,22 +114,22 @@ export function PresentView() {
           <div className="flex items-center justify-between px-8 py-4 border-b border-border/50">
             <div className="flex items-center gap-4">
               <div className="flex flex-col">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Round</span>
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "round")}</span>
                 <span className="font-mono text-3xl font-bold text-foreground tabular-nums">
                   {session.currentRound + 1}<span className="text-muted-foreground text-xl">/{session.scenario.rounds.length}</span>
                 </span>
               </div>
               <div className="flex flex-col">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Phase</span>
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "phaseLabel")}</span>
                 <span className="font-mono text-xl font-bold text-primary">{PHASE_LABELS[phase] ?? phase.toUpperCase()}</span>
               </div>
             </div>
             <div className="flex items-center gap-6">
               {/* Escalation level */}
               <div className="flex flex-col items-end">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Escalation</span>
-                <span className={`font-mono text-xl font-bold ${ESCALATION_COLORS[escalationIndex]}`}>
-                  {ESCALATION_LABELS[escalationIndex]}
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "escalationLevel")}</span>
+                <span className={`font-mono text-xl font-bold uppercase ${ESCALATION_COLORS[escalationIndex]}`}>
+                  {tr(lang, ESCALATION_KEYS[escalationIndex])}
                 </span>
               </div>
               {/* Timer */}

@@ -165,6 +165,11 @@ export const t = {
     escalation_critical: "Critical",
     escalationLevel: "Escalation",
 
+    // Presenter / big screen
+    phaseLabel: "Phase",
+    sessionEnded: "Session ended",
+    viewReport: "View report",
+
     // Urgency (per inject)
     urgency_low: "Low",
     urgency_medium: "Medium",
@@ -379,6 +384,11 @@ export const t = {
     escalation_high: "Hoog",
     escalation_critical: "Kritiek",
     escalationLevel: "Escalatieniveau",
+
+    // Presenter / groot scherm
+    phaseLabel: "Fase",
+    sessionEnded: "Sessie beëindigd",
+    viewReport: "Rapport bekijken",
 
     // Urgency (per inject)
     urgency_low: "Laag",
