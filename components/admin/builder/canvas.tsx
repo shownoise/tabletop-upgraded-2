@@ -646,7 +646,7 @@ function InnerCanvas() {
     const scoringErrors = validateDecisionScoring(graph).filter(issue => issue.severity === 'error')
     if (scoringErrors.length > 0) {
       setStatus({ kind: 'error', text: `Publiceren geblokkeerd: ${scoringErrors.length} keuze${scoringErrors.length === 1 ? '' : 's'} zonder geldige zesdimensionale score. ${scoringErrors[0].message}` })
-      return
+      return scoringErrors
     }
     // Other validation findings remain visible to the author.
     const issues = validateGraph(graph)
