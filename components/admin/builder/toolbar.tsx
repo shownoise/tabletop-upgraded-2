@@ -40,7 +40,7 @@ interface Props {
   onWizardGenerated: (g: ScenarioGraph, meta: { warnings: RuleFailure[] }) => void
   onNew: () => void
   onValidate: () => GraphIssue[]
-  onPublish: () => Promise<void>
+  onPublish: () => Promise<GraphIssue[] | void>
   onRoleBriefingsChange?: (next: Partial<Record<Role, RoleBriefing>>) => void
   onInjectLibraryChange?: (next: PremadeInject[]) => void
   saving?: boolean
@@ -98,7 +98,11 @@ export function Toolbar({
   async function handlePublish() {
     setPublishing(true)
     try {
-      await onPublish()
+      // Publishing is hard-blocked on unscored decision options. Surface the
+      // reasons in the validation dialog — the status strip above the canvas is
+      // easy to miss, which reads as "the button does nothing".
+      const blocking = await onPublish()
+      if (blocking && blocking.length > 0) setIssues(blocking)
     } finally {
       setPublishing(false)
     }
