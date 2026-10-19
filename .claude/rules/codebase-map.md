@@ -20,7 +20,9 @@ app/
 
 lib/
   types.ts                    ← ALL types + ROLE_META + ExerciseConfig
-  scenario-generator.ts       ← Template scenarios (Ransomware/Insider/BEC/Exfil)
+  builtin-templates.ts        ← Built-in scenario templates (Ransomware, BEC)
+  template-types.ts           ← ScenarioTemplate / RoundTemplate / InjectTemplate
+  template-store.ts           ← Template library load/save/import/export
   session-store.ts            ← In-memory + KV session state
   document-generator.ts       ← Per-role hypothetical documents
   api-client.ts               ← Client-side API helpers
@@ -50,7 +52,7 @@ components/
 | Task | File |
 |---|---|
 | Change AI prompt / scenario generation | `app/api/session/create/route.ts` |
-| Add/change scenario type template | `lib/scenario-generator.ts` |
+| Add/change scenario type template | `lib/builtin-templates.ts` (+ `lib/template-types.ts` for the shape) |
 | Add/change role definitions or authorities | `lib/types.ts` → `ROLE_META` |
 | Change setup form fields | `components/admin/setup-form.tsx` + `lib/types.ts` ExerciseConfig |
 | Change what participants see | `components/participant/play-view.tsx` |

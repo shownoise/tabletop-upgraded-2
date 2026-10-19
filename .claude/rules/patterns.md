@@ -3,7 +3,7 @@
 ## Anti-patterns — Never Do These
 
 - Don't read `control-dashboard.tsx` fully unless changing the dashboard — it's 800+ lines
-- Don't read `scenario-generator.ts` fully to find one scenario — grep for the function name first
+- Don't read `builtin-templates.ts` fully to find one scenario — it's 42KB; grep for the template constant first
 - Don't add `console.log` — use the existing timeline event system
 - Don't add comments explaining what code does — only explain non-obvious WHY
 - Don't create new files when editing an existing one fits
