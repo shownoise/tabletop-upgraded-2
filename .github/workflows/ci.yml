@@ -18,9 +18,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsc --noEmit
-      # Geen pnpm lint — eslint is niet als devDependency geïnstalleerd en er
-      # is geen eslint-config in de repo. Externe developers kunnen dit later
-      # inrichten. Type-check + tests + build zijn de kwaliteitsgates.
+      - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
         env:
