@@ -441,6 +441,16 @@ export const t = {
 
 export type TKeys = keyof typeof t.en
 
+// Escalation level travels as an index. Translate it through these fixed keys —
+// deriving a key from an already-translated label yields a key that does not
+// exist, and tr() then renders the raw key to the user.
+export const ESCALATION_KEYS = [
+  "escalation_normal",
+  "escalation_elevated",
+  "escalation_high",
+  "escalation_critical",
+] as const satisfies readonly TKeys[]
+
 export function tr(lang: Lang, key: TKeys, vars?: Record<string, string | number>): string {
   let s: string = (t[lang] as Record<string, string>)[key] ?? (t.en as Record<string, string>)[key] ?? key
   if (vars) {
