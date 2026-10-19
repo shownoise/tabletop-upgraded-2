@@ -156,7 +156,7 @@ function layoutChasers(
   rounds.forEach((r, i) => roundByIndex.set(i + 1, r.id))
 
   const chasers = nodes.filter(n => n.type === "chaser")
-  let overflowCol = Math.max(0, ...Array.from(rank.values())) + 1
+  const overflowCol = Math.max(0, ...Array.from(rank.values())) + 1
   let overflowRow = 0
   const chaserSlotByRound = new Map<string, number>()
 
