@@ -170,6 +170,17 @@ export const t = {
     sessionEnded: "Session ended",
     viewReport: "View report",
 
+    // Login
+    facilitatorAccess: "Facilitator access",
+    emailLabel: "Email",
+    passwordLabel: "Password",
+    signIn: "Sign in",
+    signingIn: "Signing in…",
+    invalidCredentials: "Invalid email or password",
+    loginFailed: "Something went wrong. Try again.",
+    participantsNoAccount: "Participants don't need an account.",
+    useJoinCodeAt: "Use the join code at",
+
     // Urgency (per inject)
     urgency_low: "Low",
     urgency_medium: "Medium",
@@ -390,9 +401,20 @@ export const t = {
     sessionEnded: "Sessie beëindigd",
     viewReport: "Rapport bekijken",
 
+    // Login
+    facilitatorAccess: "Facilitatorlogin",
+    emailLabel: "E-mailadres",
+    passwordLabel: "Wachtwoord",
+    signIn: "Inloggen",
+    signingIn: "Inloggen…",
+    invalidCredentials: "Onjuist e-mailadres of wachtwoord",
+    loginFailed: "Er ging iets mis. Probeer het opnieuw.",
+    participantsNoAccount: "Deelnemers hebben geen account nodig.",
+    useJoinCodeAt: "Gebruik de toegangscode op",
+
     // Urgency (per inject)
     urgency_low: "Laag",
-    urgency_medium: "Gemiddeld",
+    urgency_medium: "Midden",
     urgency_high: "Hoog",
     urgency_critical: "Kritiek",
     surprise: "Verrassing",

@@ -4,9 +4,12 @@ import { useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ShieldAlert, Loader2, Eye, EyeOff } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { useLang } from "@/lib/use-lang"
+import { tr } from "@/lib/i18n"
 
 export function LoginForm() {
   const router = useRouter()
+  const [lang] = useLang()
   const params = useSearchParams()
   const callbackUrl = params.get("callbackUrl") ?? "/admin"
 
@@ -30,14 +33,14 @@ export function LoginForm() {
         })
 
         if (result?.error) {
-          setError("Invalid email or password")
+          setError(tr(lang, "invalidCredentials"))
           return
         }
 
         router.push(callbackUrl)
         router.refresh()
       } catch {
-        setError("Something went wrong. Try again.")
+        setError(tr(lang, "loginFailed"))
       }
     })
   }
@@ -59,7 +62,7 @@ export function LoginForm() {
           </div>
           <div className="flex flex-col items-center gap-1">
             <span className="font-mono text-lg font-bold tracking-wider text-foreground">CYBER_TABLETOP</span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Facilitator access</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{tr(lang, "facilitatorAccess")}</span>
           </div>
         </div>
 
@@ -67,7 +70,7 @@ export function LoginForm() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="rounded-xl border border-border bg-card px-5 py-5 flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Email</label>
+              <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "emailLabel")}</label>
               <input
                 type="email"
                 value={email}
@@ -79,7 +82,7 @@ export function LoginForm() {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Password</label>
+              <label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "passwordLabel")}</label>
               <div className="relative">
                 <input
                   type={showPw ? "text" : "password"}
@@ -113,17 +116,17 @@ export function LoginForm() {
             className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 font-mono text-sm uppercase tracking-wider text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isPending ? (
-              <><Loader2 className="size-4 animate-spin" /> Signing in…</>
+              <><Loader2 className="size-4 animate-spin" /> {tr(lang, "signingIn")}</>
             ) : (
-              "Sign in"
+              tr(lang, "signIn")
             )}
           </button>
         </form>
 
         <div className="text-center">
           <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
-            Participants don't need an account.<br />
-            Use the join code at <span className="text-foreground">/join</span>
+            {tr(lang, "participantsNoAccount")}<br />
+            {tr(lang, "useJoinCodeAt")} <span className="text-foreground">/join</span>
           </p>
         </div>
       </div>
