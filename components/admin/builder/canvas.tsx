@@ -34,7 +34,7 @@ import { SpecialNode } from "./nodes/special-node"
 import { TypedEdge } from "./edges/typed-edge"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Sparkles, FileText, Workflow, LayoutGrid } from "lucide-react"
+import { Sparkles, FileText, Workflow, LayoutGrid, GitMerge, GitFork } from "lucide-react"
 import { autoLayout } from "./layout"
 import type {
   EvaluationAspect,
@@ -228,7 +228,8 @@ function InnerCanvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [status, setStatus] = useState<{ kind: "info" | "error"; text: string } | null>(null)
+  const [showEveryOptionEdge, setShowEveryOptionEdge] = useState(false)
+  const [status, setStatus] = useState<{ kind: "info" | "error"; text: string } |null>(null)
   const [wizardWarnings, setWizardWarnings] = useState<RuleFailure[]>([])
   // Als er ?wizard=1 in de URL staat (vanuit /admin/quality "Genereer via wizard")
   // slaan we de startup-dialog over. De wizard-dialoog opent pas nadat een
@@ -611,6 +612,43 @@ function InnerCanvas() {
     })
   }, [nodes, handleDelete, handleDuplicate, handleAddNext, injectCountByRound])
 
+  // A decision node carries one source handle per option, so the graph holds one
+  // edge per option. Options without an explicit `leadsTo` all land on the same
+  // next round, which draws N lines that fan out and immediately converge —
+  // reads as branching when the story is linear. Collapse each group sharing
+  // source, target and kind down to one line. Display only: `edges` is
+  // untouched, so buildGraph() still serialises every option edge and the
+  // engine still resolves choices by sourceHandle.
+  const displayEdges = useMemo<Edge[]>(() => {
+    if (showEveryOptionEdge) return edges
+    const kept: Edge[] = []
+    const firstOfGroup = new Map<string, Edge>()
+    const groupSize = new Map<string, number>()
+    for (const edge of edges) {
+      const kind = (edge.data as { kind?: string } | undefined)?.kind
+      if (kind !== "branch" && kind !== "outcome") {
+        kept.push(edge)
+        continue
+      }
+      const key = `${edge.source}|${edge.target}|${kind}`
+      const existing = firstOfGroup.get(key)
+      if (!existing) {
+        firstOfGroup.set(key, edge)
+        groupSize.set(key, 1)
+        kept.push(edge)
+        continue
+      }
+      groupSize.set(key, (groupSize.get(key) ?? 1) + 1)
+    }
+    return kept.map(edge => {
+      const kind = (edge.data as { kind?: string } | undefined)?.kind
+      if (kind !== "branch" && kind !== "outcome") return edge
+      const count = groupSize.get(`${edge.source}|${edge.target}|${kind}`) ?? 1
+      if (count < 2) return edge
+      return { ...edge, label: `${count} opties` }
+    })
+  }, [edges, showEveryOptionEdge])
+
   // Keyboard shortcuts: Delete/Backspace, Cmd/Ctrl+D, Escape, Cmd/Ctrl+K wizard.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -725,7 +763,7 @@ function InnerCanvas() {
         <div ref={wrapperRef} className="relative flex-1" onDragOver={onDragOver} onDrop={onDrop}>
           <ReactFlow
             nodes={displayNodes}
-            edges={edges}
+            edges={displayEdges}
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
             onNodesChange={onNodesChange}
@@ -745,6 +783,16 @@ function InnerCanvas() {
             <Controls>
               <ControlButton onClick={handleAutoLayout} title="Auto-layout — zet nodes netjes uit elkaar">
                 <LayoutGrid />
+              </ControlButton>
+              <ControlButton
+                onClick={() => setShowEveryOptionEdge(v => !v)}
+                title={
+                  showEveryOptionEdge
+                    ? "Eén lijn per overgang — opties samenvouwen"
+                    : "Alle optielijnen tonen — nodig om aftakkingen per optie te zien"
+                }
+              >
+                {showEveryOptionEdge ? <GitMerge /> : <GitFork />}
               </ControlButton>
             </Controls>
             <MiniMap
