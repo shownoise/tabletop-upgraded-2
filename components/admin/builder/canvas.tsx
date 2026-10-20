@@ -714,7 +714,6 @@ function InnerCanvas() {
         graph={buildGraph()}
         onNameChange={name => setGraphMeta(g => ({ ...g, name }))}
         onScenarioTypeChange={t => setGraphMeta(g => ({ ...g, scenarioType: t as ScenarioType }))}
-        onPlaybookChange={p => setGraphMeta(g => ({ ...g, irPlaybook: p }))}
         onSave={handleSave}
         onLoad={handleLoad}
         onWizardGenerated={handleWizardGenerated}

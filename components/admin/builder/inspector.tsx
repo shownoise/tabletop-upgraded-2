@@ -316,11 +316,6 @@ function InjectForm({
           </p>
         </div>
       </div>
-      {!local.classification && (
-        <p className="text-[10px] text-yellow-700 dark:text-yellow-400">
-          Auteur moet publiek type kiezen — feit of aanname.
-        </p>
-      )}
       <div>
         <Label className="text-xs">Zet welke beslissing op?</Label>
         <select
