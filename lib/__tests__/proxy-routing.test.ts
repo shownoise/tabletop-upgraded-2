@@ -95,6 +95,15 @@ describe("proxy routing — facilitator protection", () => {
     expect((await run("/templates")).status).toBe(307)
   })
 
+  // /observe projects the join code, participant names and submitted choices.
+  it("protects /observe, which projects the join code and participant names", async () => {
+    expect((await run("/observe")).status).toBe(307)
+  })
+
+  it("admits an authenticated facilitator to /observe", async () => {
+    expect(isPassThrough(await run("/observe", { session: FACILITATOR }))).toBe(true)
+  })
+
   it("admits an authenticated facilitator to /admin", async () => {
     expect(isPassThrough(await run("/admin", { session: FACILITATOR }))).toBe(true)
   })
