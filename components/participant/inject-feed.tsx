@@ -7,6 +7,7 @@ import {
 } from "lucide-react"
 import type { FactCheckTag, PushedInject, InjectChannel, InjectType, SessionState, Urgency } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
+import { injectTypeLabel } from "@/lib/format"
 import type { Role } from "@/lib/types"
 import { getInjectRecipients, resolveInjectRecipients } from "@/lib/inject-routing"
 import { buildTeamRoles } from "@/lib/team-roster"
@@ -29,17 +30,6 @@ const CHANNEL_CONFIG: Record<string, { label: string; color: string; Icon: React
   system_alert: { label: "EDR/SYSTEM",  color: "var(--tt-warn)",      Icon: Shield },
   sms:          { label: "SMS",         color: "#25D366",             Icon: Smartphone },
   raw:          { label: "MEMO",        color: "var(--tt-dim)",       Icon: FileText },
-}
-
-const INJECT_TYPE_LABELS: Partial<Record<InjectType, string>> = {
-  alert:      "ALERT",
-  intel:      "INTEL",
-  media:      "MEDIA",
-  executive:  "EXECUTIVE",
-  technical:  "TECHNICAL",
-  regulatory: "REGULATORY",
-  social:     "SOCIAL",
-  internal:   "INTERNAL",
 }
 
 const CHANNEL_REMAP: Partial<Record<string, InjectChannel>> = {
@@ -93,7 +83,7 @@ function Shell({
   const cfg = CHANNEL_CONFIG[channel] ?? CHANNEL_CONFIG.raw
   const { Icon } = cfg
   const big = size === "xl"
-  const typeLabel = inject.type ? INJECT_TYPE_LABELS[inject.type] : undefined
+  const typeLabel = inject.type ? injectTypeLabel(inject.type) : undefined
   const showTeamBadge = inject.targetTeam && inject.targetTeam !== "all"
   const ownStyle = myTag ? OWN_TAG_STYLE[myTag] : undefined
   const borderStyle = ownStyle

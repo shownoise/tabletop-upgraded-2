@@ -1,4 +1,5 @@
 import type { Urgency, InjectType, InjectChannel } from "./types"
+import { URGENCY_LABELS } from "./config/texts"
 
 export function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
@@ -13,18 +14,22 @@ export function urgencyClasses(urgency: Urgency): string {
   }
 }
 
-export function urgencyLabel(urgency: Urgency): string { return urgency.toUpperCase() }
+// Callers render these in uppercase badges, so uppercase here rather than
+// leaking the raw enum value the way `urgency.toUpperCase()` did.
+export function urgencyLabel(urgency: Urgency): string {
+  return (URGENCY_LABELS[urgency] ?? urgency).toUpperCase()
+}
 
 export function injectTypeLabel(t: InjectType): string {
   switch (t) {
-    case "alert": return "ALERT"
+    case "alert": return "MELDING"
     case "intel": return "INTEL"
-    case "media": return "MEDIA"
-    case "executive": return "EXEC"
-    case "technical": return "TECH"
-    case "regulatory": return "REG"
+    case "media": return "PERS"
+    case "executive": return "DIRECTIE"
+    case "technical": return "TECHNISCH"
+    case "regulatory": return "TOEZICHT"
     case "social": return "SOCIAL"
-    case "internal": return "INTERNAL"
+    case "internal": return "INTERN"
   }
 }
 
@@ -32,13 +37,13 @@ export function channelLabel(c: InjectChannel): string {
   switch (c) {
     case "whatsapp": return "WhatsApp"
     case "slack": return "Slack"
-    case "email": return "Email"
+    case "email": return "E-mail"
     case "siem_alert": return "SIEM"
     case "sms": return "SMS"
-    case "phone": return "Phone"
-    case "news_ticker": return "News"
-    case "system_alert": return "System"
-    case "raw": default: return "Raw"
+    case "phone": return "Telefoon"
+    case "news_ticker": return "Nieuws"
+    case "system_alert": return "Systeem"
+    case "raw": default: return "Memo"
   }
 }
 
