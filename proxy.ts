@@ -1,7 +1,11 @@
 import { auth } from "@/auth"
 import { NextResponse } from "next/server"
 
-const PROTECTED_PREFIXES = ["/admin", "/templates"]
+// /observe is the big-screen observer twin of /admin/present. It renders the
+// join code, participant names and every submitted choice, so it belongs
+// behind the facilitator login like its counterpart — it is driven from the
+// facilitator's own machine, never by an anonymous visitor.
+const PROTECTED_PREFIXES = ["/admin", "/templates", "/observe"]
 
 // Participant-callable API endpoints — safe to hit without a facilitator session.
 // Route handlers must still validate the request body / participant identity (see lib/api-validation.ts).
