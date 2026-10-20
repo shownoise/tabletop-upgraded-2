@@ -23,7 +23,6 @@ import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
 import { DecisionPanel } from "./decision-panel"
 import { RegulatoryNotificationButton } from "./regulatory-notification-button"
-import { MeldingButton } from "./melding-button"
 import { OpeningBriefing } from "./opening-briefing"
 import { SpecialModal } from "./special-modal"
 import { PhaseTimer, PhaseSegments } from "./phase-timer"
@@ -762,88 +761,6 @@ function PacingBanner({ roundStartedAt, timerMinutes }: { roundStartedAt?: numbe
   )
 }
 
-// ─── IR / Crisis Playbook (right panel) ───
-function IrPlaybookPanel({ session, participantRole }: {
-  session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>
-  participantRole?: Role
-}) {
-  const graph = (session as unknown as { graph?: { irPlaybook?: string; irRetainerName?: string } }).graph
-  const playbook = graph?.irPlaybook
-  const retainer = graph?.irRetainerName
-  const [open, setOpen] = useState(true)
-  if (!playbook) return null
-  return (
-    <div className="rounded-xl border border-tt-accent/30 bg-tt-accent/5 overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-tt-accent/10 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="size-3.5 text-tt-accent" />
-          <span className="font-mono text-[10px] uppercase tracking-wider text-tt-accent">
-            Crisis Playbook{retainer ? ` · ${retainer}` : ""}
-          </span>
-        </div>
-        <ChevronDown className={`size-3.5 text-tt-accent shrink-0 ml-2 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="border-t border-tt-accent/20 px-4 pb-3 pt-2 max-h-[400px] overflow-y-auto">
-          <PlaybookRenderer text={playbook} participantRole={participantRole} />
-          <p className="mt-3 pt-2 border-t border-tt-accent/20 font-mono text-[9px] text-muted-foreground italic">
-            Let op: dit playbook bevat mogelijk verouderde of incomplete passages. Verifieer feiten vóór je erop handelt.
-          </p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Section rules:
-// - `## [role1,role2] Title` → alleen zichtbaar voor participants met een van die rollen
-// - `## Title` → globaal, iedereen ziet het
-function parseSectionRoles(heading: string): { roles: string[] | null; title: string } {
-  const match = heading.match(/^\[([^\]]+)\]\s*(.*)$/)
-  if (!match) return { roles: null, title: heading }
-  const roles = match[1].split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
-  return { roles, title: match[2] }
-}
-
-function PlaybookRenderer({ text, participantRole }: { text: string; participantRole?: Role }) {
-  const lines = text.split("\n")
-  // Group by section (## headers). Filter sections not for this role.
-  const sections: Array<{ heading: string | null; visible: boolean; lines: string[] }> = []
-  let current: { heading: string | null; visible: boolean; lines: string[] } = { heading: null, visible: true, lines: [] }
-  for (const line of lines) {
-    if (line.startsWith("## ")) {
-      if (current.lines.length || current.heading) sections.push(current)
-      const raw = line.slice(3)
-      const { roles, title } = parseSectionRoles(raw)
-      const visible = !roles || roles.length === 0 || (participantRole ? roles.includes(participantRole) : false)
-      current = { heading: title, visible, lines: [] }
-    } else {
-      current.lines.push(line)
-    }
-  }
-  if (current.lines.length || current.heading) sections.push(current)
-
-  return (
-    <div className="flex flex-col gap-1 text-xs leading-relaxed">
-      {sections.filter(s => s.visible).map((section, si) => (
-        <div key={si} className="flex flex-col gap-0.5">
-          {section.heading && (
-            <h4 className="mt-2 first:mt-0 font-mono text-[10px] uppercase tracking-wider text-tt-accent">{section.heading}</h4>
-          )}
-          {section.lines.map((line, i) => {
-            if (line.startsWith("- ")) return <div key={i} className="flex gap-2"><span className="text-tt-accent shrink-0">›</span><span className="text-tt-bright">{line.slice(2)}</span></div>
-            if (line.trim()) return <p key={i} className="text-tt-bright">{line}</p>
-            return <div key={i} className="h-1" />
-          })}
-        </div>
-      ))}
-    </div>
-  )
-}
-
 // ─── Escalation overlay ───
 function EscalationOverlay({ roundIndex }: { roundIndex: number }) {
   if (roundIndex < 2) return null
@@ -1282,10 +1199,6 @@ export function PlayView() {
             {/* Regulatory notification — appears when a data-driven regime obligation opens. */}
             {!isEventMode && participantId && <RegulatoryNotificationButton session={session} participantId={participantId} />}
 
-            {/* Melding button — participant-initiated escalation. Visible only when a moment is open for this role. */}
-            {!isEventMode && participantId && participantRole && (
-              <MeldingButton session={session} participantId={participantId} participantRole={participantRole} />
-            )}
 
             {/* Inject feed — always shown for context */}
             {!isEventMode && <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} session={session} participantId={participantId ?? undefined} />}
@@ -1322,9 +1235,6 @@ export function PlayView() {
                 ))}
               </ul>
             </div>
-
-            {/* IR / Crisis Playbook — always shown when authored on the scenario graph */}
-            {!isEventMode && <IrPlaybookPanel session={session} participantRole={participantRole} />}
 
             {/* Documents — filtered to this participant's role */}
             {!isEventMode && participantRole && (() => {

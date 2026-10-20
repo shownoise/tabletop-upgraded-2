@@ -34,7 +34,6 @@ interface Props {
   graph: ScenarioGraph
   onNameChange: (name: string) => void
   onScenarioTypeChange: (t: ScenarioType) => void
-  onPlaybookChange: (playbook: string | undefined) => void
   onSave: () => Promise<void>
   onLoad: (g: ScenarioGraph) => void
   onWizardGenerated: (g: ScenarioGraph, meta: { warnings: RuleFailure[] }) => void
@@ -57,7 +56,6 @@ export function Toolbar({
   graph,
   onNameChange,
   onScenarioTypeChange,
-  onPlaybookChange,
   onSave,
   onLoad,
   onWizardGenerated,
