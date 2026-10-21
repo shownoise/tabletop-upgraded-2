@@ -47,29 +47,59 @@ Wat ik in de UI "IT-inrichting" noem, is in de code het veld `criticalSystems`
 (dynamic-fill token en waarschijnlijk WizardConfig-veld). Kroonjuwelen is een
 apart veld: `crownJewels`. Verwar die twee niet.
 
-### Feit / aanname / fabel — in de code, ik gebruik alleen feit / aanname
+### Feit / aanname — twee auteurvelden voor hetzelfde
 
-Inject-classificatie staat op `'feit' | 'aanname' | 'fabel'`
-(`lib/graph/types.ts:97`). Ik heb "fabel / misleidend" nooit gevraagd — dat is
-door de AI verzonnen. P2 verwijdert dit. Kom je nu code tegen die op `fabel`
-filtert: dat is de oude toestand.
+`'fabel'` is **weg**: de classificatie staat op `'feit' | 'aanname'`
+(`lib/graph/types.ts:98`), verwijderd 2026-08-14. Kom je nog UI tegen die op
+`fabel` filtert, dan is dat dode code die nooit matcht.
 
-### Training modus ≠ event modus — één helft ontbreekt in de code
+Wat er wél speelt: er zijn **twee** auteurvelden die dezelfde vraag stellen, en
+de inspector vraagt ze naast elkaar.
 
-- **Event modus** bestaat: fasen `briefing → overleg → keuze → lock → review` in
-  `lib/scoring/event-mode.ts:12`. Notulist bedient één iPad
-  (`lib/types.ts:603`).
-- **Training modus** heeft **geen expliciete vlag** in de code voor zover ik heb
-  gezien — grep vindt geen `trainingMode` / `training_mode`. Waarschijnlijk is
-  "training modus" gewoon "alles wat niet in event-mode zit". Check dit
-  expliciet bij P8.
+- `classification` — `'feit' | 'aanname'`, Nederlands. Label dat de deelnemer
+  ziet. `lib/graph/types.ts:98` en `:284`.
+- `reliability` — `'fact' | 'assumption' | 'misleading'`, Engels, 3-waardig.
+  "Ground truth", gestript uit de deelnemer-payload tot de review-fase.
+  `lib/types.ts:342`. De waarde `misleading` is dezelfde "fabel" die ik nooit
+  heb gevraagd.
+
+`lib/types.ts:371` zegt dat nieuwe scenario's `classification` gebruiken, maar
+`reliability` wordt nog in tien bestanden gelezen. Samenvoegen raakt opgeslagen
+injects.
+
+Los daarvan staat `FactCheckTag` (`'fact' | 'assumption'`, `lib/types.ts:603`):
+wat de **deelnemer denkt**. Dat is een legitieme aparte as — de gok tegenover
+de waarheid — en niet de dubbeling.
+
+### Training modus ≠ event modus — beide bestaan wél
+
+Opgelost 2026-10-20. Mijn eerdere aanname ("training modus heeft geen expliciete
+vlag") kwam doordat ik op `trainingMode` / `training_mode` zocht. De vlag heet
+anders:
+
+- **`SimulationMode`** — `'event' | 'training'` op `lib/types.ts:88`. Omzetten
+  via `setMode()` (`lib/session-store.ts:1276`) en
+  `POST /api/session/set-mode`. Doorgevoerd in `createSession`, de setup-form,
+  play-view en de scoring.
+- **Event modus**: fasen `briefing → overleg → keuze → lock → review` in
+  `lib/scoring/event-mode.ts:12`. Notulist bedient één iPad.
+- In componenten zie je dit terug als `isEventMode` — de meeste
+  deelnemerspanelen hangen aan `!isEventMode`.
 
 ### Escalatieniveau vs. `urgency`
 
-Wat ik in gesprek "escalatieniveau" noem, heet in de code `urgency` (op inject,
-zie `components/participant/urgent-inject-modal.tsx`, `phase-timer.tsx`,
-`inject-feed.tsx`). Eén waarde die ik zeker weet: `"normal"` staat als Engels
-label in een Nederlands scherm — dat komt terug in P2.
+Twee verschillende dingen met bijna dezelfde naam in gesprek:
+
+- **`urgency`** — per inject, `'low' | 'medium' | 'high' | 'critical'`
+  (`lib/types.ts:272`). Labels via `urgencyLabel()` in `lib/format.ts`, die
+  `URGENCY_LABELS` uit `lib/config/texts.ts` leest.
+- **Escalatieniveau van de sessie** — een index 0-3, labels via
+  `ESCALATION_KEYS` in `lib/i18n.ts`.
+
+De Engelse labels in Nederlandse schermen zijn opgelost 2026-10-19/20: zowel
+`urgency` als het sessie-escalatieniveau renderen nu Nederlands, en
+`lib/__tests__/format-labels.test.ts` plus `i18n-escalation.test.ts` dwingen af
+dat ze niet terugvallen op de ruwe enum-waarde.
 
 ---
 
@@ -106,17 +136,26 @@ label in een Nederlands scherm — dat komt terug in P2.
   data `InjectNodeData` in `lib/graph/types.ts:74`. Feed voor deelnemer:
   `components/participant/inject-feed.tsx`.
 - **Meldplicht** — melding bij bevoegde autoriteit (nu NIS2-specifiek in tekst;
-  P2 maakt dit algemener). `MeldingMoment` op ronde
-  (`lib/graph/types.ts:68`), profiles/rail in
+  P2 maakt dit algemener). Dit is sinds 2026-10-20 het **enige** meldmechanisme
+  bij de deelnemer: `components/participant/regulatory-notification-button.tsx`
+  → `POST /api/session/regulatory-filing` → `fileRegulatoryObligation()`, met
+  milestones (`initial` / eindrapportage) uit het regime. Profiles/rail in
   `components/admin/builder/compliance-rail.tsx`.
+  **Let op**: `MeldingMoment` op ronde (`lib/graph/types.ts:68`) is het *oude*,
+  tweede mechanisme. De wizard genereert die momenten nog en de builder
+  valideert ze, maar er is geen deelnemers-UI meer voor; `/api/session/melding`
+  en `fileMelding()` zijn daarmee onbereikbaar geworden.
 - **Notulist** — persoon achter de ene iPad in event modus, submitteert namens
   de hele groep. Genoemd in `lib/types.ts:603` (comment). Geen aparte `Role` in
   het type-union.
 - **Optie** — een keuze binnen een decision, per rol. `DecisionOption` in
   `lib/graph/types.ts`. Deel B / scoring: elke optie draagt een outcome-vector.
-- **Presenter view** — groot scherm voor het publiek in event modus. Verwezen
-  in `lib/scoring/event-mode.ts`. Losse pagina/component nog niet gevonden —
-  developers bouwen die.
+- **Presenter view** — groot scherm voor het publiek. Bestaat: pagina
+  `app/admin/present/page.tsx`, component `components/admin/present-view.tsx`.
+  Leest dezelfde `useSessionStream()` als facilitator en deelnemer, heeft geen
+  bedieningselementen behalve een terugknop naar het dashboard. Daarnaast is er
+  `app/observe/page.tsx` — een tweede, los gebouwde observerweergave met nul
+  inkomende links. Beide zitten achter de facilitator-login.
 - **Rol** — deelnemersrol. Type-union `Role` in `lib/types.ts:10`. Meta (label,
   team, authorities) in `ROLE_META` op `lib/types.ts:37`. Domeinen (bv.
   leadership / technical / legal) in `RoleDomain` op `lib/types.ts:22`.
@@ -135,6 +174,7 @@ label in een Nederlands scherm — dat komt terug in P2.
 - **Special** — bijzonder event (bv. negotiation, journalist). Node-type
   `"special"` in `lib/graph/types.ts:15`. UI:
   `components/admin/specials-panel.tsx`. API: `app/api/special/route.ts`.
-- **Training modus** — zie ⚠-blok. Niet expliciet in code.
+- **Training modus** — zie ⚠-blok. `SimulationMode = 'training'` op
+  `lib/types.ts:88`; in componenten `!isEventMode`.
 - **Zes scoringsdimensies** — zie ⚠-blok. `OUTCOME_DIMENSIONS` in
   `lib/scoring/constants.ts:6`.
