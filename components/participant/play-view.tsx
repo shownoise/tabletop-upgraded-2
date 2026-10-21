@@ -1152,7 +1152,13 @@ export function PlayView() {
             )}
 
             {/* DECISION PHASE — pinned to top on mobile, natural order on desktop */}
-            {session.roundPhase === "decision" && currentRound?.roleActions && participantId && !(isEventMode && session.graph) && (() => {
+            {/* Legacy roleActions panel — only for sessions without a scenario
+                graph. A graph session gets DecisionTicket above, and rendering
+                both showed two different questions in the same phase: because
+                submitDecision dedupes on (participantId, roundIndex, role),
+                answering this one replaced the graph answer and threw away its
+                outcomeVector, resetting the decision queue. */}
+            {session.roundPhase === "decision" && currentRound?.roleActions && participantId && !session.graph && (() => {
               const roundDecisions = (session.submittedDecisions ?? []).filter(d => d.roundIndex === session.currentRound)
               return (
                 <div className="order-first lg:order-none flex flex-col gap-2">
