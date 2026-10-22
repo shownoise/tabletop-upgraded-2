@@ -13,12 +13,13 @@ export const t = {
     welcomeTitle: "Welcome to the exercise",
     welcomeSub: "Before we begin, here's what to expect",
     howItWorks: "How this works",
-    intro1: "You'll go through a series of rounds, each describing an evolving cyber incident.",
-    intro2: "The facilitator will send you injects — messages, alerts, and signals — that arrive as they would in a real incident.",
-    intro3: "Each round has a discussion timer. Use the time to debate, decide, and respond together.",
-    intro4: "Every decision counts — the goal is to surface gaps and improve your team's response. Feedback is provided at the end of each round.",
-    intro5: "Stay in role. React as you would in a real crisis.",
-    timerNote: "Each round: 10 minutes discussion. The facilitator controls the pace.",
+    intro1: "You'll go through a series of rounds. Each round is a new chapter of the same incident.",
+    intro2: "During a round, injects arrive — messages, alerts and signals, the way they would reach you in a real crisis.",
+    intro3: "Each round leads to a decision. You only see the options that belong to your role and mandate.",
+    intro4: "Every choice counts on six axes: containment, forensics, business continuity, legal, accountability and cost. An option that scores well on all six rarely exists — that trade-off is the exercise.",
+    intro5: "If a role is unstaffed, you decide for that role too, working through them one at a time.",
+    intro6: "After the choices comes the review: you see what your choice did on each axis. Stay in role and react as you would in a real crisis.",
+    timerNote: "The facilitator sets the pace. Time remaining in the current round is shown at the top of your screen.",
     readyBtn: "I'm ready — join the exercise",
     yourName: "Your name",
     joinCode: "Join code",
@@ -170,6 +171,20 @@ export const t = {
     sessionEnded: "Session ended",
     viewReport: "View report",
 
+    // Join
+    joinExercise: "Join exercise",
+    enterYourName: "Please enter your name.",
+    enterJoinCode: "Please enter the join code.",
+    joinFailed: "Could not join",
+
+    // Lobby
+    lobbyCheckedIn: "You're checked in",
+    lobbyWaitingBody: "The facilitator starts the exercise. You don't have to do anything.",
+    lobbyPickRoleFirst: "Pick a role first — the facilitator can see who still needs one.",
+    lobbyReadyCount: "{ready} of {total} participants ready",
+    lobbyYourRole: "Your role",
+    rereadExplanation: "Read the explanation again",
+
     // Login
     facilitatorAccess: "Facilitator access",
     emailLabel: "Email",
@@ -248,12 +263,13 @@ export const t = {
     welcomeTitle: "Welkom bij de oefening",
     welcomeSub: "Even uitleg voordat we beginnen",
     howItWorks: "Hoe het werkt",
-    intro1: "Je doorloopt een aantal rondes, elk met een nieuw hoofdstuk van een cybersecurity-incident.",
-    intro2: "De facilitator stuurt je injects — berichten, meldingen en signalen — zoals ze ook in een echte crisis binnenkomen.",
-    intro3: "Elke ronde heeft een discussietimer. Gebruik de tijd om samen te overleggen en beslissingen te nemen.",
-    intro4: "Elke beslissing telt — het doel is om hiaten te ontdekken en de respons van je team te verbeteren. Terugkoppeling volgt aan het einde van elke ronde.",
-    intro5: "Blijf in rol. Reageer zoals je in een echte crisis zou doen.",
-    timerNote: "Elke ronde: 10 minuten overleg. De facilitator bepaalt het tempo.",
+    intro1: "Je doorloopt een aantal rondes. Elke ronde is een nieuw hoofdstuk van hetzelfde incident.",
+    intro2: "Tijdens een ronde komen injects binnen — berichten, meldingen en signalen, zoals ze in een echte crisis bij je terechtkomen.",
+    intro3: "Per ronde volgt een beslissing. Je ziet alleen de opties die bij jouw rol en mandaat horen.",
+    intro4: "Elke keuze weegt mee op zes assen: containment, forensics, bedrijfscontinuïteit, juridisch, verantwoording en kosten. Een optie die op alle zes goed scoort bestaat zelden — die afweging ís de oefening.",
+    intro5: "Is een rol niet bezet, dan beslis je ook voor die rol. Je werkt ze dan één voor één af.",
+    intro6: "Na de keuzes volgt de terugblik: je ziet wat jullie keuze op elke as deed. Blijf in rol en reageer zoals je in een echte crisis zou doen.",
+    timerNote: "De facilitator bepaalt het tempo. De resterende tijd voor de lopende ronde staat boven in je scherm.",
     readyBtn: "Ik ben klaar — doe mee",
     yourName: "Jouw naam",
     joinCode: "Toegangscode",
@@ -400,6 +416,20 @@ export const t = {
     phaseLabel: "Fase",
     sessionEnded: "Sessie beëindigd",
     viewReport: "Rapport bekijken",
+
+    // Join
+    joinExercise: "Deelnemen aan de oefening",
+    enterYourName: "Vul je naam in.",
+    enterJoinCode: "Vul de toegangscode in.",
+    joinFailed: "Deelnemen is niet gelukt",
+
+    // Lobby
+    lobbyCheckedIn: "Je bent ingecheckt",
+    lobbyWaitingBody: "De facilitator start de oefening. Je hoeft niets te doen.",
+    lobbyPickRoleFirst: "Kies eerst een rol — de facilitator ziet wie er nog een nodig heeft.",
+    lobbyReadyCount: "{ready} van {total} deelnemers klaar",
+    lobbyYourRole: "Jouw rol",
+    rereadExplanation: "Uitleg opnieuw lezen",
 
     // Login
     facilitatorAccess: "Facilitatorlogin",

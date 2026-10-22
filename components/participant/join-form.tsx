@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { api } from "@/lib/api-client"
+import { useLang } from "@/lib/use-lang"
+import { tr } from "@/lib/i18n"
 
 const NAME_KEY  = "ctt:name"
 const ID_KEY    = "ctt:participantId"
@@ -14,6 +16,7 @@ const CODE_KEY  = "ctt:joinCode"
 
 export function JoinForm() {
   const router = useRouter()
+  const [lang] = useLang()
   const [name, setName] = useState("")
   const [code, setCode] = useState("")
   const [submitting, setSubmitting] = useState(false)
@@ -33,11 +36,11 @@ export function JoinForm() {
     e.preventDefault()
     setError(null)
     if (!name.trim()) {
-      setError("Please enter your name.")
+      setError(tr(lang, "enterYourName"))
       return
     }
     if (!code.trim()) {
-      setError("Please enter the join code.")
+      setError(tr(lang, "enterJoinCode"))
       return
     }
     setSubmitting(true)
@@ -58,7 +61,7 @@ export function JoinForm() {
       } catch { /* noop */ }
       router.push("/play")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to join")
+      setError(err instanceof Error ? err.message : tr(lang, "joinFailed"))
       setSubmitting(false)
     }
   }
@@ -67,7 +70,7 @@ export function JoinForm() {
     <form onSubmit={onSubmit} className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
         <Label htmlFor="name" className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-          Your name
+          {tr(lang, "yourName")}
         </Label>
         <Input
           id="name"
@@ -82,7 +85,7 @@ export function JoinForm() {
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="code" className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-          Join code
+          {tr(lang, "joinCodeLabel")}
         </Label>
         <Input
           id="code"
@@ -105,11 +108,11 @@ export function JoinForm() {
         {submitting ? (
           <>
             <Loader2 className="size-4 animate-spin" />
-            Joining
+            {tr(lang, "joining")}
           </>
         ) : (
           <>
-            Join exercise
+            {tr(lang, "joinExercise")}
             <ArrowRight className="size-4" />
           </>
         )}
