@@ -10,6 +10,7 @@ import type {
 } from "@/lib/types"
 import type { DecisionNodeData, GraphNode, InjectNodeData, ScenarioGraph } from "@/lib/graph/types"
 import { RETAINER_ACTIVATED_FLAG } from "@/lib/graph/types"
+import { tagMatchesClassification } from "@/lib/classification"
 
 export type SupervisionArea =
   | 'detection_classification'
@@ -352,8 +353,7 @@ export function collectInjectEvidence(session: PseudoSessionState): SupervisionE
       if (areas.length === 0) continue
       const check = checks.find(c => c.injectId === inj.id)
       if (!check) continue
-      const truth = inj.reliability
-      const correct = truth ? check.tag === truth : undefined
+      const correct = tagMatchesClassification(check.tag, inj.classification)
       const label = correct === true ? 'correct getagd' : correct === false ? 'onjuist getagd' : 'getagd'
       for (const area of areas) {
         out.push({

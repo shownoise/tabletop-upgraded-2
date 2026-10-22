@@ -22,6 +22,7 @@ import type {
   Urgency,
 } from "@/lib/types"
 import { createSeededRng, type SeededRng } from "@/lib/wizard/seed"
+import { classificationFromLegacyReliability } from "@/lib/classification"
 
 // The AI returns a "plan" — a compact, LLM-friendly shape. planToGraph converts
 // it to a full ScenarioGraph with correct edges, coordinates, and defaults.
@@ -54,6 +55,7 @@ export interface WizardPlanInject {
   targetTeam?: "all" | "crisis_management" | "technical_it"
   targetRoles?: Role[]
   nis2Relevant?: boolean
+  /** @deprecated geen wizard-output meer; wordt gevouwen in classification */
   reliability?: InjectReliability
   deliverySeconds?: number
   // Phase 3 — capability-gated visibility. Inject hidden until session.flags[key]==true.
@@ -294,11 +296,10 @@ export function planToGraph(plan: WizardPlan, options: PlanToGraphOptions = {}):
         targetTeam: inj.targetTeam,
         targetRoles: inj.targetRoles,
         nis2Relevant: inj.nis2Relevant,
-        reliability: inj.reliability,
         deliverySeconds: inj.deliverySeconds,
         requiresCapability: inj.requiresCapability,
         triggersRegulatoryNotification: inj.triggersRegulatoryNotification,
-        classification: inj.classification,
+        classification: inj.classification ?? classificationFromLegacyReliability(inj.reliability),
         setsUpDecisionNodeId: resolvedSetup,
         facilitatorNote: inj.facilitatorNote,
       }

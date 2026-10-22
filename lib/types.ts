@@ -121,6 +121,8 @@ export interface RoleAction {
     title: string
     content: string
     channel?: InjectChannel
+    classification?: 'feit' | 'aanname'
+    /** @deprecated gemigreerd naar classification */
     reliability?: InjectReliability
     onlyToSubmitter?: boolean
   }
@@ -333,12 +335,10 @@ export type EmotionalTone =
   | 'menacing'
   | 'professional'
 
-// Ground truth reliability op InjectNodeData / Inject. Author-set, wordt
-// gestript uit de participant-payload via toParticipantState() tot de sessie
-// in REVIEW-fase komt. Sinds 2026-08-14 blijft dit 3-waardig omdat 'misleading'
-// (bewuste onwaarheid) semantisch verschilt van 'assumption' (ongetoetste
-// aanname); wat de deelnemer denkt (feit/aanname) is een aparte as via
-// FactCheckTag.
+// @deprecated 2026-10-22 — geen auteursinput meer. `classification`
+// ('feit' | 'aanname') is het enige auteursveld voor deze as; legacy-waarden
+// worden ingelezen door lib/classification.ts (misleading → aanname). Het type
+// blijft bestaan voor opgeslagen data en voor span-annotaties.
 export type InjectReliability = 'fact' | 'assumption' | 'misleading'
 
 export interface InjectSpanAnnotation {
@@ -365,11 +365,9 @@ export interface Inject {
   nis2Relevant?: boolean
   // Drip delivery: if > 0, this inject appears X seconds after the round starts (client-side reveal).
   deliverySeconds?: number
-  // BOB-training: how reliable is this info? Ground truth — hidden from participants during play,
-  // revealed in the review phase.
-  // @deprecated Phase 2 — legacy field kept for backwards compat with older
-  // scenario data. New scenarios use `classification` on InjectNodeData
-  // ('feit' | 'aanname'). The builder no longer surfaces this.
+  // @deprecated 2026-10-22 — alleen nog leespad voor opgeslagen scenario's.
+  // Gemigreerd naar `classification` door lib/classification.ts; niets leest
+  // dit veld nog voor UI of scoring.
   reliability?: InjectReliability
   // Optional per-span ground truth for annotation-level scoring (Phase D.11).
   groundTruthAnnotations?: InjectSpanAnnotation[]
@@ -381,9 +379,14 @@ export interface Inject {
   // Phase 3 — capability-gated visibility. Injects with this flag set are hidden
   // from participants until session.flags[requiresCapability] === true.
   requiresCapability?: string
-  // Phase 2 — auteur-geclassificeerd type informatie. Undefined tolerated
-  // for legacy data. New scenarios should always classify.
+  // Ground truth: is dit een getoetst feit of een ongetoetste aanname? Het
+  // enige auteursveld voor deze as. toParticipantState strijkt het uit de
+  // deelnemer-payload tot de review-fase, zodat er iets te beoordelen blijft.
+  // Optioneel — validateGraph waarschuwt, blokkeert niet.
   classification?: 'feit' | 'aanname'
+  // Server-afgeleid, alleen in de deelnemer-payload: vraagt deze inject om een
+  // fact-check-tag? Vervangt het aflezen van de (nu verborgen) classification.
+  factCheckRequested?: boolean
   // Phase 4 — facilitator-only note about why this inject exists. Stripped
   // from participant payload in toParticipantState.
   facilitatorNote?: string

@@ -4,18 +4,23 @@ import { useMemo } from "react"
 import { Check, X, Minus } from "lucide-react"
 import type { FactCheckTag, InjectAnnotation, InjectSpanAnnotation, SessionState } from "@/lib/types"
 import { splitTextByAnnotations } from "@/components/shared/span-annotator"
+import { CLASSIFICATION_LABELS, FACT_CHECK_TAG_LABELS } from "@/lib/config/texts"
+import { classificationForTag, type InjectClassification } from "@/lib/classification"
+
+interface Tally { correct: number; total: number; matchedSpans: number; totalSpans: number }
 
 // Fact-check review — compares each participant's own tags to authored ground truth.
 // Scoring was removed; this component is a plain visual comparison.
-function computeMyMatches(session: SessionState, participantId: string): { correct: number; total: number; matchedSpans: number; totalSpans: number } {
+function computeMyMatches(session: SessionState, participantId: string, roundIndex?: number): Tally {
   const checks = session.factChecks ?? []
   const anns = session.injectAnnotations ?? []
   let correct = 0, total = 0, matchedSpans = 0, totalSpans = 0
-  for (const round of session.scenario.rounds) {
+  session.scenario.rounds.forEach((round, ri) => {
+    if (typeof roundIndex === "number" && ri !== roundIndex) return
     for (const inj of round.injects) {
-      if (inj.reliability) {
+      if (inj.classification) {
         const my = checks.find(c => c.injectId === inj.id && c.participantId === participantId)
-        if (my) { total++; if (my.tag === inj.reliability) correct++ }
+        if (my) { total++; if (classificationForTag(my.tag) === inj.classification) correct++ }
       }
       for (const gt of inj.groundTruthAnnotations ?? []) {
         totalSpans++
@@ -23,7 +28,7 @@ function computeMyMatches(session: SessionState, participantId: string): { corre
         if (mine.some(m => m.start <= gt.end && m.end >= gt.start && m.tag === gt.tag)) matchedSpans++
       }
     }
-  }
+  })
   return { correct, total, matchedSpans, totalSpans }
 }
 
@@ -33,42 +38,41 @@ interface Props {
   roundIndex?: number   // if undefined, show all rounds
 }
 
-// Deelnemers taggen zelf 2 waarden (feit/aanname). De ground truth op de
-// inject is 3-waardig — misleidend is een aparte kolom voor "wat het écht was".
+// De deelnemer tagt in Engelse enum-waarden, de auteur classificeert in het
+// Nederlands. Beide assen hebben dezelfde twee waarden; alleen de taal verschilt.
 const TAG_META: Record<FactCheckTag, { label: string; dot: string; color: string }> = {
-  fact:       { label: "Feit",    dot: "bg-emerald-500", color: "text-emerald-600 dark:text-emerald-400" },
-  assumption: { label: "Aanname", dot: "bg-yellow-500",  color: "text-yellow-600 dark:text-yellow-400"   },
+  fact:       { label: FACT_CHECK_TAG_LABELS.fact.label,       dot: "bg-emerald-500", color: "text-emerald-600 dark:text-emerald-400" },
+  assumption: { label: FACT_CHECK_TAG_LABELS.assumption.label, dot: "bg-yellow-500",  color: "text-yellow-600 dark:text-yellow-400"   },
 }
 
-// Ground truth-labels (3 waarden — inclusief misleidend). Alleen zichtbaar
-// in review; gebruikt om het factcheck-paneel te vullen met "wat het écht was".
-const GROUND_TRUTH_META: Record<'fact' | 'assumption' | 'misleading', { label: string; dot: string; color: string }> = {
-  fact:       { label: "Feit",       dot: "bg-emerald-500", color: "text-emerald-600 dark:text-emerald-400" },
-  assumption: { label: "Aanname",    dot: "bg-yellow-500",  color: "text-yellow-600 dark:text-yellow-400"   },
-  misleading: { label: "Misleidend", dot: "bg-red-500",     color: "text-red-600 dark:text-red-400"         },
-}
-
-function normalizeReliability(rel: string | undefined): 'fact' | 'assumption' | 'misleading' | undefined {
-  if (rel === "fact" || rel === "assumption" || rel === "misleading") return rel
-  return undefined
+const TRUTH_META: Record<InjectClassification, { label: string; dot: string; color: string }> = {
+  feit:    { label: CLASSIFICATION_LABELS.feit.label,    dot: "bg-emerald-500", color: "text-emerald-600 dark:text-emerald-400" },
+  aanname: { label: CLASSIFICATION_LABELS.aanname.label, dot: "bg-yellow-500",  color: "text-yellow-600 dark:text-yellow-400"   },
 }
 
 export function FactCheckReview({ session, participantId, roundIndex }: Props) {
-  const myScore = useMemo(() => computeMyMatches(session, participantId), [session, participantId])
+  const roundScore = useMemo(
+    () => computeMyMatches(session, participantId, roundIndex),
+    [session, participantId, roundIndex],
+  )
+  const overallScore = useMemo(
+    () => computeMyMatches(session, participantId),
+    [session, participantId],
+  )
 
   const targets = useMemo(() => {
     const out: Array<{
       round: number
       injectId: string
       title: string
-      truth: 'fact' | 'assumption' | 'misleading'
+      truth: InjectClassification
       content: string
       groundTruth: InjectSpanAnnotation[]
     }> = []
     session.scenario.rounds.forEach((r, ri) => {
       if (typeof roundIndex === "number" && ri !== roundIndex) return
       for (const inj of r.injects) {
-        const truth = normalizeReliability(inj.reliability)
+        const truth = inj.classification
         if (!truth) continue
         out.push({
           round: ri + 1,
@@ -85,29 +89,32 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
 
   if (targets.length === 0) return null
 
-  const myPct = myScore.total > 0 ? Math.round((myScore.correct / myScore.total) * 100) : 0
+  const roundPct = roundScore.total > 0 ? Math.round((roundScore.correct / roundScore.total) * 100) : 0
+  const showOverall = typeof roundIndex === "number" && overallScore.total > roundScore.total
+  const roundLabel = typeof roundIndex === "number" ? `Ronde ${roundIndex + 1}` : "Alle rondes"
 
   return (
     <div className="rounded-lg border border-tt-border bg-tt-surface p-4 flex flex-col gap-3">
-      <header className="flex items-center justify-between">
-        <span className="font-mono text-xs uppercase tracking-widest text-tt-accent">Fact-check review</span>
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-mono text-xs uppercase tracking-widest text-tt-accent">Feit of aanname — wat jij dacht</span>
         <span className="font-mono text-[10px] text-tt-dim">
-          Jij: {myScore.correct}/{myScore.total} markeringen{myScore.totalSpans > 0 ? ` · ${myScore.matchedSpans}/${myScore.totalSpans} spans correct` : ""} ({myPct}%)
+          {roundLabel}: {roundScore.correct}/{roundScore.total} juist ({roundPct}%)
+          {roundScore.totalSpans > 0 ? ` · ${roundScore.matchedSpans}/${roundScore.totalSpans} spans` : ""}
+          {showOverall ? ` · hele sessie ${overallScore.correct}/${overallScore.total}` : ""}
         </span>
       </header>
+      {roundScore.total < targets.length && (
+        <p className="font-mono text-[10px] text-tt-dim">
+          {targets.length - roundScore.total} van {targets.length} injects heb je niet beoordeeld — die tellen niet mee.
+        </p>
+      )}
       <ul className="flex flex-col divide-y divide-tt-border/50">
         {targets.map(t => {
           const myTag = (session.factChecks ?? []).find(
             f => f.injectId === t.injectId && f.participantId === participantId
           )?.tag
-          // Deelnemer kan 'fact' of 'assumption' taggen; ground truth kan
-          // extra 'misleading' zijn. Mismatch = elke andere combinatie dan
-          // exact overeenkomen (bij misleidend is elke deelnemer-tag mismatch,
-          // want er is geen 'misleading' knop voor deelnemers — het punt is
-          // dat een 'assumption' tag hier de "voorzichtigheid" is en het
-          // dichtst bij correct staat, maar we scoren pure match).
-          const mismatched = myTag && myTag !== t.truth
-          const truthMeta = GROUND_TRUTH_META[t.truth]
+          const mismatched = myTag !== undefined && classificationForTag(myTag) !== t.truth
+          const truthMeta = TRUTH_META[t.truth]
           const myMeta = myTag ? TAG_META[myTag] : null
           return (
             <li key={t.injectId} className="py-2 flex items-center gap-3 text-xs">
@@ -117,7 +124,7 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <div className="flex flex-col items-end gap-0.5">
-                  <span className="font-mono text-[9px] text-tt-dim">Jouw</span>
+                  <span className="font-mono text-[9px] text-tt-dim">Jij dacht</span>
                   {myMeta ? (
                     <span className={`inline-flex items-center gap-1 ${myMeta.color}`}>
                       <span className={`inline-block size-1.5 rounded-full ${myMeta.dot}`} />
@@ -128,7 +135,7 @@ export function FactCheckReview({ session, participantId, roundIndex }: Props) {
                   )}
                 </div>
                 <div className="flex flex-col items-end gap-0.5">
-                  <span className="font-mono text-[9px] text-tt-dim">Waarheid</span>
+                  <span className="font-mono text-[9px] text-tt-dim">Het was</span>
                   <span className={`inline-flex items-center gap-1 ${truthMeta.color}`}>
                     <span className={`inline-block size-1.5 rounded-full ${truthMeta.dot}`} />
                     {truthMeta.label}

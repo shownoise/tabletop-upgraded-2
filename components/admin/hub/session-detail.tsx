@@ -10,6 +10,8 @@ import { useToast } from "./toast"
 import { SpiderChart, type ReportVector } from "./report-charts"
 import { ROLE_META, type Role } from "@/lib/types"
 import type { DecisionNodeData, InjectNodeData, ScenarioGraph } from "@/lib/graph/types"
+import { CLASSIFICATION_LABELS } from "@/lib/config/texts"
+import type { InjectClassification } from "@/lib/classification"
 
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleString("nl-NL", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -36,7 +38,6 @@ interface RoundReport {
       injectId: string
       title: string
       classification?: string
-      groundTruth?: string
       participantViews: Array<{ participantName: string; tag: "fact" | "assumption" }>
     }>
   }>
@@ -115,7 +116,6 @@ function buildRoundReport(snapshot: SessionSnapshot): RoundReport[] {
           injectId: inj.id,
           title: inj.title,
           classification: inj.classification,
-          groundTruth: inj.reliability,
           participantViews,
         })
       }
@@ -169,7 +169,7 @@ function cumulativeVector(rounds: RoundReport[]): ReportVector {
 interface FactAssumptionRow {
   injectId: string
   injectTitle: string
-  groundTruth: "fact" | "assumption" | "misleading"
+  groundTruth: InjectClassification
   participantViews: Array<{ participantName: string; tag: "fact" | "assumption" }>
   // Wat het team volgens de facilitator behandelde (retroactief). Leeg als
   // de facilitator (nog) niet heeft ingevuld.
@@ -190,10 +190,10 @@ function buildFactAssumptionRows(
   for (const r of rounds) {
     for (const d of r.decisions) {
       for (const inj of d.setupInjects) {
-        if (!inj.groundTruth) continue
+        if (inj.classification !== "feit" && inj.classification !== "aanname") continue
         if (seenInjects.has(inj.injectId)) continue
         seenInjects.add(inj.injectId)
-        const gt = inj.groundTruth as "fact" | "assumption" | "misleading"
+        const gt: InjectClassification = inj.classification
         const retro = retroactiveTags[inj.injectId]
         // Majority-tag van deelnemers als er meer factchecks zijn dan één
         // is-fact en één is-assumption. Bij tie kiezen we niks.
@@ -205,8 +205,7 @@ function buildFactAssumptionRows(
           else if (asns > facts) participantMajority = "assumption"
         }
         const effective = participantMajority ?? retro
-        const isMismatch =
-          effective === "fact" && (gt === "misleading" || gt === "assumption")
+        const isMismatch = effective === "fact" && gt === "aanname"
         rows.push({
           injectId: inj.injectId,
           injectTitle: inj.title,
@@ -597,7 +596,7 @@ function FactAssumptionRowView({
   row: {
     injectId: string
     injectTitle: string
-    groundTruth: "fact" | "assumption" | "misleading"
+    groundTruth: InjectClassification
     participantViews: Array<{ participantName: string; tag: "fact" | "assumption" }>
     retroactiveTag?: "fact" | "assumption"
     effectiveTeamTag?: "fact" | "assumption"
@@ -606,11 +605,9 @@ function FactAssumptionRowView({
   }
   onSetRetro: (tag: "fact" | "assumption" | "") => void
 }) {
-  const gtLabel = row.groundTruth === "misleading" ? "misleidend"
-                : row.groundTruth === "assumption" ? "aanname"
-                : "feit"
-  const gtClass = row.groundTruth === "misleading" ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-400"
-                : row.groundTruth === "assumption" ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+  const gtLabel = CLASSIFICATION_LABELS[row.groundTruth].label.toLowerCase()
+  const gtClass = row.groundTruth === "aanname"
+                ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
                 : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
   const teamHadTags = row.participantViews.length > 0
   const outerClass = row.isMismatch
