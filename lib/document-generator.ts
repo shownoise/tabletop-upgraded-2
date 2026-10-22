@@ -1,7 +1,63 @@
-import type { ExerciseConfig, RoleDocument, Role } from "./types"
+import type { ExerciseConfig, RoleDocument, Role, RegulatoryRegime } from "./types"
+import type { ScenarioGraph } from "./graph/types"
+import { NL_AVG_NIS2_REGIME } from "./regulatory/regimes"
 
 function docId() {
   return `doc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+}
+
+// The templates below are deliberately generic — they give a role an idea of
+// what it is expected to have on hand. Anything the scenario actually pins down
+// is appended per role, so a document says "bel DIT nummer" instead of
+// "externe IR-partij". Only structured graph data is used: a ransom amount, for
+// instance, lives in inject prose and would have to be guessed, so the generic
+// board threshold below stays generic.
+function scenarioAddendum(role: Role, graph: ScenarioGraph | undefined, regime: RegulatoryRegime): string {
+  const blocks: string[] = []
+  const retainer = graph?.irRetainerProfile
+
+  if (retainer && (role === "ceo" || role === "ciso" || role === "it_manager")) {
+    const lines = [
+      `IR-PARTIJ: ${retainer.name}`,
+      `ACTIVEREN: ${retainer.activationNumber}`,
+      ...(retainer.activationEmail ? [`E-MAIL: ${retainer.activationEmail}`] : []),
+    ]
+    if (retainer.scopeIncludes.length > 0) {
+      lines.push("", "ZIJ DOEN:", ...retainer.scopeIncludes.map(s => `• ${s}`))
+    }
+    if (retainer.scopeExcludes.length > 0) {
+      lines.push("", "ZIJ DOEN NIET — DIT BLIJFT BIJ JULLIE:", ...retainer.scopeExcludes.map(s => `• ${s}`))
+    }
+    blocks.push(lines.join("\n"))
+  }
+
+  if (role === "ceo" || role === "legal" || role === "ciso") {
+    const milestones = regime.milestones
+      .map(m => `• ${m.label}: binnen ${m.deadlineHours} uur — ${m.purpose}`)
+      .join("\n")
+    blocks.push(`MELDPLICHT IN DEZE OEFENING\nBevoegde instantie: ${regime.authorityLabel}\n${regime.obligation}\n\n${milestones}`)
+  }
+
+  // The briefing text itself already opens the exercise, so only the authored
+  // gaps are repeated here — those are the thing you want on hand mid-round.
+  const gaps = graph?.roleBriefings?.[role]?.playbookGaps
+  if (gaps && gaps.length > 0) {
+    blocks.push(`WAT IN JULLIE DRAAIBOEK ONTBREEKT\n${gaps.map(g => `• ${g}`).join("\n")}`)
+  }
+
+  if (blocks.length === 0) return ""
+  return `\n\n─── UIT DIT SCENARIO ───\n\n${blocks.join("\n\n")}`
+}
+
+export function withScenarioAddenda(
+  docs: RoleDocument[],
+  graph: ScenarioGraph | undefined,
+  regime: RegulatoryRegime = NL_AVG_NIS2_REGIME,
+): RoleDocument[] {
+  return docs.map(doc => {
+    const extra = scenarioAddendum(doc.targetRole, graph, regime)
+    return extra ? { ...doc, content: doc.content + extra } : doc
+  })
 }
 
 function insurerFor(sector: string): { name: string; phone: string; email: string } {
@@ -189,10 +245,10 @@ BOARD BRIEFING STRUCTUUR (5 minuten)
 5. Wanneer is de volgende update?
 
 SPREEKPUNTEN BIJ MEDIAVRAGEN
-• "We are aware of the situation and have activated our incident response team."
-• "We are cooperating fully with relevant authorities."
-• "We will provide an update at [tijdstip]."
-• NOOIT: bevestig of ontkent betaling losgeld aan pers
+• "We zijn bekend met de situatie en hebben ons incidentresponsteam geactiveerd."
+• "We werken volledig samen met de bevoegde instanties."
+• "We komen om [tijdstip] met een update."
+• NOOIT: bevestig of ontken tegenover de pers dat er losgeld is betaald
 
 SECTOR: ${sector} | OMVANG: ${size} medewerkers
 SCENARIO: ${scenario}`,
