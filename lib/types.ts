@@ -1,5 +1,5 @@
 import type { GoalId } from "@/lib/engine/types"
-import type { ScenarioGraph } from "@/lib/graph/types"
+import type { OutcomeVector, ScenarioGraph } from "@/lib/graph/types"
 import type { SupervisionArea } from "@/lib/engine/supervision"
 import { ROLE_BRIEFINGS } from "@/lib/config/texts"
 export type { GoalId }
@@ -703,6 +703,8 @@ export interface SessionState {
   // Per-round debrief progress. Today only participantFeedback is written;
   // toParticipantState narrows it to the caller's own entries.
   roundProgress?: RoundProgress[]
+  // Set by toParticipantState once the session has ended. Never persisted.
+  participantClosing?: ParticipantClosing
   // Monotonically increasing revision — bumped on every persisted mutation.
   version?: number
 }
@@ -881,6 +883,42 @@ export interface ParticipantFeedback {
   didnt: string
   gap: string
   submittedAt: number
+}
+
+// ─── Participant closing recap (end of session) ───
+// Server-computed in toParticipantState once session.status is "ended". Holds
+// nothing the participant could not already see at review; the facilitator's
+// own report keeps the internals (role resolution, dropped decision points).
+
+export interface ParticipantClosingChoice {
+  roleLabel: string
+  optionLabel: string
+  // De vector van de gekozen optie zoals de scoring hem leest — dezelfde
+  // getallen als in het facilitator-rapport. Weg als de optie er geen heeft.
+  outcomeVector?: OutcomeVector
+  debriefNote?: string
+}
+
+export interface ParticipantClosingRound {
+  roundNumber: number
+  title: string
+  choices: ParticipantClosingChoice[]
+  // Ronde-uitkomst: gemiddelde van de gekozen vectoren, −2..+2 per as. Weg
+  // zodra er niets is ingediend — voor zo'n ronde bestaat geen score.
+  perDimension?: OutcomeVector
+  points?: number
+}
+
+export interface ParticipantClosing {
+  rounds: ParticipantClosingRound[]
+  // Alleen gevuld als er iets te scoren viel. maxPoints telt uitsluitend de
+  // rondes die daadwerkelijk zijn ingediend.
+  totalPoints?: number
+  maxPoints?: number
+  scoringVersion?: string
+  teamName?: string
+  // Alleen in EVENT-mode met meerdere teams. Teamnamen zijn al zichtbaar in de lobby.
+  teamStandings?: Array<{ name: string; points: number; isMine: boolean }>
 }
 
 // ─── Facilitator response (per round) ───

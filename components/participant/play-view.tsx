@@ -22,6 +22,7 @@ import { FactCheckReview } from "./fact-check-review"
 import { ReviewCommentary } from "./review-commentary"
 import { SessionHUD } from "./session-hud"
 import { FeedbackScreen } from "./feedback-screen"
+import { SessionClosing } from "./session-closing"
 import { DecisionPanel } from "./decision-panel"
 import { RegulatoryNotificationButton } from "./regulatory-notification-button"
 import { OpeningBriefing } from "./opening-briefing"
@@ -1119,14 +1120,14 @@ export function PlayView() {
       <SessionHUD session={session} connected={connected} name={name} participantRole={participantRole} lang={lang} setLang={setLang} />
 
       {/* Whole-round phase timeline (four top-level phases) */}
-      {currentRound && session.activeRoundPhaseState && (
+      {currentRound && status !== "ended" && session.activeRoundPhaseState && (
         <div className="mx-auto max-w-6xl px-4 pt-3 md:px-8">
           <RoundPhaseTimeline state={session.activeRoundPhaseState} />
         </div>
       )}
 
       {/* Round timer + inline banner zone */}
-      {currentRound && (
+      {currentRound && status !== "ended" && (
         <div className="sticky top-[var(--ctt-hud-h,57px)] z-30 bg-background/95 backdrop-blur border-b border-border">
           <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-2 md:px-8">
             <RoundTimerCompact
@@ -1161,7 +1162,6 @@ export function PlayView() {
             </button>
             <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               {status === "lobby" ? tr(lang, "waitingToStart") :
-               status === "ended" ? tr(lang, "exerciseEnded") :
                isEventMode ? `Ronde ${session.currentRound + 1}` : tr(lang, "roundOf", { n: String(session.currentRound + 1), total: String(totalRounds) })}
             </div>
             </div>
@@ -1170,6 +1170,9 @@ export function PlayView() {
       )}
 
       <main className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
+        {status === "ended" ? (
+          <SessionClosing session={session} closing={session.participantClosing} />
+        ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Feed — main column; flex allows order-first on DecisionPanel for mobile */}
           <div className="flex flex-col gap-5 lg:col-span-2">
@@ -1186,7 +1189,7 @@ export function PlayView() {
             )}
 
             {/* Role picker — alleen in ASSESSMENT mode. In EVENT: iPad = team, geen individuele rol nodig. */}
-            {participantId && status !== "ended" && session.mode !== "event" && (status === "lobby" || !participantRole) && (
+            {participantId && session.mode !== "event" && (status === "lobby" || !participantRole) && (
               <RolePickerLobby
                 session={session}
                 participantId={participantId}
@@ -1226,7 +1229,7 @@ export function PlayView() {
                   <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "waitingToStart")}</p>
                 </div>
               )
-            ) : status === "active" ? (
+            ) : (
               <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card/50 py-12 text-center">
                 <div className="flex gap-1.5">
                   {[0,1,2].map(i => <span key={i} className="size-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: `${i*0.3}s` }} />)}
@@ -1234,10 +1237,6 @@ export function PlayView() {
                 <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
                   Wachten op eerste ronde…
                 </p>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-border bg-card/50 py-8 text-center">
-                <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "exerciseEnded")}</p>
               </div>
             )}
 
@@ -1394,6 +1393,7 @@ export function PlayView() {
             </div>}
           </aside>
         </div>
+        )}
       </main>
 
       <UrgentInjectModal inject={urgent} onClose={() => setUrgent(null)} lang={lang} />

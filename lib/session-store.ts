@@ -31,6 +31,7 @@ import type {
 } from "./types"
 import { ROLE_META } from "./types"
 import { classificationFromLegacyReliability, migrateGraphClassifications, migrateSessionClassifications } from "./classification"
+import { buildParticipantClosing } from "./participant-closing"
 import { NL_AVG_NIS2_REGIME } from "./regulatory/regimes"
 import { computeAuthoredWorkload, distributeRoles, effectiveRolesForParticipant } from "./engine/distribute-roles"
 import { plotInjectRoutes } from "./inject-routing"
@@ -317,6 +318,13 @@ export function toParticipantState(session: SessionState, forParticipantId?: str
     // Inter-round reflections are written for the facilitator's debrief. A
     // participant only ever gets their own back.
     roundProgress: filterRoundProgress(session, forParticipantId),
+    // Closing recap. Computed here rather than behind its own endpoint because
+    // scoring needs the graph, which this projection strips — doing it inside
+    // the projection keeps the scrubbing and the scoring on one code path,
+    // behind the membership check that /api/session/state already enforces.
+    participantClosing: session.status === "ended" && forParticipantId
+      ? buildParticipantClosing(session, forParticipantId)
+      : undefined,
   }
 }
 
