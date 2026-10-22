@@ -4,6 +4,7 @@ import { useMemo } from "react"
 import { Activity } from "lucide-react"
 import type { SessionState, TimelineEvent } from "@/lib/types"
 import { ROLE_META, ROUND_PHASE_LABELS_NL } from "@/lib/types"
+import { analyzeGraph } from "@/lib/graph/analyze"
 import { sessionToScoringInput } from "@/lib/scoring/graph-adapter"
 import { scoreExercise, OUTCOME_DIMENSIONS, type OutcomeDimension } from "@/lib/scoring"
 
@@ -21,7 +22,10 @@ const DIM_LABEL: Record<OutcomeDimension, string> = {
 // it is driven by the SessionState prop passed from the control-dashboard. All
 // scoring is computed inline via a useMemo — no /api/session/score call.
 export function LiveOverviewPanel({ session }: { session: SessionState }) {
-  const totalRounds = session.scenario.rounds.length
+  // scenario.rounds only holds the rounds played so far; the graph carries the total.
+  const totalRounds = session.graph
+    ? analyzeGraph(session.graph).roundCount
+    : session.scenario.rounds.length
   const currentIndex = session.currentRound
   const phase = session.roundPhase ?? "inject"
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { ShieldAlert } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
 import { ROLE_META } from "@/lib/types"
+import { analyzeGraph } from "@/lib/graph/analyze"
 import { InjectFeed } from "@/components/participant/inject-feed"
 import { RoundTimerCompact } from "@/components/participant/round-timer"
 import { stripMarkdown } from "@/lib/render-markdown"
@@ -56,6 +57,10 @@ export default function ObservePage() {
 
   const roundIdx = session.currentRound
   const currentRound = roundIdx >= 0 ? session.scenario.rounds[roundIdx] : null
+  // scenario.rounds only holds the rounds played so far; the graph carries the total.
+  const totalRounds = session.graph
+    ? analyzeGraph(session.graph).roundCount
+    : session.scenario.rounds.length
   const severityIdx = Math.min(Math.max(roundIdx, 0), SEVERITY_COLORS.length - 1)
   const severityColor = SEVERITY_COLORS[severityIdx]
   const severityLabel = SEVERITY_LABELS[severityIdx]
@@ -136,7 +141,7 @@ export default function ObservePage() {
               <div className="flex items-center justify-between px-4 py-2.5 bg-black/25 border-b border-tt-border">
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-[10px] font-bold tracking-widest" style={{ color: severityColor }}>
-                    RONDE {roundIdx + 1}/{session.scenario.rounds.length}
+                    RONDE {roundIdx + 1}/{totalRounds}
                   </span>
                   <span className="font-mono text-[10px] text-tt-dim truncate">{currentRound.title}</span>
                 </div>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, ShieldAlert } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
+import { analyzeGraph } from "@/lib/graph/analyze"
 import { useLang } from "@/lib/use-lang"
 import { tr, ESCALATION_KEYS } from "@/lib/i18n"
 import type { AssessmentReport } from "@/lib/scoring"
@@ -61,6 +62,10 @@ export function PresentView() {
 
   const escalationIndex = Math.min(session?.currentRound ?? 0, 3)
   const phase = session?.roundPhase ?? "inject"
+  // scenario.rounds only holds the rounds played so far; the graph carries the total.
+  const totalRounds = session?.graph
+    ? analyzeGraph(session.graph).roundCount
+    : session?.scenario.rounds.length ?? 0
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -116,7 +121,7 @@ export function PresentView() {
               <div className="flex flex-col">
                 <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "round")}</span>
                 <span className="font-mono text-3xl font-bold text-foreground tabular-nums">
-                  {session.currentRound + 1}<span className="text-muted-foreground text-xl">/{session.scenario.rounds.length}</span>
+                  {session.currentRound + 1}<span className="text-muted-foreground text-xl">/{totalRounds}</span>
                 </span>
               </div>
               <div className="flex flex-col">

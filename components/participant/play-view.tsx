@@ -7,6 +7,7 @@ import { ArrowLeft, CheckCircle, ChevronDown, FileText, Info, Loader2, ShieldAle
 import { useSessionStream } from "@/lib/use-session-stream"
 import type { Inject, LiveEvent, Participant, Role, RoleDocument, SessionState, SpecialEvent, SubmittedDecision } from "@/lib/types"
 import { ROLE_META, ROLE_ORDER } from "@/lib/types"
+import { analyzeGraph } from "@/lib/graph/analyze"
 import { api } from "@/lib/api-client"
 import { getGoal } from "@/lib/goals/registry"
 import type { GoalId } from "@/lib/engine/types"
@@ -214,7 +215,7 @@ function IntroOverlay({
 const SEVERITY_COLORS = ["#e8ff40", "#ffb340", "#ff4d3d", "#ff4d3d"] as const
 const SEVERITY_LABELS = ["MEDIUM", "HOOG", "KRITIEK", "KRITIEK"] as const
 
-function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>; lang: ReturnType<typeof useLang>[0] }) {
+function RoundSituationCard({ session, totalRounds, lang }: { session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>; totalRounds: number; lang: ReturnType<typeof useLang>[0] }) {
   const roundIdx = session.currentRound
   const currentRound = roundIdx >= 0 ? session.scenario.rounds[roundIdx] : null
   const [expanded, setExpanded] = useState(true)
@@ -239,7 +240,7 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
             className="font-mono text-[10px] font-bold tracking-widest shrink-0"
             style={{ color: severityColor }}
           >
-            {tr(lang, "round").toUpperCase()} {roundIdx + 1}{session.mode === 'event' ? '' : `/${session.scenario.rounds.length}`}
+            {tr(lang, "round").toUpperCase()} {roundIdx + 1}{session.mode === 'event' ? '' : `/${totalRounds}`}
           </span>
           <span className="font-mono text-[10px] text-tt-dim truncate">{currentRound.title}</span>
           <span
@@ -1047,6 +1048,10 @@ export function PlayView() {
   }
 
   const status = session.status
+  // scenario.rounds grows one round at a time, so it is never the total. A
+  // facilitator opening /play gets the unstripped state and can count the graph.
+  const totalRounds = session.totalRounds
+    ?? (session.graph ? analyzeGraph(session.graph).roundCount : session.scenario.rounds.length)
 
   // Deel B §4 — team-picker verschijnt in EVENT-mode zolang deelnemer geen groupId heeft.
   const currentParticipant = participantId ? session.participants.find(p => p.id === participantId) : undefined
@@ -1090,7 +1095,7 @@ export function PlayView() {
       {feedbackFor && (
         <FeedbackScreen
           roundNumber={feedbackFor.round}
-          totalRounds={session.scenario.rounds.length}
+          totalRounds={totalRounds}
           isFinal={feedbackFor.isFinal}
           lang={lang}
           onContinue={handleFeedbackDone}
@@ -1149,7 +1154,7 @@ export function PlayView() {
             <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               {status === "lobby" ? tr(lang, "waitingToStart") :
                status === "ended" ? tr(lang, "exerciseEnded") :
-               isEventMode ? `Ronde ${session.currentRound + 1}` : tr(lang, "roundOf", { n: String(session.currentRound + 1), total: String(session.scenario.rounds.length) })}
+               isEventMode ? `Ronde ${session.currentRound + 1}` : tr(lang, "roundOf", { n: String(session.currentRound + 1), total: String(totalRounds) })}
             </div>
             </div>
           </div>
@@ -1203,7 +1208,7 @@ export function PlayView() {
 
             {/* Round situation */}
             {currentRound ? (
-              <RoundSituationCard session={session} lang={lang} />
+              <RoundSituationCard session={session} totalRounds={totalRounds} lang={lang} />
             ) : status === "lobby" ? (
               !participantId && (
                 <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card/50 py-12 text-center">

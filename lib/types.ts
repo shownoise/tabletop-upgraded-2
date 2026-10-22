@@ -644,6 +644,11 @@ export interface SessionState {
   // Graph runtime — populated when the session was created from a scenario graph.
   graph?: ScenarioGraph
   graphState?: GraphRuntimeState
+  // Rounds in the whole exercise. Graph rounds materialise lazily, so
+  // scenario.rounds only ever holds the rounds played so far and may not be used
+  // as a denominator. Set by toParticipantState, whose graph has no nodes left
+  // for the participant to count.
+  totalRounds?: number
   // Locked-at-start inject → recipient routing.
   injectRoutePlan?: InjectRoutePlan
   // Whole-round phase timeline state (inject → discussion → decision → review).
