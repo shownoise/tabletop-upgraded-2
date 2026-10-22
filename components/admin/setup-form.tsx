@@ -22,6 +22,8 @@ import type {
 import { Input } from "@/components/ui/input"
 import type { ScenarioGraph } from "@/lib/graph/types"
 import { analyzeGraph, type GraphAnalysis } from "@/lib/graph/analyze"
+import { findUsedTokens, TOKEN_CONFIG_LABEL } from "@/lib/graph/dynamic-fill"
+import type { DynamicFillToken } from "@/lib/graph/types"
 import type { TemplateModuleSlot } from "@/lib/types/scenario-instance"
 import { DEFAULT_MODULE_SETS } from "@/lib/modules/defaults"
 import { MODULE_DEFINITIONS } from "@/lib/modules/definitions"
@@ -80,6 +82,16 @@ const DURATION_MINUTES: Record<string, number> = {
 
 const ALL_ROLES: readonly Role[] = ROLE_ORDER
 const CRISIS_ROLES: readonly Role[] = ALL_ROLES.filter(r => ROLE_META[r].team === "crisis_management")
+
+// Reading a token's config value, so the warning below can compare what is set
+// now against the default it shipped with.
+const TOKEN_CONFIG_VALUE: Record<DynamicFillToken, (c: ExerciseConfig) => string | undefined> = {
+  sector: c => c.sector,
+  companySize: c => c.companySize,
+  crownJewels: c => c.crownJewels,
+  criticalSystems: c => c.criticalSystems,
+  irRetainerName: c => c.irRetainerName,
+}
 
 const defaults: ExerciseConfig = {
   sector: "Financial Services",
@@ -428,6 +440,36 @@ export function SetupForm() {
                   ⚠ {graphAnalysis.unmatchedDecisionOptions.length} decision option(s) reference an unknown roleAction id — branching may not work automatically.
                 </p>
               )}
+              {/* These values are substituted into inject and round text, so a
+                  default left untouched puts the wrong client in front of the
+                  participants — and an empty one leaves a literal {{token}}. */}
+              {loadedGraph && (() => {
+                const used = findUsedTokens(loadedGraph)
+                if (used.length === 0) return null
+                const empty = used.filter(t => !TOKEN_CONFIG_VALUE[t](config))
+                const untouched = used.filter(t => {
+                  const v = TOKEN_CONFIG_VALUE[t](config)
+                  return !!v && v === TOKEN_CONFIG_VALUE[t](defaults)
+                })
+                if (empty.length === 0 && untouched.length === 0) return null
+                return (
+                  <div className="flex flex-col gap-1 rounded border border-amber-500/40 bg-amber-500/5 px-2.5 py-2">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                      Dit scenario vult klantgegevens in de teksten
+                    </span>
+                    {empty.length > 0 && (
+                      <p className="font-mono text-[10px] text-destructive">
+                        Leeg, deelnemers lezen dan letterlijk {"{{token}}"}: {empty.map(t => TOKEN_CONFIG_LABEL[t]).join(", ")}
+                      </p>
+                    )}
+                    {untouched.length > 0 && (
+                      <p className="font-mono text-[10px] text-amber-700 dark:text-amber-400">
+                        Nog de standaardwaarde: {untouched.map(t => `${TOKEN_CONFIG_LABEL[t]} ("${TOKEN_CONFIG_VALUE[t](config)}")`).join(", ")} — pas dit aan naar deze klant.
+                      </p>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           )}
         </div>
