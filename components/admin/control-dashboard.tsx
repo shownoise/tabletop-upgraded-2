@@ -141,7 +141,16 @@ export function ControlDashboard() {
     } catch {}
   }
 
-  async function endAndReset() {
+  // Ending and destroying are separate actions. Ending keeps the session, so
+  // the participant closing screen and the report still work; destroying wipes
+  // it. They used to be the same button once a session had ended.
+  async function endExercise() {
+    if (!confirm("Oefening nu beëindigen? Deelnemers zien hun eindscherm met scores. De sessie blijft bewaard.")) return
+    await run("end", () => api.endSessionForced())
+  }
+
+  async function destroySession() {
+    if (!confirm("Sessie definitief verwijderen? Keuzes, scores en de terugblik gaan verloren. Dit kan niet ongedaan worden gemaakt.")) return
     await run("reset", () => api.resetSession())
     router.push("/admin")
   }
@@ -349,8 +358,26 @@ export function ControlDashboard() {
                   })()}
                 </>
               )}
+              {!isEnded && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={endExercise}
+                  disabled={working !== null}
+                  className="gap-2 font-mono uppercase tracking-wider"
+                  title="Beëindig de oefening nu — deelnemers krijgen hun eindscherm, de sessie blijft bewaard"
+                >
+                  <Square className="size-3.5" />Beëindig oefening
+                </Button>
+              )}
               {isEnded && (
-                <Button size="sm" variant="outline" onClick={endAndReset} className="gap-2 font-mono uppercase tracking-wider">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={destroySession}
+                  disabled={working !== null}
+                  className="gap-2 font-mono uppercase tracking-wider border-destructive/40 text-destructive"
+                >
                   <Power className="size-3.5" />{tr(lang, "resetSession")}
                 </Button>
               )}
@@ -649,7 +676,7 @@ export function ControlDashboard() {
             {/* Danger zone */}
             <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 flex items-center justify-between">
               <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Session</span>
-              <button onClick={endAndReset} className="font-mono text-[10px] uppercase tracking-wider text-destructive hover:underline">
+              <button onClick={destroySession} className="font-mono text-[10px] uppercase tracking-wider text-destructive hover:underline">
                 {tr(lang, "destroySession")}
               </button>
             </div>

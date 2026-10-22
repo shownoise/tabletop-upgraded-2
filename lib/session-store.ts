@@ -1222,6 +1222,10 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
 
   // End of session — only reachable from the final round's REVIEW.
   let updated: SessionState = { ...session, status: "ended" as const }
+  // Playing to the end and aborting early must settle identically: an
+  // obligation left open is an omitted notification and has to score as one.
+  // This path used to skip the expiry that endSessionForced does.
+  updated = expireOpenRegulatoryObligations(updated)
   updated = pushTimeline(updated, "session_ended", {})
   await dbSetSession(updated)
   broadcastState(updated)

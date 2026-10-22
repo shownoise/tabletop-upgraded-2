@@ -66,7 +66,7 @@ export const api = {
   setPhase: (phase: RoundPhase, opts?: { force?: boolean; reason?: string }) =>
     post<{ ok: true }>("/api/session/set-phase", { phase, ...(opts ?? {}) }),
   endSessionForced: (input?: { reason?: string }) =>
-    post<{ ok: true }>("/api/session/end", input ?? {}),
+    post<{ ok: true }>("/api/session/end", { confirm: true, ...(input ?? {}) }),
   submitDecision: (input: { participantId: string; participantName: string; roundIndex: number; actionId: string; reasoning: string; confidence?: 1 | 2 | 3 | 4 | 5; activeRole?: Role }) =>
     post<{ ok: true }>("/api/session/submit-decision", input),
   assignRole: (input: { participantId: string; role: Role; joinCode?: string }) =>
