@@ -31,6 +31,66 @@ function replaceTokens(text: string, allowed: DynamicFillToken[], config: Exerci
 // {{crownJewels}} in an option without extra ceremony.
 const ALL_TOKENS: DynamicFillToken[] = DYNAMIC_FILL_TOKENS
 
+// Which config field feeds each token, for telling a facilitator what to fill in.
+export const TOKEN_CONFIG_LABEL: Record<DynamicFillToken, string> = {
+  sector: 'Sector',
+  companySize: 'Bedrijfsgrootte',
+  crownJewels: 'Kroonjuwelen',
+  criticalSystems: 'Kritieke systemen',
+  irRetainerName: 'Naam IR-retainer',
+}
+
+function tokensIn(text: string | undefined, allowed: readonly DynamicFillToken[]): DynamicFillToken[] {
+  if (!text) return []
+  return allowed.filter(t => text.includes(`{{${t}}}`))
+}
+
+// Which tokens this scenario actually substitutes into participant-facing
+// text. Mirrors applyDynamicFill's rules exactly — including that
+// aiPromptTemplate is filled even without dynamic.enabled, and that decision
+// nodes only take part once some node in the graph is dynamic. Callers use this
+// to warn about config values that land in the scenario: an empty one leaves a
+// literal "{{sector}}", an untouched default puts the wrong client in the text.
+export function findUsedTokens(graph: ScenarioGraph): DynamicFillToken[] {
+  const hasAnyDynamic = graph.nodes.some(n => (n.data as { dynamic?: { enabled?: boolean } }).dynamic?.enabled === true)
+  const used = new Set<DynamicFillToken>()
+
+  for (const node of graph.nodes) {
+    const d = node.data as (InjectNodeData | RoundNodeData | DecisionNodeData) & {
+      dynamic?: { enabled?: boolean; fillFrom?: DynamicFillToken[] }
+      aiPromptTemplate?: string
+    }
+    const allowed = d.dynamic?.fillFrom ?? ALL_TOKENS
+    const isDynamic = d.dynamic?.enabled === true
+
+    for (const t of tokensIn(d.aiPromptTemplate, ALL_TOKENS)) used.add(t)
+
+    if (node.type === 'inject' && isDynamic) {
+      const inj = d as InjectNodeData
+      for (const t of [...tokensIn(inj.title, allowed), ...tokensIn(inj.content, allowed)]) used.add(t)
+    } else if (node.type === 'round' && isDynamic) {
+      const rd = d as RoundNodeData
+      const fields = [rd.title, rd.situation_update, ...(rd.openingPrompts ?? [])]
+      for (const f of fields) for (const t of tokensIn(f, allowed)) used.add(t)
+    } else if (node.type === 'decision' && hasAnyDynamic) {
+      const dd = d as DecisionNodeData
+      const fields = [dd.prompt, ...dd.options.flatMap(o => [o.label, o.lessonLearned])]
+      for (const f of fields) for (const t of tokensIn(f, ALL_TOKENS)) used.add(t)
+    }
+  }
+
+  return [...used]
+}
+
+// The subset whose config value is missing, so replaceTokens leaves the raw
+// "{{token}}" in the text a participant reads.
+export function findUnfilledTokens(graph: ScenarioGraph, config: ExerciseConfig): DynamicFillToken[] {
+  return findUsedTokens(graph).filter(t => {
+    const v = tokenValue(t, config)
+    return v === undefined || v === null || v === ''
+  })
+}
+
 // Walk the graph and substitute {{token}} in nodes marked dynamic.enabled.
 // Only title, content, situation_update, openingPrompts[], and decision option
 // label / lessonLearned are touched. Unknown or unlisted tokens are left
