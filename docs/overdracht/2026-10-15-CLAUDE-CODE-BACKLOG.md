@@ -29,12 +29,17 @@ Gebruik dit document samen met `CONTEXT.md`, niet met de oudere
 | --- | --- | --- |
 | P0 | [#58](https://github.com/shownoise/tabletop-upgraded-2/issues/58) | Eén server-authoritative fase-overgang, één duidelijke facilitatorbediening, en facilitator/deelnemer zien na refresh dezelfde fase. |
 | P1 | [#60](https://github.com/shownoise/tabletop-upgraded-2/issues/60) | Partner Event toont alleen inject → overleg → keuze → dimensiefeedback → volgende ronde; zijpanelen staan standaard uit zonder data te verwijderen. |
+| P1a | [#105](https://github.com/shownoise/tabletop-upgraded-2/issues/105) | De live ervaring leidt rollen, informatie, overleg, keuze, review en afsluiting helder door; scoretrade-offs zijn bespreekbaar en het puntentotaal is aantoonbaar juist. |
 | P2 | [#70](https://github.com/shownoise/tabletop-upgraded-2/issues/70) | Vier-browser end-to-end test bewijst fase, mandaat, keuze, score, rapport en refresh in één wegwerpevent. |
 
 Pak P0 en P1 niet als cosmetische fixes op: de fase is nu in meerdere velden
 vertegenwoordigd (`roundPhase` en `activeRoundPhaseState`) en de twee
 facilitatorbedieningen kunnen verschillende routes kiezen. Centraliseer eerst
 de servertransitie en laat de UI uitsluitend die transitie aanroepen.
+
+Ticket #105 is de scherm-voor-scherm specificatie uit een daadwerkelijk
+gespeelde live sessie. Gebruik de live acceptatiesessie daarin als concrete
+oplevercheck en voeg hem toe aan #70.
 
 ### 2. Daarna: maak het platform geschikt voor echte events
 
