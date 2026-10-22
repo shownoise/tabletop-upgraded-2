@@ -60,11 +60,11 @@ export function ClientDetail({ id }: { id: string }) {
         if (!c) { toast.push("error", "Klant niet gevonden"); router.push("/admin/clients"); return }
         setClient(c)
         lastSavedSnapshotRef.current = clientSnapshot(c)
-        // Bijbehorende scenario's ophalen — matcht via clientName in de graph metadata.
+        // Bijbehorende scenario's ophalen — matcht op clientId in de graph.
         const sres = await fetch("/api/scenario-graph")
         if (sres.ok) {
           const sdata = await sres.json() as { graphs: ScenarioGraph[] }
-          setScenarios(sdata.graphs.filter(g => (g as unknown as { clientId?: string }).clientId === c.id))
+          setScenarios(sdata.graphs.filter(g => g.clientId === c.id))
         }
         const xres = await fetch("/api/admin/sessions")
         if (xres.ok) {
