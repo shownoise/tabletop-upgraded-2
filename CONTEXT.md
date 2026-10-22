@@ -20,12 +20,15 @@ Twee compleet verschillende concepten met verwarrend gelijkende naam.
   `OutcomeDimensionKey` in `lib/graph/types.ts:39`. Codenamen: `CONT` (containment),
   `FOR` (forensics), `BC` (business continuity), `JUR` (juridisch),
   `VER` (verantwoording / stakeholders — zie `SCORING.md:26`), `KOS` (kosten).
-- **`evaluationAspects`** — opt-in vlaggen per node die bepalen wélke evaluatie-UI
-  wordt getoond bij een inject/round. Waarden: `reliability`, `facts_assumptions`
-  (deprecated alias voor `reliability`), `nis2`, `decision_impact`,
-  `lessons_learned`. Code: `EvaluationAspect` in `lib/graph/types.ts:27`, gebruikt
-  in `RoundNodeData.evaluationAspects` en `InjectNodeData.evaluationAspects`. Heeft
-  **niks met scoring te maken**.
+- **`evaluationAspects`** — opt-in vlaggen per node. Waarden: `classification`
+  (sinds 2026-10-22 de naam voor de feit/aanname-as; `reliability` en
+  `facts_assumptions` zijn de oude namen en blijven geldig voor opgeslagen
+  graphs), `nis2`, `decision_impact`, `lessons_learned`. Code:
+  `EvaluationAspect` in `lib/graph/types.ts`, gebruikt in
+  `RoundNodeData.evaluationAspects` en `InjectNodeData.evaluationAspects`.
+  **Let op**: niets *leest* deze vlaggen — de builder schrijft ze (`canvas.tsx`
+  zet `[]` op nieuwe nodes) maar geen enkele UI hangt eraan. Heeft **niks met
+  scoring te maken**.
 
 ### Klantnaam ≠ dynamic-fill token
 
@@ -47,29 +50,37 @@ Wat ik in de UI "IT-inrichting" noem, is in de code het veld `criticalSystems`
 (dynamic-fill token en waarschijnlijk WizardConfig-veld). Kroonjuwelen is een
 apart veld: `crownJewels`. Verwar die twee niet.
 
-### Feit / aanname — twee auteurvelden voor hetzelfde
+### Feit / aanname — één auteursveld
 
-`'fabel'` is **weg**: de classificatie staat op `'feit' | 'aanname'`
-(`lib/graph/types.ts:98`), verwijderd 2026-08-14. Kom je nog UI tegen die op
-`fabel` filtert, dan is dat dode code die nooit matcht.
+Opgelost 2026-10-22. Er was één veld te veel; `reliability` is samengevoegd in
+`classification`.
 
-Wat er wél speelt: er zijn **twee** auteurvelden die dezelfde vraag stellen, en
-de inspector vraagt ze naast elkaar.
+- **`classification`** — `'feit' | 'aanname'`, het **enige** auteursveld.
+  `lib/graph/types.ts` (`InjectNodeData`) en `lib/types.ts` (`Inject`,
+  `PremadeInject`). Het is **ground truth**: `toParticipantState()` strijkt het
+  uit de deelnemer-payload tot de review-fase, net zoals `reliability` dat deed.
+  Optioneel — `validateGraph` waarschuwt, blokkeert niet.
+- **`reliability`** — `'fact' | 'assumption' | 'misleading'` — is **geen
+  auteursinput meer**. De inspector heeft er geen veld voor en niets leest het
+  nog voor UI of scoring. Opgeslagen waarden worden ingelezen door
+  `lib/classification.ts`: `fact → feit`, `assumption → aanname`,
+  `misleading → aanname`. Een bestaande `classification` wordt nooit
+  overschreven. Het type blijft bestaan voor `InjectSpanAnnotation.tag`.
+- **`factCheckRequested`** — server-afgeleide boolean, alleen in de
+  deelnemer-payload. Zegt "deze inject vraagt een oordeel" zonder het antwoord
+  te verklappen; de inject-feed hangt de tag-knoppen hieraan.
+- `'fabel'` is weg sinds 2026-08-14 en de laatste dode `fabel`-UI
+  (`premade-inject-panel.tsx`) is 2026-10-22 verwijderd.
 
-- `classification` — `'feit' | 'aanname'`, Nederlands. Label dat de deelnemer
-  ziet. `lib/graph/types.ts:98` en `:284`.
-- `reliability` — `'fact' | 'assumption' | 'misleading'`, Engels, 3-waardig.
-  "Ground truth", gestript uit de deelnemer-payload tot de review-fase.
-  `lib/types.ts:342`. De waarde `misleading` is dezelfde "fabel" die ik nooit
-  heb gevraagd.
+Los daarvan staat `FactCheckTag` (`'fact' | 'assumption'`): wat de **deelnemer
+denkt**. Dat is een legitieme aparte as — de gok tegenover de waarheid — en
+niet de dubbeling. Brug tussen beide assen: `classificationForTag()` /
+`tagMatchesClassification()` in `lib/classification.ts`.
 
-`lib/types.ts:371` zegt dat nieuwe scenario's `classification` gebruiken, maar
-`reliability` wordt nog in tien bestanden gelezen. Samenvoegen raakt opgeslagen
-injects.
-
-Los daarvan staat `FactCheckTag` (`'fact' | 'assumption'`, `lib/types.ts:603`):
-wat de **deelnemer denkt**. Dat is een legitieme aparte as — de gok tegenover
-de waarheid — en niet de dubbeling.
+Rapportage per ronde: `components/participant/fact-check-review.tsx` (deelnemer,
+"jij dacht" vs "het was" met ronde-tally) en
+`components/admin/fact-check-panel.tsx` (facilitator, per ronde gegroepeerd met
+team-tally).
 
 ### Training modus ≠ event modus — beide bestaan wél
 
@@ -110,8 +121,8 @@ dat ze niet terugvallen op de ruwe enum-waarde.
   `lib/wizard/seed.ts`. UI: `components/admin/builder/ai-wizard-dialog.tsx`.
   Zie ook: `app/api/session/create/route.ts` (waar de prompt richting Claude
   wordt opgebouwd).
-- **Aanname** — inject-classificatie, waarde `'aanname'` in `classification`
-  (`lib/graph/types.ts:97`). Zie ⚠-blok hierboven.
+- **Aanname** — inject-classificatie, waarde `'aanname'` in `classification`.
+  Zie ⚠-blok hierboven.
 - **Chaser** — node-type dat een follow-up inject afvuurt als een decision niet
   is genomen. `lib/graph/types.ts:15` (`GraphNodeType`).
 - **Decision** — node in de graph met opties per rol. Data:
@@ -130,8 +141,7 @@ dat ze niet terugvallen op de ruwe enum-waarde.
   `components/admin/setup-form.tsx`. Live dashboard:
   `app/admin/dashboard/page.tsx` + `components/admin/control-dashboard.tsx`.
   Builder: `app/admin/builder/page.tsx` + `components/admin/builder/`.
-- **Feit** — inject-classificatie, waarde `'feit'` in `classification`
-  (`lib/graph/types.ts:97`).
+- **Feit** — inject-classificatie, waarde `'feit'` in `classification`.
 - **Inject** — bericht dat tijdens een ronde binnenkomt. Node-type `"inject"`,
   data `InjectNodeData` in `lib/graph/types.ts:74`. Feed voor deelnemer:
   `components/participant/inject-feed.tsx`.
