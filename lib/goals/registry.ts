@@ -20,32 +20,32 @@ export const GOAL_REGISTRY: Record<GoalId, GoalPlugin> = {
   crisis_management: comingSoon(
     'crisis_management',
     'Crisis Management',
-    'Full crisis team coordination across IT, Legal, Communications, and Executive. Multi-track pressure with simultaneous stakeholder demands.',
+    'Volledige coördinatie van het crisisteam over IT, Legal, Communicatie en directie. Druk op meerdere sporen tegelijk, met stakeholders die gelijktijdig iets van je willen.',
   ),
   ransomware_simulation: comingSoon(
     'ransomware_simulation',
     'Ransomware Simulation',
-    'Deep-dive ransomware exercise including negotiation, backup recovery decisions, and regulatory notification under a live timer.',
+    'Diepgaande ransomware-oefening: onderhandeling, besluiten over herstel uit back-ups, en de meldplicht onder een lopende klok.',
   ),
   business_continuity: comingSoon(
     'business_continuity',
     'Business Continuity',
-    'Operational resilience: workarounds, priority recovery, and acceptable downtime decisions for mission-critical processes.',
+    'Operationele weerbaarheid: noodoplossingen, welke processen als eerste terug moeten, en welke uitvaltijd nog acceptabel is voor bedrijfskritische processen.',
   ),
   regulatory_compliance: comingSoon(
     'regulatory_compliance',
     'Regulatory Compliance',
-    'Notification obligations, regulator interaction, and compliance deadline management under NIS2 and GDPR.',
+    'Meldplichten, contact met de toezichthouder, en het beheersen van compliance-deadlines onder NIS2 en AVG.',
   ),
   supply_chain_crisis: comingSoon(
     'supply_chain_crisis',
     'Supply Chain Crisis',
-    'Vendor compromise scenarios with downstream customer impact, processor liability, and supply chain response coordination.',
+    'Een gecompromitteerde leverancier, met impact bij je eigen klanten, aansprakelijkheid als verwerker, en coördinatie door de hele keten.',
   ),
   partner_mix: comingSoon(
     'partner_mix',
     'Partner Mix Event',
-    'Competitive multi-team format with leaderboard, speed bonuses, and dilemma cards. Designed for partner events and conferences.',
+    'Competitief formaat voor meerdere teams, met scorebord, snelheidsbonussen en dilemmakaarten. Bedoeld voor partner-events en congressen.',
   ),
 }
 

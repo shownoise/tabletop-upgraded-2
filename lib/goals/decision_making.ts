@@ -3,7 +3,7 @@ import type { GoalPlugin } from "./types"
 export const decisionMakingGoal: GoalPlugin = {
   id: 'decision_making',
   name: 'Decision-Making Under Pressure',
-  description: 'Train your team to make clear, mandate-aware decisions in crisis conditions. Focus on escalation timing, role clarity, and structured frameworks.',
+  description: 'Leer je team heldere besluiten nemen binnen het eigen mandaat, onder crisisdruk. De nadruk ligt op het moment van escaleren, wie waarover gaat, en vasthouden aan één werkwijze.',
   status: 'active',
   capabilities: [
     'governance_decisions',
