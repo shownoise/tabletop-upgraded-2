@@ -23,7 +23,9 @@ import {
 import type { PremadeInject, RoleBriefing, ScenarioGraph } from "@/lib/graph/types"
 import type { GraphIssue } from "@/lib/graph/validate"
 import type { RuleFailure } from "@/lib/wizard/framework"
-import type { Role, ScenarioType } from "@/lib/types"
+import type { GoalId, Role, ScenarioType } from "@/lib/types"
+import { getAllGoals } from "@/lib/goals/registry"
+import { resolveGraphGoalId } from "@/lib/admin/client-config"
 import { EXAMPLES } from "@/lib/graph/examples"
 import { PreviewDialog } from "./preview-dialog"
 import { DryRunDialog } from "./dry-run-dialog"
@@ -34,6 +36,8 @@ interface Props {
   graph: ScenarioGraph
   onNameChange: (name: string) => void
   onScenarioTypeChange: (t: ScenarioType) => void
+  onGoalChange: (g: GoalId) => void
+  clientName?: string
   onSave: () => Promise<void>
   onLoad: (g: ScenarioGraph) => void
   onWizardGenerated: (g: ScenarioGraph, meta: { warnings: RuleFailure[] }) => void
@@ -56,6 +60,8 @@ export function Toolbar({
   graph,
   onNameChange,
   onScenarioTypeChange,
+  onGoalChange,
+  clientName,
   onSave,
   onLoad,
   onWizardGenerated,
@@ -109,7 +115,7 @@ export function Toolbar({
   return (
     <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-2">
       {/* Meta group — identity of this scenario */}
-      <div className="flex flex-1 items-center gap-2">
+      <div className="flex flex-1 flex-wrap items-center gap-2">
         <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">Naam</Label>
         <Input
           value={graph.name}
@@ -123,6 +129,33 @@ export function Toolbar({
         >
           {SCENARIO_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
+        {/* Doel hoort bij het scenario, niet bij de losse sessie. De waarde kan
+            hier de opgeloste default tonen zonder die in de graph te schrijven. */}
+        <select
+          value={resolveGraphGoalId(graph)}
+          onChange={e => onGoalChange(e.target.value as GoalId)}
+          title="Doel van de oefening — hoort bij dit scenario"
+          className="h-8 rounded border border-border bg-background px-2 font-mono text-xs"
+        >
+          {getAllGoals().map(g => (
+            <option key={g.id} value={g.id} disabled={g.status !== "active"}>
+              {g.name}{g.status !== "active" ? " (binnenkort)" : ""}
+            </option>
+          ))}
+        </select>
+        {graph.clientId ? (
+          <a
+            href={`/admin/clients/${encodeURIComponent(graph.clientId)}`}
+            className="font-mono text-[10px] uppercase tracking-wider text-primary hover:underline"
+            title="Klant van dit scenario — bepaalt de organisatiegegevens in de sessie"
+          >
+            Klant: {clientName ?? graph.clientId}
+          </a>
+        ) : (
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground" title="Dit scenario hangt niet onder een klant — de sessie-setup vraagt de organisatie dan zelf uit">
+            Geen klant
+          </span>
+        )}
       </div>
 
       {/* Content group — starting a new scenario or reusing existing content */}

@@ -44,11 +44,21 @@ De AI-wizard vraagt de klantnaam wél uit, maar je kunt hem **niet** als
   `dynamic-fill.ts` (token toevoegen aan `DynamicFillToken` in
   `lib/graph/types.ts` én in `tokenValue()`).
 
-### IT-inrichting ≈ `criticalSystems` (niet exact)
+### IT-inrichting = `criticalSystems` (hetzelfde gegeven)
 
-Wat ik in de UI "IT-inrichting" noem, is in de code het veld `criticalSystems`
-(dynamic-fill token en waarschijnlijk WizardConfig-veld). Kroonjuwelen is een
-apart veld: `crownJewels`. Verwar die twee niet.
+Opgelost 2026-10-22: dit is één gegeven onder drie namen, niet "ongeveer
+hetzelfde".
+
+- **`AdminClient.itArrangement`** — `lib/admin/clients.ts`, wat ik in de
+  klant-UI "IT-inrichting" noem. Dit is de bron.
+- **`ExerciseConfig.criticalSystems`** — `lib/types.ts`, wat de sessie en het
+  `{{criticalSystems}}`-token gebruiken. Wordt uit `itArrangement` gevuld door
+  `organisationFromClient()` in `lib/admin/client-config.ts`.
+- **`WizardConfig.itArrangement`** — `lib/wizard/config.ts`, zelfde gegeven
+  voor de AI-wizard.
+
+Kroonjuwelen is een apart veld: `crownJewels`, op alle drie de niveaus met
+dezelfde naam. Verwar die twee niet.
 
 ### Feit / aanname — één auteursveld
 
@@ -130,6 +140,11 @@ dat ze niet terugvallen op de ruwe enum-waarde.
 - **Deelnemer** — persoon met een rol tijdens een sessie. Views:
   `components/participant/*` (play-view, decision-panel, inject-feed,
   session-hud, phase-timer). Join-flow: `app/join/page.tsx`.
+- **Doel (oefendoel)** — `GoalId` in `lib/engine/types.ts`, plugins in
+  `lib/goals/registry.ts`. Staat op de **graph** (`ScenarioGraph.goalId`), niet
+  op de sessie: je kiest het in de builder, de sessie-setup toont het alleen.
+  Een graph zonder doel lost op naar `decision_making` via
+  `resolveGraphGoalId()` in `lib/admin/client-config.ts`.
 - **Dynamic tokens** — `{{sector}}`, `{{companySize}}`, `{{crownJewels}}`,
   `{{criticalSystems}}`, `{{irRetainerName}}`. Substitutie:
   `lib/graph/dynamic-fill.ts`. Zie ⚠-blok voor het ontbrekende `{{klantnaam}}`.
@@ -145,6 +160,14 @@ dat ze niet terugvallen op de ruwe enum-waarde.
 - **Inject** — bericht dat tijdens een ronde binnenkomt. Node-type `"inject"`,
   data `InjectNodeData` in `lib/graph/types.ts:74`. Feed voor deelnemer:
   `components/participant/inject-feed.tsx`.
+- **Klant** — `AdminClient` in `lib/admin/clients.ts`, beheerd op
+  `/admin/clients`. Bezit de organisatiegegevens (sector, `employees`,
+  `itArrangement`, `crownJewels`, `crisisTeamRoles`, `regimeId`). Een scenario
+  hangt eronder via `ScenarioGraph.clientId`; de sessie legt het vast in
+  `ExerciseConfig.adminClientId`. De sessie-setup vraagt deze gegevens dan niet
+  meer uit — zie `organisationFromClient()` in `lib/admin/client-config.ts`.
+  Een graph zonder `clientId` (alles van voor 2026-10-22) houdt de handmatige
+  invulling.
 - **Meldplicht** — melding bij bevoegde autoriteit (nu NIS2-specifiek in tekst;
   P2 maakt dit algemener). Dit is sinds 2026-10-20 het **enige** meldmechanisme
   bij de deelnemer: `components/participant/regulatory-notification-button.tsx`

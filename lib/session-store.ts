@@ -32,7 +32,8 @@ import type {
 import { ROLE_META } from "./types"
 import { classificationFromLegacyReliability, migrateGraphClassifications, migrateSessionClassifications } from "./classification"
 import { buildParticipantClosing } from "./participant-closing"
-import { NL_AVG_NIS2_REGIME } from "./regulatory/regimes"
+import { getClient } from "./admin/clients"
+import { regimeForClient } from "./admin/client-config"
 import { computeAuthoredWorkload, distributeRoles, effectiveRolesForParticipant } from "./engine/distribute-roles"
 import { plotInjectRoutes } from "./inject-routing"
 import { buildTeamRoles } from "./team-roster"
@@ -530,10 +531,14 @@ export async function createSession(
   if (!scenario) throw new Error("createSession requires a scenario — legacy generator is removed")
   const resolvedScenario = migrateScenarioRoles(scenario)
   const startNodeId = graph?.nodes.find(n => n.type === "start")?.id
+  const client = graph?.clientId ? await getClient(graph.clientId) : null
+  const resolvedConfig: ExerciseConfig = client
+    ? { ...config, adminClientId: client.id, adminClientName: client.name }
+    : config
   const session: SessionState = {
     id: genId("ses"),
     joinCode: genJoinCode(),
-    config,
+    config: resolvedConfig,
     scenario: resolvedScenario,
     currentRound: -1,
     status: "lobby",
@@ -555,8 +560,9 @@ export async function createSession(
     graphState: graph && startNodeId
       ? { currentNodeId: startNodeId, pathHistory: [startNodeId], branchLog: [] }
       : undefined,
-    // Default regulatory regime — NL AVG + NIS2. Scenarios may swap this later.
-    regulatoryRegime: NL_AVG_NIS2_REGIME,
+    // De klant bepaalt het regime; zonder klant of bij een onbekend regimeId
+    // valt het terug op NL AVG + NIS2.
+    regulatoryRegime: regimeForClient(client),
     regulatoryObligations: [],
   }
   const migrated = migrateSessionClassifications(session)
@@ -571,9 +577,7 @@ export async function resetSession(): Promise<void> {
   if (current && (current.status === "ended" || current.status === "active")) {
     try {
       const { upsertSnapshot, snapshotFromSession } = await import("./admin/sessions-archive")
-      const clientId = (current.config as unknown as { adminClientId?: string })?.adminClientId
-      const clientName = (current.config as unknown as { adminClientName?: string })?.adminClientName
-      await upsertSnapshot(snapshotFromSession(current, clientId, clientName))
+      await upsertSnapshot(snapshotFromSession(current, current.config.adminClientId, current.config.adminClientName))
     } catch (err) {
       // Archiveren mag niet blocking zijn voor de reset — sessie-reset heeft prio.
       console.warn("[session-archive] snapshot failed:", err)

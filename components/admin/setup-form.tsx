@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, Sparkles, Upload, X, FileText, Plus, Trash2, ChevronUp, ChevronDown, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -27,7 +27,13 @@ import type { DynamicFillToken } from "@/lib/graph/types"
 import type { TemplateModuleSlot } from "@/lib/types/scenario-instance"
 import { DEFAULT_MODULE_SETS } from "@/lib/modules/defaults"
 import { MODULE_DEFINITIONS } from "@/lib/modules/definitions"
-import { getAllGoals } from "@/lib/goals/registry"
+import { getGoal } from "@/lib/goals/registry"
+import type { AdminClient } from "@/lib/admin/clients"
+import {
+  COMPANY_SIZE_BUCKETS,
+  organisationFromClient,
+  resolveGraphGoalId,
+} from "@/lib/admin/client-config"
 
 // Mapping van UI-scenario-strings naar ScenarioType voor module-defaults
 const SCENARIO_TYPE_MAP: Record<string, ScenarioType> = {
@@ -59,7 +65,7 @@ const sectors = [
   "Financial Services", "Healthcare", "Energy & Utilities", "Manufacturing",
   "Retail & E-commerce", "Public Sector", "Technology / SaaS", "Transportation",
 ]
-const sizes = ["100–250", "250–500", "500–1,500", "1,500+"]
+const sizes: readonly string[] = COMPANY_SIZE_BUCKETS
 const scenarios = [
   "Ransomware", "Data Exfiltration", "Insider Threat", "Business Email Compromise",
   "Supply Chain Compromise", "DDoS / Extortion", "Cloud Account Takeover",
@@ -159,6 +165,13 @@ export function SetupForm() {
   const [irFileName, setIrFileName] = useState<string | null>(null)
   const [irTruncated, setIrTruncated] = useState<{ original: number; kept: number } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  // De klant van de graph. Zolang die er is zijn de organisatievelden een
+  // gegeven; zonder klant blijft de facilitator ze zelf invullen.
+  const [client, setClient] = useState<AdminClient | null>(null)
+  const [clientLoadError, setClientLoadError] = useState<string | null>(null)
+  // Welke configvelden de facilitator in deze sessie zelf heeft aangeraakt.
+  // Die overschrijven we niet stil als er daarna nog een klant binnenkomt.
+  const [touched, setTouched] = useState<ReadonlySet<keyof ExerciseConfig>>(() => new Set())
 
   // Validation flags — surfaced to the submit button so invalid configs cannot POST.
   const rounds = config.roundCount ?? 4
@@ -179,6 +192,7 @@ export function SetupForm() {
   const [showAddModule, setShowAddModule] = useState(false)
 
   function update<K extends keyof ExerciseConfig>(key: K, value: ExerciseConfig[K]) {
+    setTouched(prev => prev.has(key) ? prev : new Set(prev).add(key))
     setConfig((c) => ({ ...c, [key]: value }))
   }
 
@@ -202,6 +216,9 @@ export function SetupForm() {
         ...c,
         selectedRoles: analysis.requiredRoles.length > 0 ? analysis.requiredRoles : c.selectedRoles,
         specialsMode: analysis.suggestedSpecialsMode,
+        // Het doel hoort bij het scenario. Een graph zonder doel valt terug op
+        // decision_making; dat schrijven we niet terug naar de graph.
+        goalId: resolveGraphGoalId(g),
       }))
       setSpecialsMode(analysis.suggestedSpecialsMode)
     }
@@ -236,6 +253,64 @@ export function SetupForm() {
       })
     return () => { cancelled = true }
   }, [graphId])
+
+  // Klant van de graph ophalen. Geen clientId (of een graph die is losgekoppeld)
+  // → geen klant, en de organisatievelden blijven handmatig.
+  const clientId = loadedGraph?.clientId
+  useEffect(() => {
+    if (!clientId) {
+      setClient(null)
+      setClientLoadError(null)
+      return
+    }
+    let cancelled = false
+    setClientLoadError(null)
+    fetch("/api/admin/clients")
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { clients?: AdminClient[] } | null) => {
+        if (cancelled) return
+        const found = data?.clients?.find(c => c.id === clientId) ?? null
+        setClient(found)
+        if (!found) setClientLoadError("De klant van dit scenario bestaat niet meer — vul de organisatie hieronder zelf in.")
+      })
+      .catch(() => {
+        if (!cancelled) setClientLoadError("Kon de klantgegevens niet ophalen — vul de organisatie hieronder zelf in.")
+      })
+    return () => { cancelled = true }
+  }, [clientId])
+
+  const clientOrg = useMemo(() => client ? organisationFromClient(client) : null, [client])
+
+  // De klant is het gegeven, maar niet met terugwerkende kracht: een veld dat de
+  // facilitator in deze sessie zelf heeft aangepast houdt zijn waarde, en krijgt
+  // een notitie dat het afwijkt van de klant.
+  useEffect(() => {
+    if (!clientOrg) return
+    setConfig(c => {
+      const next = { ...c }
+      if (!touched.has("sector")) next.sector = clientOrg.sector
+      if (!touched.has("companySize")) next.companySize = clientOrg.companySize
+      if (!touched.has("criticalSystems")) next.criticalSystems = clientOrg.criticalSystems
+      if (!touched.has("crownJewels")) next.crownJewels = clientOrg.crownJewels
+      if (clientOrg.selectedRoles && !touched.has("selectedRoles")) {
+        next.selectedRoles = clientOrg.selectedRoles
+      }
+      return next
+    })
+  }, [clientOrg, touched])
+
+  function clientOverrideNote(key: "sector" | "companySize" | "criticalSystems" | "crownJewels"): string | undefined {
+    if (!clientOrg) return undefined
+    if (!touched.has(key)) return undefined
+    if (config[key] === clientOrg[key]) return undefined
+    return `Handmatig aangepast voor deze sessie — bij de klant staat: ${clientOrg[key] || "leeg"}`
+  }
+
+  const goal = (() => { try { return getGoal(config.goalId ?? resolveGraphGoalId(loadedGraph)) } catch { return null } })()
+  const clientRoles = clientOrg?.selectedRoles
+  const rolesMissingAtClient = clientRoles
+    ? (graphAnalysis?.requiredRoles ?? []).filter(r => !clientRoles.includes(r))
+    : []
 
   function handleDurationChange(dur: string) {
     const [rounds, timer] = DURATION_DEFAULTS[dur] ?? [4, 15]
@@ -447,7 +522,9 @@ export function SetupForm() {
                 const used = findUsedTokens(loadedGraph)
                 if (used.length === 0) return null
                 const empty = used.filter(t => !TOKEN_CONFIG_VALUE[t](config))
-                const untouched = used.filter(t => {
+                // Met een klant komen deze waarden uit het klantdossier, dus dan
+                // is "nog de standaardwaarde" niet meer het risico.
+                const untouched = client ? [] : used.filter(t => {
                   const v = TOKEN_CONFIG_VALUE[t](config)
                   return !!v && v === TOKEN_CONFIG_VALUE[t](defaults)
                 })
@@ -475,43 +552,23 @@ export function SetupForm() {
         </div>
       )}
 
-      {/* Step 1 — Exercise goal */}
+      {/* Doel — vastgelegd in het scenario, hier alleen ter bevestiging. */}
       <div className="flex flex-col gap-4">
         <SectionHeader label="Doel van de oefening" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {getAllGoals().map(goal => {
-            const isActive = goal.status === "active"
-            const isSelected = config.goalId === goal.id
-            return (
-              <button
-                key={goal.id}
-                type="button"
-                disabled={!isActive}
-                tabIndex={isActive ? 0 : -1}
-                title={!isActive ? "This will be available in a future update" : undefined}
-                onClick={() => isActive && update("goalId", goal.id as GoalId)}
-                className={`relative flex flex-col gap-2 rounded-lg border px-4 py-3 text-left transition-all ${
-                  !isActive
-                    ? "cursor-not-allowed border-border bg-card opacity-50 select-none"
-                    : isSelected
-                      ? "border-primary bg-primary/10"
-                      : "border-border bg-card hover:border-primary/40"
-                }`}
-              >
-                {!isActive && (
-                  <span className="absolute top-2 right-2 font-mono text-[8px] uppercase tracking-widest text-muted-foreground border border-border/60 rounded px-1 py-0.5 leading-none">
-                    Soon
-                  </span>
-                )}
-                <span className={`font-mono text-sm font-medium pr-8 ${isSelected && isActive ? "text-primary" : "text-foreground"}`}>
-                  {goal.name}
-                </span>
-                <span className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
-                  {goal.description}
-                </span>
-              </button>
-            )
-          })}
+        <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-card px-4 py-3">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Uit het scenario</span>
+          <span className="font-mono text-sm font-medium text-foreground">{goal?.name ?? "Onbekend doel"}</span>
+          {goal?.description && (
+            <span className="text-[11px] leading-relaxed text-muted-foreground">{goal.description}</span>
+          )}
+          {graphId && (
+            <a
+              href={`/admin/builder?id=${encodeURIComponent(graphId)}`}
+              className="font-mono text-[10px] uppercase tracking-wider text-primary hover:underline"
+            >
+              Doel wijzigen in de scenariobuilder
+            </a>
+          )}
         </div>
       </div>
 
@@ -555,24 +612,47 @@ export function SetupForm() {
         </div>
       </div>
 
-      {/* Section 1 — Organization profile */}
+      {/* Section 1 — Organization profile. Hangt het scenario onder een klant,
+          dan is dit een gegeven en geen keuze. */}
       <SectionHeader label="Organisatie" />
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <FieldRow label="Sector" hint="Branche van de gesimuleerde organisatie">
-          <Select value={config.sector} onValueChange={(v) => update("sector", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{sectors.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-          </Select>
-        </FieldRow>
+      {clientLoadError && (
+        <p className="font-mono text-[11px] text-amber-700 dark:text-amber-400">{clientLoadError}</p>
+      )}
+      {client ? (
+        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card px-4 py-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="font-mono text-sm font-medium text-foreground">{client.name}</span>
+            <a
+              href={`/admin/clients/${encodeURIComponent(client.id)}`}
+              className="font-mono text-[10px] uppercase tracking-wider text-primary hover:underline"
+            >
+              Klantgegevens wijzigen
+            </a>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FactRow label="Sector" value={config.sector} note={clientOverrideNote("sector")} />
+            <FactRow label="Grootte" value={config.companySize} note={clientOverrideNote("companySize")} />
+            <FactRow label="Kritieke systemen" value={config.criticalSystems} note={clientOverrideNote("criticalSystems")} />
+            <FactRow label="Kroonjuwelen" value={config.crownJewels} note={clientOverrideNote("crownJewels")} />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <FieldRow label="Sector" hint="Branche van de gesimuleerde organisatie">
+            <Select value={config.sector} onValueChange={(v) => update("sector", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{sectors.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </FieldRow>
 
-        <FieldRow label="Grootte" hint="Aantal medewerkers">
-          <Select value={config.companySize} onValueChange={(v) => update("companySize", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{sizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-          </Select>
-        </FieldRow>
-
-      </div>
+          <FieldRow label="Grootte" hint="Aantal medewerkers">
+            <Select value={config.companySize} onValueChange={(v) => update("companySize", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{sizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </FieldRow>
+        </div>
+      )}
 
       {/* Section 2 — Exercise setup */}
       <SectionHeader label="Instellingen" />
@@ -590,6 +670,25 @@ export function SetupForm() {
 
       {/* Section 3 — Rollen & tijd */}
       <SectionHeader label="Rollen & tijd" />
+      {clientRoles ? (
+        <div className="flex flex-col gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Deelnemende rollen — crisisteam van {client?.name}
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {(config.selectedRoles ?? []).map(r => (
+              <span key={r} className="rounded border border-border bg-card px-2 py-1 font-mono text-[11px] text-foreground">
+                {ROLE_META[r].label}
+              </span>
+            ))}
+          </div>
+          {rolesMissingAtClient.length > 0 && (
+            <p className="font-mono text-[10px] text-amber-700 dark:text-amber-400">
+              Dit scenario rekent ook op {rolesMissingAtClient.map(r => ROLE_META[r].label).join(", ")} — die rol staat niet in het crisisteam van deze klant. Vul het crisisteam aan bij de klant of pas het scenario aan.
+            </p>
+          )}
+        </div>
+      ) : (
       <div className="grid grid-cols-1 gap-5">
         <FieldRow label="Deelnemende rollen" hint="Welke rollen doen mee in deze oefening">
           <div className="flex flex-col gap-3">
@@ -637,17 +736,23 @@ export function SetupForm() {
         </FieldRow>
 
       </div>
+      )}
 
-      {/* Section 4 — Context van de organisatie */}
-      <SectionHeader label="Context" />
-      <div className={`grid grid-cols-1 gap-5 md:grid-cols-2 ${graphId ? "opacity-40 pointer-events-none select-none" : ""}`}>
-        <FieldRow label="Kritieke systemen" hint={graphId ? "Ingebed in het scenario" : "Systemen wier uitval materiële impact heeft op de operatie"}>
-          <Textarea value={config.criticalSystems} onChange={(e) => update("criticalSystems", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
-        </FieldRow>
-        <FieldRow label="Kroonjuwelen" hint={graphId ? "Ingebed in het scenario" : "Meest gevoelige data of assets om te beschermen"}>
-          <Textarea value={config.crownJewels} onChange={(e) => update("crownJewels", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
-        </FieldRow>
-      </div>
+      {/* Section 4 — Context van de organisatie. Met een klant staat dit al
+          hierboven als gegeven; zonder klant vult de facilitator het zelf in. */}
+      {!client && (
+        <>
+          <SectionHeader label="Context" />
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <FieldRow label="Kritieke systemen" hint="Systemen wier uitval materiële impact heeft op de operatie">
+              <Textarea value={config.criticalSystems} onChange={(e) => update("criticalSystems", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
+            </FieldRow>
+            <FieldRow label="Kroonjuwelen" hint="Meest gevoelige data of assets om te beschermen">
+              <Textarea value={config.crownJewels} onChange={(e) => update("crownJewels", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
+            </FieldRow>
+          </div>
+        </>
+      )}
 
       {error && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">
@@ -728,6 +833,18 @@ function ToggleButton({ active, onClick, label, disabled }: { active: boolean; o
     >
       {label}
     </button>
+  )
+}
+
+function FactRow(props: { label: string; value: string; note?: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{props.label}</span>
+      <span className="font-mono text-sm text-foreground">{props.value || "—"}</span>
+      {props.note && (
+        <span className="font-mono text-[10px] text-amber-700 dark:text-amber-400">{props.note}</span>
+      )}
+    </div>
   )
 }
 

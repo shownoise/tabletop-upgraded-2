@@ -216,9 +216,15 @@ function fromFlowEdges(edges: Edge[]): GraphEdge[] {
 function InnerCanvas() {
   const router = useRouter()
   const initial = useMemo(() => initialGraph(), [])
-  const [graphMeta, setGraphMeta] = useState<Pick<ScenarioGraph, "id" | "name" | "version" | "scenarioType" | "createdAt" | "irRetainerName" | "irPlaybook" | "irRetainerProfile" | "features" | "roleBriefings" | "injectLibrary">>(
+  // Query-params één keer uit window.location lezen: useSearchParams kan bij de
+  // eerste render null geven zonder Suspense-boundary, en de builder is ssr:false.
+  const urlClientId = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("clientId")
+    : null
+  const [graphMeta, setGraphMeta] = useState<Pick<ScenarioGraph, "id" | "name" | "version" | "scenarioType" | "createdAt" | "clientId" | "goalId" | "irRetainerName" | "irPlaybook" | "irRetainerProfile" | "features" | "roleBriefings" | "injectLibrary">>(
     {
       id: initial.id, name: initial.name, version: initial.version, scenarioType: initial.scenarioType, createdAt: initial.createdAt,
+      clientId: urlClientId ?? undefined,
       irRetainerName: initial.irRetainerName, irRetainerProfile: initial.irRetainerProfile, features: initial.features,
       roleBriefings: initial.roleBriefings,
       injectLibrary: initial.injectLibrary,
@@ -239,8 +245,7 @@ function InnerCanvas() {
   // niet een leeg canvas met kickoff-keuze.
   const urlHasWizard = typeof window !== "undefined"
     && new URLSearchParams(window.location.search).get("wizard") === "1"
-  const urlHasClientId = typeof window !== "undefined"
-    && !!new URLSearchParams(window.location.search).get("clientId")
+  const urlHasClientId = !!urlClientId
   const urlHasId = typeof window !== "undefined"
     && !!new URLSearchParams(window.location.search).get("id")
   const [startupOpen, setStartupOpen] = useState(!urlHasWizard && !urlHasId)
@@ -451,17 +456,22 @@ function InnerCanvas() {
     const g = initialGraph()
     setGraphMeta({
       id: g.id, name: g.name, version: g.version, scenarioType: g.scenarioType, createdAt: g.createdAt,
+      clientId: urlClientId ?? undefined,
     })
     setNodes(toFlowNodes(g))
     setEdges([])
     setSelectedId(null)
     setWizardWarnings([])
-  }, [setNodes, setEdges])
+  }, [setNodes, setEdges, urlClientId])
 
   const handleLoad = useCallback((g: ScenarioGraph) => {
     // Retainer is always Eye Security — override anything an older saved graph may hold.
     setGraphMeta({
       id: g.id, name: g.name, version: g.version, scenarioType: g.scenarioType, createdAt: g.createdAt,
+      // Een opgeslagen klant wint; ?clientId= vult alleen aan wat nog leeg is
+      // (nieuw scenario vanuit een klantpagina, voorbeeld of wizard-concept).
+      clientId: g.clientId ?? urlClientId ?? undefined,
+      goalId: g.goalId,
       irRetainerName: EYE_SECURITY_RETAINER.name,
       irPlaybook: g.irPlaybook,
       irRetainerProfile: EYE_SECURITY_RETAINER,
@@ -473,7 +483,7 @@ function InnerCanvas() {
     setEdges(toFlowEdges(g))
     setSelectedId(null)
     setWizardWarnings([])
-  }, [setNodes, setEdges])
+  }, [setNodes, setEdges, urlClientId])
 
   const handleWizardGenerated = useCallback((g: ScenarioGraph, meta: { warnings: RuleFailure[] }) => {
     handleLoad(g)
@@ -489,7 +499,6 @@ function InnerCanvas() {
   const searchParams = useSearchParams()
   const requestedId = searchParams?.get("id") ?? null
   const requestedWizard = searchParams?.get("wizard") === "1"
-  const requestedClientId = searchParams?.get("clientId") ?? null
   const loadedIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (!requestedId || loadedIdRef.current === requestedId) return
@@ -544,6 +553,25 @@ function InnerCanvas() {
     // urlHasWizard is uit dezelfde window.location, dus stabiel voor deze mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Naam van de gekoppelde klant, voor de toolbar. Geldt ook voor een graph die
+  // de koppeling al had opgeslagen — dus niet alleen bij ?clientId= in de URL.
+  const [boundClient, setBoundClient] = useState<AdminClient | null>(null)
+  useEffect(() => {
+    const id = graphMeta.clientId
+    if (!id) { setBoundClient(null); return }
+    if (boundClient?.id === id) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/admin/clients")
+        if (!res.ok || cancelled) return
+        const data = await res.json() as { clients: AdminClient[] }
+        if (!cancelled) setBoundClient(data.clients.find(c => c.id === id) ?? null)
+      } catch { /* stil falen — toolbar valt terug op het id */ }
+    })()
+    return () => { cancelled = true }
+  }, [graphMeta.clientId, boundClient?.id])
 
   const persistGraph = useCallback(async (): Promise<boolean> => {
     const graph = buildGraph()
@@ -714,6 +742,8 @@ function InnerCanvas() {
         graph={buildGraph()}
         onNameChange={name => setGraphMeta(g => ({ ...g, name }))}
         onScenarioTypeChange={t => setGraphMeta(g => ({ ...g, scenarioType: t as ScenarioType }))}
+        onGoalChange={goalId => setGraphMeta(g => ({ ...g, goalId }))}
+        clientName={boundClient?.name}
         onSave={handleSave}
         onLoad={handleLoad}
         onWizardGenerated={handleWizardGenerated}
