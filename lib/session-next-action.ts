@@ -123,8 +123,13 @@ export function missingDecisionRoles(session: SessionState): Role[] {
   const rolesRequired = new Set<Role>()
   const optionIds = new Set<string>()
   for (const opt of dd.options) {
-    if (opt.allowedRole) rolesRequired.add(opt.allowedRole)
     optionIds.add(opt.id)
+    // Mirror the event-mode filter above: a participant cannot pick an implicit
+    // or capability-gated option, so a role whose only option is one of those
+    // must not be counted as owing a decision — nobody could ever clear it.
+    if (opt.implicit) continue
+    if (opt.requiresCapability && !session.flags?.[opt.requiresCapability]) continue
+    if (opt.allowedRole) rolesRequired.add(opt.allowedRole)
   }
   const missing: Role[] = []
   for (const entry of dist.entries) {
@@ -132,10 +137,13 @@ export function missingDecisionRoles(session: SessionState): Role[] {
     for (const r of roles) {
       if (!rolesRequired.has(r)) continue
       const submittedForRole = (session.submittedDecisions ?? []).some(d =>
-        d.participantId === entry.participantId
-        && d.roundIndex === session.currentRound
+        d.roundIndex === session.currentRound
         && d.role === r
-        && optionIds.has(d.actionId),
+        && optionIds.has(d.actionId)
+        // finalizeDecision records an unanswered role as participantId
+        // 'IMPLICIT' (session-store.ts:1337). That settles the role for whoever
+        // owned it, so it has to count here or the round can never be left.
+        && (d.participantId === entry.participantId || d.participantId === 'IMPLICIT'),
       )
       if (!submittedForRole) missing.push(r)
     }
