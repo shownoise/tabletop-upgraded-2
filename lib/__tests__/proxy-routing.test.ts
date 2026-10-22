@@ -69,6 +69,7 @@ describe("proxy routing — participant access", () => {
       "/api/session/group/create",
       "/api/session/group/join",
       "/api/session/regulatory-filing",
+      "/api/session/feedback",
       "/api/events",
     ]
 

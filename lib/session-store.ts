@@ -23,7 +23,7 @@ import type {
   ExerciseConfig, FactCheckEntry, FactCheckTag,
   FiledMelding, GovernanceFlag, Inject, InjectAnnotation, InjectRoutePlan, InjectType,
   LearningObjective, LiveEvent, LiveEventName,
-  Participant, PublicState, RegulatoryObligationState, RegulatoryRegime,
+  Participant, ParticipantFeedback, PublicState, RegulatoryObligationState, RegulatoryRegime,
   RetainerActivation, Role, RoleAction,
   RoleDocument, RoundPhase, RoundPhaseState, Scenario, SessionState, SimulationMode, SpecialEvent,
   SpecialMessage, SpecialScore, SpecialType, StreamMessage, SubmittedDecision, SupervisionReportEdits, TimelineEvent,
@@ -314,7 +314,23 @@ export function toParticipantState(session: SessionState, forParticipantId?: str
     // is provided). When we don't know the caller, hide the collection entirely
     // rather than leak other participants' hidden/handled sets.
     participantViewState: filterParticipantViewState(session, forParticipantId),
+    // Inter-round reflections are written for the facilitator's debrief. A
+    // participant only ever gets their own back.
+    roundProgress: filterRoundProgress(session, forParticipantId),
   }
+}
+
+function filterRoundProgress(
+  session: SessionState,
+  forParticipantId?: string,
+): SessionState["roundProgress"] {
+  const all = session.roundProgress
+  if (!all) return undefined
+  if (!forParticipantId) return undefined
+  return all.map(r => ({
+    ...r,
+    participantFeedback: r.participantFeedback.filter(f => f.participantId === forParticipantId),
+  }))
 }
 
 // Phase 6 — narrow the per-participant view state to the caller's own subtree.
@@ -1046,6 +1062,63 @@ export async function removeAnnotation(input: {
   await dbSetSession(updated)
   broadcastState(updated)
   return { ok: true }
+}
+
+// Inter-round reflection from the participant. The body is never trusted:
+// participantId must map to a staffed participant in the live session, and the
+// stored name/roundIndex come from server state, not from the client.
+export async function submitParticipantFeedback(input: {
+  participantId: string
+  roundIndex: number
+  worked?: string
+  didnt?: string
+  gap?: string
+}): Promise<{ ok: boolean; error?: string; feedback?: ParticipantFeedback }> {
+  const session = await readSession()
+  if (!session) return { ok: false, error: "No active session." }
+  const participant = session.participants.find(p => p.id === input.participantId)
+  if (!participant || !participant.role) return { ok: false, error: "Deelnemer heeft geen rol." }
+  if (!Number.isInteger(input.roundIndex) || input.roundIndex < 0) {
+    return { ok: false, error: "Ongeldige ronde." }
+  }
+
+  const worked = (input.worked ?? "").trim()
+  const didnt = (input.didnt ?? "").trim()
+  const gap = (input.gap ?? "").trim()
+  // A skipped form must not overwrite an earlier answer with three blanks.
+  if (!worked && !didnt && !gap) return { ok: true }
+
+  const feedback: ParticipantFeedback = {
+    participantId: participant.id,
+    participantName: participant.name,
+    roundIndex: input.roundIndex,
+    worked,
+    didnt,
+    gap,
+    submittedAt: Date.now(),
+  }
+
+  const progress = [...(session.roundProgress ?? [])]
+  const roundIdx = progress.findIndex(r => r.roundIndex === input.roundIndex)
+  const existing = roundIdx >= 0
+    ? progress[roundIdx]
+    : { roundIndex: input.roundIndex, participantFeedback: [], decision: null, facilitatorDone: false }
+  const others = existing.participantFeedback.filter(f => f.participantId !== participant.id)
+  const nextRound = { ...existing, participantFeedback: [...others, feedback] }
+  if (roundIdx >= 0) progress[roundIdx] = nextRound
+  else progress.push(nextRound)
+  progress.sort((a, b) => a.roundIndex - b.roundIndex)
+
+  let updated: SessionState = { ...session, roundProgress: progress }
+  updated = pushTimeline(updated, "participant_feedback_submitted", {
+    participantId: participant.id,
+    participantName: participant.name,
+    role: participant.role,
+    roundIndex: input.roundIndex,
+  })
+  await dbSetSession(updated)
+  broadcastState(updated)
+  return { ok: true, feedback }
 }
 
 export async function replotInjectRoutes(): Promise<{ ok: boolean; error?: string; version?: number }> {

@@ -550,6 +550,7 @@ export type TimelineEventType =
   | "inject_routes_replotted"
   | "inject_tagged"
   | "melding_filed"
+  | "participant_feedback_submitted"
   | "regulatory_obligation_opened"
   | "regulatory_obligation_filed"
   | "regulatory_obligation_expired"
@@ -699,6 +700,9 @@ export interface SessionState {
   roleAssignmentOverrides?: Record<string, Role[]>
   // Deel B §4 — groepen (EVENT-mode).
   groups?: Group[]
+  // Per-round debrief progress. Today only participantFeedback is written;
+  // toParticipantState narrows it to the caller's own entries.
+  roundProgress?: RoundProgress[]
   // Monotonically increasing revision — bumped on every persisted mutation.
   version?: number
 }

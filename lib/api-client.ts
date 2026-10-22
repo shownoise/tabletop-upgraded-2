@@ -97,6 +97,8 @@ export const api = {
     post<{ ok: true; version?: number }>("/api/session/replot-injects", {}),
   tagInject: (input: { participantId: string; injectId: string; tag: FactCheckTag }) =>
     post<{ ok: true }>("/api/session/tag-inject", input),
+  submitFeedback: (input: { participantId: string; roundIndex: number; worked?: string; didnt?: string; gap?: string }) =>
+    post<{ ok: true }>("/api/session/feedback", input),
   addAnnotation: (input: { participantId: string; injectId: string; start: number; end: number; tag: FactCheckTag }) =>
     post<{ ok: true; annotationId?: string }>("/api/session/annotate-inject", input),
   removeAnnotation: (input: { participantId: string; annotationId: string }) =>

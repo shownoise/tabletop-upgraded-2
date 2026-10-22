@@ -1003,6 +1003,14 @@ export function PlayView() {
   function handleFeedbackDone(fb: { worked: string; didnt: string; gap: string }) {
     if (!feedbackFor) return
     const key = feedbackFor.isFinal ? -1 : feedbackFor.round
+    // The closing reflection belongs to the round the session ended on; the
+    // inter-round one to the round that just finished (feedbackFor.round is 1-based).
+    const roundIndex = feedbackFor.isFinal
+      ? Math.max(0, session?.currentRound ?? 0)
+      : feedbackFor.round - 1
+    if (participantId && (fb.worked.trim() || fb.didnt.trim() || fb.gap.trim())) {
+      api.submitFeedback({ participantId, roundIndex, ...fb }).catch(() => { /* niet blokkerend */ })
+    }
     const next = new Set(doneFeedbackRounds).add(key)
     setDoneFeedbackRounds(next)
     try { localStorage.setItem(FEEDBACK_KEY, JSON.stringify([...next])) } catch {}
