@@ -222,33 +222,36 @@ describe("rule 3 — no dominant option", () => {
   })
 })
 
-describe("rule 4 — geen decision op alleen misleidende setups", () => {
-  it("passes on baseGraph (setups zijn feit/aanname, niet misleading)", () => {
+describe("rule 4 — elke decision heeft een geclassificeerde setup", () => {
+  it("passes on baseGraph (setups hebben classification feit/aanname)", () => {
     expect(ruleNoiseNeverCarriesOnlyPath(baseGraph()).ok).toBe(true)
   })
-  it("fails when every setup for a decision is reliability=misleading", () => {
+  it("fails when no setup for a decision carries a classification", () => {
     const g = baseGraph()
-    // Beide setup-injects (I1 → D1, I2 → D2) op misleading zetten
-    // via ground truth. classification (publiek) mag hetzelfde blijven.
     for (const n of g.nodes) {
       if (n.type !== 'inject') continue
       const d = n.data as InjectNodeData
-      if (d.setsUpDecisionNodeId) d.reliability = 'misleading'
+      if (d.setsUpDecisionNodeId) d.classification = undefined
     }
     const res = ruleNoiseNeverCarriesOnlyPath(g)
     expect(res.ok).toBe(false)
-    if (!res.ok) expect(res.violation).toContain('misleidende')
+    if (!res.ok) expect(res.violation).toContain('geclassificeerde setup')
   })
-  it("passes when at least one setup per decision is fact/assumption", () => {
+  it("passes when a decision deliberately rests on a single aanname", () => {
     const g = baseGraph()
-    // Setup I3 op D1 (I1 blijft óók setup op D1 maar wordt misleading) —
-    // I3 is 'fact' dus D1 heeft nog een truthful setup. I2 is aanname
-    // (heeft geen reliability, maar rule 4 vereist enkel dat setups niet
-    // ALLEMAAL misleading zijn — undefined is 'onbekend', geen misleiding).
+    for (const n of g.nodes) {
+      if (n.type !== 'inject') continue
+      const d = n.data as InjectNodeData
+      if (d.setsUpDecisionNodeId) d.classification = 'aanname'
+    }
+    expect(ruleNoiseNeverCarriesOnlyPath(g).ok).toBe(true)
+  })
+  it("passes when one of several setups is classified", () => {
+    const g = baseGraph()
     const i1 = g.nodes.find(n => n.id === 'I1')!.data as InjectNodeData
     const i3 = g.nodes.find(n => n.id === 'I3')!.data as InjectNodeData
-    i1.reliability = 'misleading'
-    i3.reliability = 'fact'
+    i1.classification = undefined
+    i3.classification = 'feit'
     i3.setsUpDecisionNodeId = 'D1'
     expect(ruleNoiseNeverCarriesOnlyPath(g).ok).toBe(true)
   })

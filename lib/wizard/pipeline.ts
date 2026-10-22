@@ -221,7 +221,7 @@ Structuur:
 - Aantal rondes: ${config.rounds}
 - Injects per ronde: ${config.injectsPerRound}
 - Opties per rol per decision: ${config.optionsPerRolePerRound}
-- Feit/aanname-ratio: ${config.factsNoiseRatio.toFixed(2)} (0 = alle aannames, 1 = alle feiten). Elke inject krijgt classification 'feit' of 'aanname'.
+- Feit/aanname-ratio: ${config.factsNoiseRatio.toFixed(2)} (0 = alle aannames, 1 = alle feiten). Elke inject krijgt classification 'feit' of 'aanname'. Dat veld is de ground truth: de deelnemer ziet het niet tijdens de ronde en moet zelf gokken. Gebruik geen reliability-veld.
 
 Rollen betrokken: ${config.rolesIncluded.join(", ")}
 
@@ -249,7 +249,7 @@ Framework-regels die de code toetst:
 1. Elke decision heeft een setup-inject in dezelfde of vorige ronde (inject.setsUpDecisionNodeId).
 2. Per decision: exact ${config.optionsPerRolePerRound} opties per rol (minimum uit config is 3; geen binaire wel-of-niet).
 3. Geen enkele optie domineert een andere op alle 6 outcome-assen.
-4. Geen enkele decision mag alleen misleidende setup-injects hebben. Het reliability-veld (ground truth) mag 'misleading' zijn voor red-herring injects, maar minstens één setup van elke decision moet reliability=fact of reliability=assumption zijn.
+4. Elke decision heeft minstens één setup-inject met een classification ('feit' of 'aanname'). Een decision mag bewust op een aanname rusten — dat is de les — maar nooit op setups waarvan de status onbepaald is.
 5. Ronde N≥2 verwijst zichtbaar naar keuze/les uit ronde N-1.
 6. Elke optie beweegt minstens één as van CONT/FOR/BC/JUR/VER/KOS (in -2..+2).
 7. Fractie 'feit' in classificaties ≈ ${config.factsNoiseRatio.toFixed(2)} (±0.15).
