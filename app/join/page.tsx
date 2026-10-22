@@ -27,10 +27,12 @@ export default function JoinPage() {
 
       <main className="relative z-10 mx-auto flex max-w-md flex-col gap-8 px-6 py-16 md:py-24">
         <div className="flex flex-col gap-3">
-          <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">Join exercise</span>
-          <h1 className="font-mono text-3xl font-bold tracking-tight text-tt-accent">ENTER CALL SIGN</h1>
+          {/* Server component, so it cannot read the language from localStorage
+              the way JoinForm does. Dutch is the default and the audience. */}
+          <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">Deelnemen</span>
+          <h1 className="font-mono text-3xl font-bold tracking-tight text-tt-accent">MELD JE AAN</h1>
           <p className="font-mono text-xs text-tt-dim leading-relaxed">
-            Use the join code shared by your facilitator. You will see the live exercise immediately after joining.
+            Gebruik de toegangscode die je facilitator heeft gedeeld. Direct na aanmelden zie je de oefening live meelopen.
           </p>
         </div>
 

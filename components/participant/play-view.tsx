@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Component, useEffect, useMemo, useRef, useState } from "react"
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { ArrowLeft, CheckCircle, ChevronDown, FileText, Info, Loader2, ShieldAlert, Users } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
@@ -169,12 +169,14 @@ function IntroOverlay({
           </div>
         )}
 
-        {/* Generic how it works — only shown when there's no goal-specific briefing (avoids duplicate) */}
-        {!goal?.participantBriefing && (
-          <div
-            className="flex flex-col gap-3 border border-tt-border bg-tt-surface p-5"
-            style={{ borderLeft: "3px solid #e8ff40" }}
-          >
+        {/* How the exercise runs. Always shown: the goal briefing above says
+            what you are practising, this says how the app works. They used to
+            be either/or, which meant whichever goal had a briefing replaced the
+            mechanics explanation entirely. */}
+        <div
+          className="flex flex-col gap-3 border border-tt-border bg-tt-surface p-5"
+          style={{ borderLeft: "3px solid #e8ff40" }}
+        >
             <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">
               {tr(lang, "howItWorks")}
             </span>
@@ -184,17 +186,17 @@ function IntroOverlay({
               tr(lang, "intro3"),
               tr(lang, "intro4"),
               tr(lang, "intro5"),
+              tr(lang, "intro6"),
             ].map((s, i) => (
               <div key={i} className="flex gap-3">
                 <span className="font-mono text-[10px] text-tt-accent mt-0.5 shrink-0">{i + 1}.</span>
                 <p className="font-mono text-xs text-tt-dim leading-relaxed">{s}</p>
               </div>
             ))}
-            <div className="border border-tt-border bg-tt-bright/5 px-4 py-2.5 mt-1">
-              <p className="font-mono text-[10px] text-tt-dim">{tr(lang, "timerNote")}</p>
-            </div>
+          <div className="border border-tt-border bg-tt-bright/5 px-4 py-2.5 mt-1">
+            <p className="font-mono text-[10px] text-tt-dim">{tr(lang, "timerNote")}</p>
           </div>
-        )}
+        </div>
 
         <button
           onClick={handleReady}
@@ -306,6 +308,67 @@ function RoundSituationCard({ session, lang }: { session: NonNullable<ReturnType
 // canonical order as ROLE_ORDER so the lobby, builder and setup form all
 // agree on how roles are listed.
 const CRISIS_ROLES_ORDERED: readonly Role[] = ROLE_ORDER.filter(r => r !== "it_manager")
+
+function LobbyWaitingPanel({
+  session,
+  participantRole,
+  lang,
+  onRereadExplanation,
+}: {
+  session: SessionState
+  participantRole: Role | undefined
+  lang: ReturnType<typeof useLang>[0]
+  onRereadExplanation: () => void
+}) {
+  const total = session.participants.length
+  const ready = session.participants.filter(p => p.readyAt).length
+
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
+            <span className="relative inline-flex size-2 rounded-full bg-primary" />
+          </span>
+          <span className="font-mono text-xs uppercase tracking-wider text-primary">
+            {participantRole ? tr(lang, "lobbyCheckedIn") : tr(lang, "waitingToStart")}
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {participantRole ? tr(lang, "lobbyWaitingBody") : tr(lang, "lobbyPickRoleFirst")}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        {participantRole && (
+          <div className="flex flex-col">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+              {tr(lang, "lobbyYourRole")}
+            </span>
+            <span className="font-mono text-sm text-foreground">{ROLE_META[participantRole].label}</span>
+          </div>
+        )}
+        <div className="flex flex-col">
+          <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+            {tr(lang, "participants")}
+          </span>
+          <span className="font-mono text-sm text-foreground tabular-nums">
+            {tr(lang, "lobbyReadyCount", { ready: String(ready), total: String(total) })}
+          </span>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onRereadExplanation}
+        className="self-start font-mono text-[10px] uppercase tracking-wider text-primary underline hover:no-underline"
+      >
+        {tr(lang, "rereadExplanation")}
+      </button>
+    </div>
+  )
+}
 
 function RolePickerLobby({
   session,
@@ -790,7 +853,19 @@ export function PlayView() {
 
   const [name, setName] = useState<string | null>(null)
   const [participantId, setParticipantId] = useState<string | null>(null)
+  // Dismissal is remembered per session: someone joining after the start still
+  // gets the explanation once, while a mid-round refresh does not throw the
+  // full-screen overlay back over a live round.
   const [showIntro, setShowIntro] = useState(true)
+  const introKey = state.session?.id ? `ctt:intro-seen:${state.session.id}` : null
+  useEffect(() => {
+    if (!introKey) return
+    try { if (localStorage.getItem(introKey)) setShowIntro(false) } catch { /* noop */ }
+  }, [introKey])
+  const dismissIntro = useCallback(() => {
+    setShowIntro(false)
+    if (introKey) { try { localStorage.setItem(introKey, "1") } catch { /* noop */ } }
+  }, [introKey])
   const [urgent, setUrgent] = useState<Inject | null>(null)
   const [banner, setBanner] = useState<{ id: number; text: string; type?: string } | null>(null)
   const [feedbackFor, setFeedbackFor] = useState<{ round: number; isFinal: boolean } | null>(null)
@@ -991,10 +1066,10 @@ export function PlayView() {
       {participantId && <AchievementsToaster session={session} participantId={participantId} />}
 
       {/* Intro overlay */}
-      {showIntro && session.status === "lobby" && (
+      {showIntro && session.status !== "ended" && (
         <IntroOverlay
           lang={lang}
-          onReady={() => setShowIntro(false)}
+          onReady={dismissIntro}
           operationName={session.scenario.scenario_title}
           session={session}
           participantId={participantId}
@@ -1085,6 +1160,18 @@ export function PlayView() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Feed — main column; flex allows order-first on DecisionPanel for mobile */}
           <div className="flex flex-col gap-5 lg:col-span-2">
+            {/* Lobby status — what a participant sees while waiting for the start.
+                Also the only way back into the explanation: the intro overlay is
+                one-shot, so anyone joining late never saw it. */}
+            {participantId && status === "lobby" && (
+              <LobbyWaitingPanel
+                session={session}
+                participantRole={participantRole}
+                lang={lang}
+                onRereadExplanation={() => setShowIntro(true)}
+              />
+            )}
+
             {/* Role picker — alleen in ASSESSMENT mode. In EVENT: iPad = team, geen individuele rol nodig. */}
             {participantId && status !== "ended" && session.mode !== "event" && (status === "lobby" || !participantRole) && (
               <RolePickerLobby

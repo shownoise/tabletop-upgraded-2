@@ -38,20 +38,11 @@ export const decisionMakingGoal: GoalPlugin = {
 - Which decisions were clear, and which were contested?
 - Where did the mandate boundary cause confusion?
 - What would change in your crisis protocol as a result?`,
-  participantBriefing: `## Participant Briefing — Decision-Making Under Pressure
+  // Plain lines, no markdown: the intro overlay renders this split on newlines,
+  // so any ## or ** would show up literally on a participant's screen.
+  participantBriefing: `Jullie team krijgt een realistisch cyberincident voor de kiezen. Het doel is niet om technisch het juiste te doen — het is om onder tijdsdruk, met onvolledige informatie, heldere en verdedigbare keuzes te maken.
 
-In this exercise, your team will face a realistic cyber incident scenario. Your goal is not just to respond to technical events — it is to **make clear, justified decisions** under time pressure, with incomplete information.
+Wat je oefent: wie mag welk besluit nemen, hoe je tot een besluit komt als je het oneens bent, en wanneer escaleren aan de orde is.
 
-**What we are practising:**
-- Who has the authority to make which decisions?
-- How do you structure a decision when you disagree?
-- When is it the right moment to escalate?
-
-**How it works:**
-- You will receive injects (messages, alerts, emails) as the scenario unfolds
-- Your role comes with specific authorities — use them
-- At key moments, the facilitator may call a structured decision phase
-- Some rounds include a dilemma — everyone votes, then you discuss
-
-**There is no single right answer.** The quality of your decision-making process matters more than the outcome.`,
+Er is geen enkel juist antwoord. Hoe jullie tot een besluit komen weegt zwaarder dan de uitkomst.`,
 }
