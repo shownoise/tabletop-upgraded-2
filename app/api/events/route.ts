@@ -1,5 +1,5 @@
 import { auth } from "@/auth"
-import { subscribe, subscribeParticipant } from "@/lib/session-store"
+import { getState, subscribe, subscribeParticipant } from "@/lib/session-store"
 import type { StreamMessage } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
@@ -10,6 +10,18 @@ export async function GET(req: Request): Promise<Response> {
   // Participants get a stripped view — no hints, no answer metadata, no future rounds
   const session = await auth()
   const isAdmin = !!session?.user
+
+  const participantId = new URL(req.url).searchParams.get("participantId") ?? undefined
+  // Same membership rule as /api/session/state: the participant projection
+  // carries the join code and client context, so an anonymous subscriber may
+  // not open a stream of it. Only enforced once a session exists — before that
+  // there is nothing to leak and the lobby still needs to connect.
+  if (!isAdmin) {
+    const { session: live } = await getState()
+    if (live && !(participantId && live.participants.some(p => p.id === participantId))) {
+      return new Response("Unauthorized", { status: 401 })
+    }
+  }
 
   const encoder = new TextEncoder()
 
@@ -30,10 +42,8 @@ export async function GET(req: Request): Promise<Response> {
         safeEnqueue(`data: ${JSON.stringify(msg.data)}\n\n`)
       }
 
-      // Participant-scoped SSE: pass the participantId query so the projection
-      // narrows participantViewState to just this participant's own entry.
-      const url = new URL(req.url)
-      const participantId = url.searchParams.get("participantId") ?? undefined
+      // Participant-scoped SSE: the participantId narrows participantViewState
+      // to just this participant's own entry.
       const unsubscribe = isAdmin ? subscribe(send) : subscribeParticipant(send, participantId)
 
       const heartbeat = setInterval(() => {
