@@ -154,6 +154,30 @@ function IntroOverlay({
           </div>
         )}
 
+        {/* Who you are this exercise. Deliberately not the scenario summary:
+            that text is identical to round 1's situation_update, so showing it
+            here would just repeat what they read a minute later. */}
+        {(() => {
+          const cfg = session?.config
+          const rows: Array<[string, string]> = []
+          if (cfg?.sector) rows.push(["Sector", cfg.sector])
+          if (cfg?.companySize) rows.push(["Omvang", `${cfg.companySize} medewerkers`])
+          if (cfg?.criticalSystems) rows.push(["Kritieke systemen", cfg.criticalSystems])
+          if (cfg?.crownJewels) rows.push(["Kroonjuwelen", cfg.crownJewels])
+          if (rows.length === 0) return null
+          return (
+            <div className="flex flex-col gap-3 border border-tt-border bg-tt-surface p-4">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">Dit is jullie organisatie</span>
+              {rows.map(([label, value]) => (
+                <div key={label} className="flex flex-col gap-0.5">
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">{label}</span>
+                  <span className="font-mono text-xs text-tt-bright">{value}</span>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+
         {/* Your role */}
         {participantRole && (
           <div className="flex flex-col gap-2 border border-tt-border bg-tt-surface p-4">
