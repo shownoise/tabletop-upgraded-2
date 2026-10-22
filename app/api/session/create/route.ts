@@ -585,8 +585,8 @@ export async function POST(req: Request) {
           return
         }
 
-        const { generateDocuments } = await import("@/lib/document-generator")
-        const documents = generateDocuments(config)
+        const { generateDocuments, withScenarioAddenda } = await import("@/lib/document-generator")
+        const documents = withScenarioAddenda(generateDocuments(config), loadedGraph ?? undefined)
 
         const { createSession } = await import("@/lib/session-store")
         const session = await createSession(config, scenario, mode, documents, loadedGraph ?? undefined)
