@@ -4,6 +4,7 @@
  */
 
 import { randomBytes } from "crypto"
+import { analyzeGraph } from "./graph/analyze"
 import { evaluateChasersOnRoundStart, stepFromNode, type EngineTrigger, type StepResult } from "./graph/engine"
 import { cumulativeScore, selectOutcomeByScore } from "./graph/outcome-selector"
 import type { DecisionNodeData } from "./graph/types"
@@ -206,6 +207,9 @@ export function toParticipantState(session: SessionState, forParticipantId?: str
   }
   return {
     ...session,
+    totalRounds: session.graph
+      ? analyzeGraph(session.graph).roundCount
+      : session.scenario.rounds.length,
     scenario: {
       ...session.scenario,
       rounds: session.scenario.rounds.map((round, i) => {

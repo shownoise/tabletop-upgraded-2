@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { ShieldAlert, Wifi, WifiOff, Users } from "lucide-react"
 import type { Role, SessionState } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
+import { analyzeGraph } from "@/lib/graph/analyze"
 import type { Lang } from "@/lib/i18n"
 import { tr, ESCALATION_KEYS } from "@/lib/i18n"
 import { LangToggle } from "@/components/lang-toggle"
@@ -67,7 +68,10 @@ function RoundDots({ current, total }: { current: number; total: number }) {
 
 export function SessionHUD({ session, connected, name, participantRole, lang, setLang }: Props) {
   const status = session.status
-  const totalRounds = session.scenario.rounds.length
+  // scenario.rounds grows one round at a time, so it is never the total. A
+  // facilitator opening /play gets the unstripped state and can count the graph.
+  const totalRounds = session.totalRounds
+    ?? (session.graph ? analyzeGraph(session.graph).roundCount : session.scenario.rounds.length)
   const currentIdx = session.currentRound
   const isActive = status === "active"
   const escalationIndex = Math.min(Math.max(currentIdx, 0), 3)
