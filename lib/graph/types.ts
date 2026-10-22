@@ -9,6 +9,7 @@ import type {
   ChoiceQuality,
   IrRetainerProfile,
   MeldingMoment,
+  GoalId,
 } from "@/lib/types"
 import type { SupervisionArea } from "@/lib/engine/supervision"
 
@@ -296,6 +297,13 @@ export interface ScenarioGraph {
   name: string
   version: number
   scenarioType: ScenarioType
+  // De klant waarvoor dit scenario geschreven is. Ontbreekt in graphs van voor
+  // deze koppeling — dan vraagt de sessie-setup de organisatie zelf uit.
+  clientId?: string
+  // Oefendoel. Hoort bij het scenario, niet bij de losse sessie. Ontbreekt in
+  // oudere graphs; resolveGraphGoalId() valt dan terug op decision_making
+  // zonder dat te schrijven.
+  goalId?: GoalId
   nodes: GraphNode[]
   edges: GraphEdge[]
   createdAt: number
