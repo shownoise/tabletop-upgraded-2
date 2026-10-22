@@ -712,7 +712,9 @@ export function InjectFeed({
             p.inject.urgency === "critical" ? "var(--tt-red)" :
             p.inject.urgency === "high"     ? "var(--tt-warn)" :
             p.inject.urgency === "medium"   ? "var(--tt-accent)" : "var(--tt-dim)"
-          const isFactCheckTarget = !isCoreEvent && p.inject.reliability !== undefined
+          // factCheckRequested komt uit toParticipantState — de classification
+          // zelf is tot de review verborgen, dus daar kan dit niet aan hangen.
+          const isFactCheckTarget = !isCoreEvent && p.inject.factCheckRequested === true
           const reviewPhase = session?.roundPhase === "review"
           const { totalTags, hasSplit, myTag } = isCoreEvent
             ? { totalTags: 0, hasSplit: false, myTag: undefined }

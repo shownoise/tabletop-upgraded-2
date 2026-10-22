@@ -9,6 +9,7 @@ function makeInject(id: string, overrides: Partial<Inject> = {}): Inject {
     title: `Inject ${id}`,
     content: "Body",
     urgency: "medium",
+    classification: "feit",
     reliability: "fact",
     groundTruthAnnotations: [{ start: 0, end: 3, label: "misleading" as never }] as never,
     ...overrides,
@@ -112,10 +113,46 @@ describe("toParticipantState", () => {
     expect(inject.groundTruthAnnotations).toBeUndefined()
   })
 
-  it("exposes inject reliability at review phase", () => {
+  it("strips inject classification before review", () => {
+    const scrubbed = toParticipantState(makeSession({ roundPhase: "decision" }))
+    const inject = scrubbed.scenario.rounds[1].injects[0] as { classification?: unknown }
+    expect(inject.classification).toBeUndefined()
+  })
+
+  it("exposes inject classification at review phase", () => {
     const scrubbed = toParticipantState(makeSession({ roundPhase: "review" }))
-    const inject = scrubbed.scenario.rounds[1].injects[0] as { reliability?: string }
-    expect(inject.reliability).toBe("fact")
+    const inject = scrubbed.scenario.rounds[1].injects[0] as { classification?: string }
+    expect(inject.classification).toBe("feit")
+  })
+
+  it("flags the inject as fact-checkable without revealing the answer", () => {
+    const scrubbed = toParticipantState(makeSession({ roundPhase: "decision" }))
+    const inject = scrubbed.scenario.rounds[1].injects[0] as { factCheckRequested?: boolean; classification?: unknown }
+    expect(inject.factCheckRequested).toBe(true)
+    expect(inject.classification).toBeUndefined()
+  })
+
+  it("does not flag an unclassified inject as fact-checkable", () => {
+    const session = makeSession()
+    session.scenario.rounds[1].injects = [
+      makeInject("plain", { classification: undefined, reliability: undefined, groundTruthAnnotations: undefined }),
+    ]
+    const inject = toParticipantState(session).scenario.rounds[1].injects[0] as { factCheckRequested?: boolean }
+    expect(inject.factCheckRequested).toBeUndefined()
+  })
+
+  it("keeps a facilitator-fired noise inject's classification hidden until review", () => {
+    const pushed = {
+      inject: makeInject("surprise", { groundTruthAnnotations: undefined }),
+      roundIndex: -1,
+      pushedAt: Date.now(),
+    }
+    const during = toParticipantState(makeSession({ roundPhase: "decision", pushedInjects: [pushed] }))
+    expect((during.pushedInjects[0].inject as { classification?: unknown }).classification).toBeUndefined()
+    expect(during.pushedInjects[0].inject.factCheckRequested).toBe(true)
+
+    const atReview = toParticipantState(makeSession({ roundPhase: "review", pushedInjects: [pushed] }))
+    expect(atReview.pushedInjects[0].inject.classification).toBe("feit")
   })
 
   it("clears governanceFlags", () => {

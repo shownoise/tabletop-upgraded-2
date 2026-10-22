@@ -30,6 +30,7 @@ import type {
   TimelineEventType, Urgency,
 } from "./types"
 import { ROLE_META } from "./types"
+import { classificationFromLegacyReliability, migrateGraphClassifications, migrateSessionClassifications } from "./classification"
 import { NL_AVG_NIS2_REGIME } from "./regulatory/regimes"
 import { computeAuthoredWorkload, distributeRoles, effectiveRolesForParticipant } from "./engine/distribute-roles"
 import { plotInjectRoutes } from "./inject-routing"
@@ -62,6 +63,14 @@ function migrateScenarioRoles(scenario: Scenario): Scenario {
       })),
     })),
   }
+}
+
+// Elke lees-ingang van de sessie loopt hierlangs, zodat een sessie die al in KV
+// stond haar legacy `reliability` als `classification` terugkrijgt en de
+// volgende write die migratie meteen vastlegt.
+async function readSession(): Promise<SessionState | null> {
+  const s = await dbGetSession()
+  return s ? migrateSessionClassifications(s) : s
 }
 
 // ─── SSE listeners (always in-memory — per-process) ───────────
@@ -186,11 +195,16 @@ export function toParticipantState(session: SessionState, forParticipantId?: str
   }
   const stripInjectGroundTruth = (inject: Inject, isReviewRound: boolean): Inject => {
     const noFacilitator = stripFacilitatorOnlyFromInject(inject)
-    if (isReviewRound) return noFacilitator
-    // Ground truth (reliability tag, span annotations) is revealed only during REVIEW.
-    const { reliability: _r, groundTruthAnnotations: _g, ...safe } = noFacilitator
-    const leak = safe as { reliability?: unknown; groundTruthAnnotations?: unknown }
-    if (leak.reliability !== undefined || leak.groundTruthAnnotations !== undefined) {
+    // Of de auteur een feit/aanname-oordeel heeft vastgelegd mag de deelnemer
+    // wél weten — dát is wat de tag-knoppen oproept. De waarde zelf niet.
+    const requested = noFacilitator.classification !== undefined || noFacilitator.reliability !== undefined
+    const withRequest = requested ? { ...noFacilitator, factCheckRequested: true } : noFacilitator
+    if (isReviewRound) return withRequest
+    // Ground truth (classification, legacy reliability, span annotations) komt
+    // pas vrij in REVIEW.
+    const { classification: _c, reliability: _r, groundTruthAnnotations: _g, ...safe } = withRequest
+    const leak = safe as { classification?: unknown; reliability?: unknown; groundTruthAnnotations?: unknown }
+    if (leak.classification !== undefined || leak.reliability !== undefined || leak.groundTruthAnnotations !== undefined) {
       const msg = `[toParticipantState] ground-truth leak on inject ${safe.id}`
       if (process.env.NODE_ENV !== "production") throw new Error(msg)
       console.warn(msg)
@@ -253,10 +267,14 @@ export function toParticipantState(session: SessionState, forParticipantId?: str
     pushedInjects: session.pushedInjects
       .filter(p => capabilityAllows(p.inject))
       .map(p => {
+        // roundIndex < 0 = facilitator-gevuurde ruis-inject: die hangt aan de
+        // lopende fase, niet aan een ronde-index, anders lekt de ground truth
+        // meteen bij het vuren.
         const isReviewRound =
-          p.roundIndex < 0 ||
-          p.roundIndex < session.currentRound ||
-          (p.roundIndex === session.currentRound && session.roundPhase === "review")
+          p.roundIndex < 0
+            ? session.roundPhase === "review"
+            : p.roundIndex < session.currentRound ||
+              (p.roundIndex === session.currentRound && session.roundPhase === "review")
         return { ...p, inject: stripInjectGroundTruth(p.inject, isReviewRound) }
       }),
     governanceFlags: [],
@@ -423,12 +441,12 @@ function projectActiveDecision(session: SessionState): import("./types").ActiveD
 
 export function subscribe(listener: Listener): () => void {
   listeners.add(listener)
-  dbGetSession().then(s => listener({ type: "state", data: { session: s } }))
+  readSession().then(s => listener({ type: "state", data: { session: s } }))
   return () => { listeners.delete(listener) }
 }
 
 export function subscribeParticipant(listener: Listener, participantId?: string): () => void {
-  // Guard: if a broadcast arrives before the initial dbGetSession() resolves,
+  // Guard: if a broadcast arrives before the initial readSession() resolves,
   // skip the db-fetch result to avoid the client receiving two conflicting states.
   let initialSent = false
   const wrapped: Listener = (msg) => {
@@ -440,7 +458,7 @@ export function subscribeParticipant(listener: Listener, participantId?: string)
     }
   }
   listeners.add(wrapped)
-  dbGetSession().then(s => {
+  readSession().then(s => {
     if (initialSent) return
     const safe = s ? toParticipantState(s, participantId) : null
     wrapped({ type: "state", data: { session: safe } })
@@ -449,7 +467,7 @@ export function subscribeParticipant(listener: Listener, participantId?: string)
 }
 
 export async function getState(): Promise<PublicState> {
-  return { session: await dbGetSession() }
+  return { session: await readSession() }
 }
 
 // Tick round-phase auto-advance + persist als er iets veranderd is.
@@ -462,7 +480,7 @@ export async function getState(): Promise<PublicState> {
 // (de "discussion komt terug na review"-bug uit issue #58).
 export async function settleAndGetState(): Promise<PublicState> {
   return withSessionLock(async () => {
-    const session = await dbGetSession()
+    const session = await readSession()
     if (!session) return { session: null }
     const ticked = tickRoundPhase(session)
     if (ticked !== session && ticked.roundPhase !== session.roundPhase) {
@@ -475,7 +493,7 @@ export async function settleAndGetState(): Promise<PublicState> {
 }
 
 export async function getSession(): Promise<SessionState | null> {
-  return dbGetSession()
+  return readSession()
 }
 
 export async function createSession(
@@ -517,14 +535,15 @@ export async function createSession(
     regulatoryRegime: NL_AVG_NIS2_REGIME,
     regulatoryObligations: [],
   }
-  await dbSetSession(session)
-  broadcastState(session)
-  return session
+  const migrated = migrateSessionClassifications(session)
+  await dbSetSession(migrated)
+  broadcastState(migrated)
+  return migrated
 }
 
 export async function resetSession(): Promise<void> {
   // Archiveer eerst als de sessie een echte run heeft gehad (ended of active).
-  const current = await dbGetSession()
+  const current = await readSession()
   if (current && (current.status === "ended" || current.status === "active")) {
     try {
       const { upsertSnapshot, snapshotFromSession } = await import("./admin/sessions-archive")
@@ -562,7 +581,7 @@ function capCollections(s: SessionState): SessionState {
 
 async function mutate(fn: (s: SessionState) => SessionState | null | { error: string }): Promise<{ ok: boolean; error?: string }> {
   return withSessionLock(async () => {
-    const session = await dbGetSession()
+    const session = await readSession()
     if (!session) return { ok: false, error: "No active session." }
     const updated = fn(session)
     if (updated === null) return { ok: false, error: "Mutation returned null." }
@@ -744,7 +763,7 @@ export async function joinSession(input: { name: string; joinCode: string; role?
   const code = input.joinCode.trim().toUpperCase()
   if (!name) return { ok: false, error: "Name is required." }
 
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session. Ask the facilitator to create one." }
   if (session.joinCode.toUpperCase() !== code) return { ok: false, error: "Invalid join code." }
 
@@ -921,7 +940,7 @@ export async function tagInject(input: {
   injectId: string
   tag: FactCheckTag
 }): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
   if (session.roundPhase === "review") return { ok: false, error: "Tagging gesloten tijdens review." }
 
@@ -985,7 +1004,7 @@ export async function addAnnotation(input: {
   end: number
   tag: FactCheckTag
 }): Promise<{ ok: boolean; error?: string; annotationId?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
   if (session.roundPhase === "review") return { ok: false, error: "Annotaties gesloten tijdens review." }
   if (input.start < 0 || input.end <= input.start) {
@@ -1014,7 +1033,7 @@ export async function removeAnnotation(input: {
   participantId: string
   annotationId: string
 }): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
   const list = session.injectAnnotations ?? []
   const target = list.find(a => a.id === input.annotationId)
@@ -1030,7 +1049,7 @@ export async function removeAnnotation(input: {
 }
 
 export async function replotInjectRoutes(): Promise<{ ok: boolean; error?: string; version?: number }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
   const presentRoles = session.participants.map(p => p.role).filter((r): r is Role => !!r)
   const teamRoles = buildTeamRoles()
@@ -1053,7 +1072,7 @@ export async function replotInjectRoutes(): Promise<{ ok: boolean; error?: strin
 }
 
 export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
 
   if (session.graph && session.graphState) {
@@ -1132,7 +1151,7 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
 // Explicit force-end: facilitator override for aborting a session mid-scenario.
 // Requires the caller to pass `confirm: true` (route enforces a UI confirmation).
 export async function endSessionForced(input: { reason?: string } = {}): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
   if (session.status === 'ended') return { ok: true }
   let updated: SessionState = { ...session, status: 'ended' as const }
@@ -1148,7 +1167,7 @@ export { missingDecisionRoles, type NextActionDescriptor } from "./session-next-
 export const describeNextAction = _describeNextAction
 
 export async function goToPrevRound(): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session || session.currentRound <= 0) return { ok: false, error: "Cannot go back." }
 
   const prevIdx = session.currentRound - 1
@@ -1163,7 +1182,7 @@ export async function goToPrevRound(): Promise<{ ok: boolean; error?: string }> 
 }
 
 export async function pushInject(input: { roundIndex: number; injectId: string }): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
 
   const round = session.scenario.rounds[input.roundIndex]
@@ -1423,7 +1442,7 @@ export interface SubmitDecisionInput {
 }
 
 export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
 
   const participant = session.participants.find(p => p.id === input.participantId)
@@ -1657,7 +1676,7 @@ export async function submitDecision(input: SubmitDecisionInput): Promise<{ ok: 
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       targetRoles: pi.onlyToSubmitter && participant.role ? [participant.role] : undefined,
       targetTeam: pi.onlyToSubmitter ? undefined : "all",
-      reliability: pi.reliability,
+      classification: pi.classification ?? classificationFromLegacyReliability(pi.reliability),
     }
     const pushed = { inject: responseInject, roundIndex: input.roundIndex, pushedAt: Date.now() }
     updated = {
@@ -1892,7 +1911,7 @@ const SCRIPTED_TURNS: Record<SpecialType, ScriptedTurn[]> = {
 }
 
 export async function triggerSpecial(type: SpecialType): Promise<{ ok: boolean; error?: string; special?: SpecialEvent }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
 
   const mode = session.config.specialsMode
@@ -1942,7 +1961,7 @@ export async function submitSpecialChoice(input: {
   participantId: string
   choiceId: string
 }): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
 
   const specialIdx = (session.specialEvents ?? []).findIndex(s => s.id === input.specialId)
@@ -2034,7 +2053,7 @@ export async function submitSpecialMessageWithAiResponse(input: {
   aiResponse: string
   evaluation?: { quality: "bad" | "neutral" | "good"; scoreImpact: number; hint: string }
 }): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
 
   const specialIdx = (session.specialEvents ?? []).findIndex(s => s.id === input.specialId)
@@ -2082,7 +2101,7 @@ export async function submitApForm(input: {
   participantId: string
   formData: Record<string, string>
 }): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
 
   const specialIdx = (session.specialEvents ?? []).findIndex(s => s.id === input.specialId)
@@ -2154,7 +2173,7 @@ function applySpecialCompletion(session: SessionState, completedSpecial: Special
 }
 
 export async function completeSpecial(specialId: string): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
 
   const specialIdx = (session.specialEvents ?? []).findIndex(s => s.id === specialId)
@@ -2194,7 +2213,7 @@ export async function fileMelding(input: {
   typeId: string
   freeText?: string
 }): Promise<{ ok: boolean; error?: string; melding?: FiledMelding }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
 
   const participant = session.participants.find(p => p.id === input.participantId)
@@ -2269,7 +2288,7 @@ export async function fileMelding(input: {
 // ─── Scenario graphs ──────────────────────────────────────────
 
 export async function facilitatorSkipDecision(): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
   if (!session.graph || !session.graphState) return { ok: false, error: "Session has no graph." }
   const node = session.graph.nodes.find(n => n.id === session.graphState!.currentNodeId)
@@ -2306,7 +2325,7 @@ export async function facilitatorPickGraphOption(input: {
   nodeId: string
   optionId: string
 }): Promise<{ ok: boolean; error?: string }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
   if (!session.graph || !session.graphState) return { ok: false, error: "Session has no graph." }
   if (session.graphState.currentNodeId !== input.nodeId) {
@@ -2346,30 +2365,12 @@ export async function saveScenarioGraph(graph: ScenarioGraph): Promise<void> {
 
 export async function loadScenarioGraph(id: string): Promise<ScenarioGraph | null> {
   const g = await dbLoadScenarioGraph(id)
-  return g ? migrateLegacyClassifications(g) : g
+  return g ? migrateGraphClassifications(g) : g
 }
 
 export async function listScenarioGraphs(_ownerId?: string): Promise<ScenarioGraph[]> {
   const list = await dbListScenarioGraphs()
-  return list.map(migrateLegacyClassifications)
-}
-
-// Legacy-data migratie: 'fabel' op InjectNodeData.classification → 'aanname'
-// (classification is publiek — deelnemer ziet dit label; 'fabel' als publiek
-// label bestaat niet meer). reliability behoudt 'misleading' (ground truth,
-// gestript tot review). Bestaande scenarios in KV blijven werken zonder
-// handmatige actie.
-function migrateLegacyClassifications(graph: ScenarioGraph): ScenarioGraph {
-  let touched = false
-  const nodes = graph.nodes.map(n => {
-    if (n.type !== 'inject') return n
-    const d = n.data as { classification?: string }
-    if (d.classification !== 'fabel') return n
-    touched = true
-    return { ...n, data: { ...n.data, classification: 'aanname' } as typeof n.data }
-  })
-  if (!touched) return graph
-  return { ...graph, nodes }
+  return list.map(migrateGraphClassifications)
 }
 
 export async function deleteScenarioGraph(id: string): Promise<void> {
@@ -2425,7 +2426,7 @@ export async function fileRegulatoryObligation(input: {
   freeText?: string
   keyPoints?: string
 }): Promise<{ ok: boolean; error?: string; obligation?: RegulatoryObligationState }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false, error: "No active session." }
   const regime = session.regulatoryRegime
   if (!regime) return { ok: false, error: "Geen regulatory regime actief in deze sessie." }
@@ -2533,7 +2534,7 @@ export function classifyRegulatoryTiming(
 }
 
 export async function setSessionFlag(key: string, value: boolean): Promise<{ ok: boolean }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false }
   const updated: SessionState = { ...session, flags: { ...(session.flags ?? {}), [key]: value } }
   await dbSetSession(updated)
@@ -2544,7 +2545,7 @@ export async function setSessionFlag(key: string, value: boolean): Promise<{ ok:
 export async function updateSupervisionReportEdits(
   edits: SupervisionReportEdits,
 ): Promise<{ ok: boolean }> {
-  const session = await dbGetSession()
+  const session = await readSession()
   if (!session) return { ok: false }
   const updated: SessionState = { ...session, supervisionReportEdits: edits }
   await dbSetSession(updated)

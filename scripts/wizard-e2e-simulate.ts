@@ -13,7 +13,7 @@ import { runWizardPipeline, type LlmMessage } from "../lib/wizard/pipeline"
 import { defaultWizardConfig, ALL_WIZARD_ROLES, specialConditionById, type WizardConfig } from "../lib/wizard/config"
 import type { WizardPlan } from "../lib/graph/wizard-plan"
 import type { OutcomeVector, RoleBriefing, PremadeInject } from "../lib/graph/types"
-import type { Role, InjectType, InjectChannel, Urgency, InjectReliability } from "../lib/types"
+import type { Role, InjectType, InjectChannel, Urgency } from "../lib/types"
 
 // ── 1. Config ─────────────────────────────────────────────────────────
 // Realistische default: 5 rondes, 4 injects, 4 opties per rol, 8 rollen.
@@ -95,12 +95,6 @@ function makeInject(roundIdx: number, injectIdx: number, config: WizardConfig, d
   // verwijzing naar de toezichthouder (NIS2 default regime = 'AP / NCSC').
   const isFirstRegulatory = roundIdx === 0 && injectIdx === 0
 
-  // Rule 4: setup-injects mogen niet ALLEMAAL misleading zijn. Eerste inject
-  // is 'fact', overige varieren.
-  const reliability: InjectReliability = injectIdx === 0
-    ? "fact"
-    : (injectIdx % 3 === 0 ? "misleading" : "assumption")
-
   // Rule 10: facilitatorNotes.discussionGoal moet feiten uit de ronde-inhoud
   // bevatten. Injects benoemen dus expliciet dezelfde termen als de goal
   // (zie makeRound below): "SIEM-alert", "HR-fileshare".
@@ -122,7 +116,6 @@ function makeInject(roundIdx: number, injectIdx: number, config: WizardConfig, d
     classification: isFact ? "feit" as const : "aanname" as const,
     setsUpDecisionNodeId: decisionAuthorId,
     triggersRegulatoryNotification: isFirstRegulatory,
-    reliability,
     senderName: "MDR-analist",
     source: "Eye Security MDR",
   }

@@ -20,13 +20,13 @@ export type GraphEdgeType = "sequence" | "branch" | "outcome" | "inject"
 // []        = minimal, hide every optional evaluation field.
 // non-empty = only show the fields that match the listed aspects.
 //
-// Note: 'facts_assumptions' was merged into 'reliability' — the latter now
-// controls both the BOB dropdown AND the span-editor. Legacy graphs may still
-// carry 'facts_assumptions' in their arrays; the inspector treats it as an
-// alias for 'reliability' (see normalizeAspects in evaluation-aspects.tsx).
+// De feit/aanname-as heet overal 'classification', net als het veld op
+// InjectNodeData. 'reliability' en 'facts_assumptions' zijn de oude namen en
+// blijven geldig zodat opgeslagen graphs niet hoeven te migreren.
 export type EvaluationAspect =
-  | 'reliability'          // BOB-select + span-editor (feit / aanname)
-  | 'facts_assumptions'    // DEPRECATED — alias for reliability, kept for backwards compat
+  | 'classification'       // feit/aanname-select + span-editor
+  | 'reliability'          // DEPRECATED — oude naam voor classification
+  | 'facts_assumptions'    // DEPRECATED — oude naam voor classification
   | 'nis2'                 // nis2Relevant flag + supervision areas
   | 'decision_impact'      // scoreImpact / linkedDimension
   | 'lessons_learned'      // learning objectives / lessonLearned
@@ -91,10 +91,12 @@ export interface InjectNodeData extends Omit<Inject, "id"> {
   // consequence for options that set a capability (e.g. retainer_activated →
   // forensic-findings inject).
   requiresCapability?: string
-  // Phase 2 — auteur-geclassificeerd type informatie: feit (getoetst) of
-  // aanname (ongetoetst). Alleen data, geen scoring-hook. Feeds wizard
-  // feit-ratio + participant filter. 'fabel' is verwijderd 2026-08-14 —
-  // leugens zijn achteraf ongetoetste aannames.
+  // Ground truth en het enige auteursveld voor de feit/aanname-as: feit
+  // (getoetst) of aanname (ongetoetst). toParticipantState strijkt het uit de
+  // deelnemer-payload tot de review-fase. Voedt de wizard-feit-ratio en het
+  // factcheck-paneel. 'fabel' is verwijderd 2026-08-14, het oude `reliability`
+  // (incl. 'misleading') is per 2026-10-22 hierin opgegaan — leugens zijn
+  // achteraf ongetoetste aannames.
   classification?: 'feit' | 'aanname'
   // Phase 4 — één-regel facilitator-noot: waarom staat deze inject hier?
   // Facilitator-only; toParticipantState strips this. Never scored.
