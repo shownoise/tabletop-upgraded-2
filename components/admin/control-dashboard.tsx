@@ -18,6 +18,7 @@ import { SpecialsPanel } from "./specials-panel"
 import { GraphPathPanel } from "./graph-path-panel"
 import { InjectRoutePlan } from "./inject-route-plan"
 import { FactCheckPanel } from "./fact-check-panel"
+import { ParticipantFeedbackPanel } from "./participant-feedback-panel"
 import { RegulatoryObligationsPanel } from "./regulatory-obligations-panel"
 import { LiveOverviewPanel } from "./live-overview-panel"
 import { MeldingenPanel } from "./meldingen-panel"
@@ -607,6 +608,9 @@ export function ControlDashboard() {
 
             {/* Fact-check panel — live tag distribution + ground truth (facilitator-only) */}
             {!isCoreEvent && <FactCheckPanel session={session} />}
+
+            {/* Terugblik per ronde — wat deelnemers invulden tussen de rondes */}
+            <ParticipantFeedbackPanel session={session} />
 
             {/* Specials panel — shown when mode is not off */}
             {!isCoreEvent && session.config.specialsMode && session.config.specialsMode !== "off" && (

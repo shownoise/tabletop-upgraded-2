@@ -131,8 +131,8 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
             </div>
           )}
 
-          {/* Session timer */}
-          {session.startedAt && (
+          {/* Session timer — stops existing once the exercise is over */}
+          {isActive && session.startedAt && (
             <div className="hidden items-center gap-1.5 border border-tt-border bg-tt-surface px-2.5 py-1 md:flex">
               <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
                 {tr(lang, "sessionTimer")}
