@@ -178,14 +178,24 @@ function IntroOverlay({
           )
         })()}
 
-        {/* Your role */}
-        {participantRole && (
+        {/* Your role, or picking one. The picker used to sit behind this
+            overlay, so you declared yourself ready first and only then chose a
+            role — and markParticipantReady does not require one, so a whole
+            team could read "klaar" with nobody holding a seat. */}
+        {participantRole ? (
           <div className="flex flex-col gap-2 border border-tt-border bg-tt-surface p-4">
             <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">Jouw rol</span>
             <span className="font-mono text-sm font-bold text-tt-bright">{ROLE_META[participantRole].label}</span>
             <p className="font-mono text-[10px] text-tt-dim">{ROLE_META[participantRole].description}</p>
           </div>
-        )}
+        ) : session && participantId ? (
+          <RolePickerLobby
+            session={session}
+            participantId={participantId}
+            myRole={undefined}
+            lang={lang}
+          />
+        ) : null}
 
         {/* Framework explanation */}
         {frameworkDesc && (
@@ -224,10 +234,16 @@ function IntroOverlay({
           </div>
         </div>
 
+        {!participantRole && (
+          <p className="font-mono text-[10px] text-tt-warn">
+            Kies eerst je rol hierboven — daarna kun je je klaarmelden.
+          </p>
+        )}
+
         <button
           onClick={handleReady}
-          disabled={marking}
-          className="flex items-center justify-center gap-2 bg-[#e8ff40] px-6 py-4 font-mono text-sm uppercase tracking-widest text-[#0d0f0f] hover:bg-[#e8ff40]/90 transition-colors disabled:opacity-70"
+          disabled={marking || !participantRole}
+          className="flex items-center justify-center gap-2 bg-[#e8ff40] px-6 py-4 font-mono text-sm uppercase tracking-widest text-[#0d0f0f] hover:bg-[#e8ff40]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {tr(lang, "readyBtn")}
         </button>
