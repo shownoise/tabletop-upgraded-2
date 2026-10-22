@@ -99,9 +99,12 @@ export function RegulatoryNotificationButton({ session, participantId }: Props) 
           type="button"
           size="sm"
           onClick={() => setOpen(true)}
-          className="self-start gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+          // The Button primitive sets whitespace-nowrap, and this label carries
+          // both the milestone and the authority name, so on a phone it grew
+          // wider than the viewport and scrolled the page sideways.
+          className="h-auto max-w-full items-start gap-2 whitespace-normal py-2 text-left bg-amber-600 hover:bg-amber-700 text-white"
         >
-          <Send className="size-3.5" />
+          <Send className="size-3.5 mt-0.5 shrink-0" />
           {buttonLabel}
         </Button>
       </div>

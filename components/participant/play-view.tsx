@@ -1119,7 +1119,7 @@ export function PlayView() {
 
       {/* Round timer + inline banner zone */}
       {currentRound && (
-        <div className="sticky top-[52px] z-30 bg-background/95 backdrop-blur border-b border-border">
+        <div className="sticky top-[var(--ctt-hud-h,57px)] z-30 bg-background/95 backdrop-blur border-b border-border">
           <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-2 md:px-8">
             <RoundTimerCompact
               roundStartedAt={session.roundStartedAt}
