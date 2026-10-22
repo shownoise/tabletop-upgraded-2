@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ShieldAlert, Wifi, WifiOff, Users } from "lucide-react"
 import type { Role, SessionState } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
@@ -76,23 +76,43 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
   const isActive = status === "active"
   const escalationIndex = Math.min(Math.max(currentIdx, 0), 3)
 
+  // The round-timer bar in play-view sticks directly beneath this header. Its
+  // offset used to be a hardcoded 52px while the header measures 57px on a
+  // phone, so the bar slid underneath. Publishing the real height keeps the two
+  // in step whatever gets added to the header later.
+  const headerRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const publish = () => {
+      document.documentElement.style.setProperty("--ctt-hud-h", `${Math.round(el.getBoundingClientRect().height)}px`)
+    }
+    publish()
+    const observer = new ResizeObserver(publish)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    <header className="sticky top-0 z-40 border-b border-tt-border bg-tt-bg">
+    <header ref={headerRef} className="sticky top-0 z-40 border-b border-tt-border bg-tt-bg">
       {/* Top bar */}
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 md:px-8">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <ShieldAlert className="size-3.5 text-tt-accent shrink-0" />
-          <div className="flex flex-col">
+          <div className="flex min-w-0 flex-col">
             <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
               {name ?? "—"}
             </span>
-            <span className="font-mono text-[10px] text-tt-bright truncate max-w-[140px] md:max-w-none">
+            <span className="font-mono text-[10px] text-tt-bright truncate">
               {session.scenario.scenario_title}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* shrink-0 plus min-w-0 on the left: without both, this cluster pushed
+            the header past a 375px viewport and the whole page scrolled
+            sideways. */}
+        <div className="flex shrink-0 items-center gap-2">
           {/* Role badge */}
           {participantRole && (
             <div className="hidden items-center border border-tt-accent/30 bg-tt-accent/5 px-2.5 py-1 md:flex">
