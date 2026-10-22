@@ -506,6 +506,11 @@ export interface ExerciseConfig {
   graphId?: string
   irRetainerName?: string
   irRetainerProfile?: IrRetainerProfile
+  // De klant waarvoor deze sessie gedraaid is. Door createSession gezet vanuit
+  // graph.clientId; ontbreekt bij sessies van voor die koppeling en bij een
+  // oefening zonder klant.
+  adminClientId?: string
+  adminClientName?: string
 }
 
 export interface Participant {
