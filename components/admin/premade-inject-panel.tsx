@@ -4,6 +4,8 @@ import { useMemo, useState } from "react"
 import type { SessionState } from "@/lib/types"
 import { ROLE_META, ROLE_ORDER, type Role } from "@/lib/types"
 import type { PremadeInject } from "@/lib/graph/types"
+import { CLASSIFICATION_LABELS } from "@/lib/config/texts"
+import type { InjectClassification } from "@/lib/classification"
 import { api } from "@/lib/api-client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,7 +15,7 @@ import { CheckCircle2 } from "lucide-react"
 // the scenario's authored library during DISCUSSION. Context only — never scored.
 export function PremadeInjectPanel({ session }: { session: SessionState }) {
   const library = session.graph?.injectLibrary ?? []
-  const [selectedClass, setSelectedClass] = useState<'feit' | 'aanname' | 'fabel' | 'all'>('all')
+  const [selectedClass, setSelectedClass] = useState<InjectClassification | 'all'>('all')
   const [selectedRoles, setSelectedRoles] = useState<Role[]>([])
   const [firedAt, setFiredAt] = useState<Record<string, number>>({})
 
@@ -97,7 +99,7 @@ export function PremadeInjectPanel({ session }: { session: SessionState }) {
 
       {/* Classification filter chips */}
       <div className="flex flex-wrap gap-1">
-        {(['all', 'feit', 'aanname', 'fabel'] as const).map(c => (
+        {(['all', 'feit', 'aanname'] as const).map(c => (
           <button
             key={c}
             type="button"
@@ -108,7 +110,7 @@ export function PremadeInjectPanel({ session }: { session: SessionState }) {
                 : "border-border bg-background text-muted-foreground hover:border-primary/40"
             }`}
           >
-            {c === 'all' ? 'alle' : c}
+            {c === 'all' ? 'alle' : CLASSIFICATION_LABELS[c].label}
           </button>
         ))}
       </div>
@@ -176,7 +178,7 @@ export function PremadeInjectPanel({ session }: { session: SessionState }) {
                     variant="outline"
                     className={`shrink-0 font-mono text-[9px] uppercase tracking-wider ${classPillColor(entry.classification)}`}
                   >
-                    {entry.classification}
+                    {CLASSIFICATION_LABELS[entry.classification].label}
                   </Badge>
                 )}
                 <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
@@ -196,10 +198,9 @@ export function PremadeInjectPanel({ session }: { session: SessionState }) {
   )
 }
 
-function classPillColor(c: 'feit' | 'aanname' | 'fabel'): string {
+function classPillColor(c: InjectClassification): string {
   switch (c) {
     case 'feit':    return 'border-emerald-500/40 text-emerald-600'
     case 'aanname': return 'border-amber-500/40 text-amber-600'
-    case 'fabel':   return 'border-destructive/40 text-destructive'
   }
 }
