@@ -78,10 +78,15 @@ function coverageLimitFor(size: string): string {
 }
 
 export function generateDocuments(config: ExerciseConfig): RoleDocument[] {
-  const sector    = config.sector        || "de organisatie"
-  const size      = config.companySize   || "250–500"
-  const systems   = config.criticalSystems || "ERP, klantportaal, identiteitsprovider"
-  const crown     = config.crownJewels   || "klantgegevens, financiële records"
+  // Geen verzonnen organisatiegegevens meer. Stond hier een voorbeeldwaarde,
+  // dan las een deelnemer in een onderwijsscenario over een ERP en een
+  // klantportaal die de organisatie niet heeft (issue #105). Niet ingevuld is
+  // niet ingevuld; dat is zichtbaar en uitlegbaar, een verzonnen feit niet.
+  const NIET_INGEVULD = "niet vastgelegd voor deze oefening"
+  const sector    = config.sector?.trim()          || ""
+  const size      = config.companySize?.trim()     || ""
+  const systems   = config.criticalSystems?.trim() || NIET_INGEVULD
+  const crown     = config.crownJewels?.trim()     || NIET_INGEVULD
   const scenario  = config.scenarioType  || "Ransomware"
   const insurer   = insurerFor(sector)
   const limit     = coverageLimitFor(size)
@@ -98,7 +103,7 @@ export function generateDocuments(config: ExerciseConfig): RoleDocument[] {
     referenceTag: "insurance",
     content: `POLISNUMMER: ${policyNum}
 VERZEKERAAR: ${insurer.name}
-VERZEKERDE: ${sector}-organisatie
+VERZEKERDE: ${sector ? `${sector}-organisatie` : "de deelnemende organisatie"}
 DEKKINGSPERIODE: 1 januari – 31 december
 
 MAXIMALE UITKERING: ${limit} per incident
@@ -250,7 +255,7 @@ SPREEKPUNTEN BIJ MEDIAVRAGEN
 • "We komen om [tijdstip] met een update."
 • NOOIT: bevestig of ontken tegenover de pers dat er losgeld is betaald
 
-SECTOR: ${sector} | OMVANG: ${size} medewerkers
+SECTOR: ${sector || NIET_INGEVULD} | OMVANG: ${size ? `${size} medewerkers` : NIET_INGEVULD}
 SCENARIO: ${scenario}`,
   })
 
@@ -373,7 +378,7 @@ Omschakeling naar handmatige procedures: Ops Manager beslist (geen CEO-goedkeuri
 Failover naar DR-omgeving: CISO + Ops Manager gezamenlijk
 Volledige shutdown businessproces: CEO-goedkeuring vereist
 
-SECTOR: ${sector} | MEDEWERKERS: ${size}`,
+SECTOR: ${sector || NIET_INGEVULD} | MEDEWERKERS: ${size || NIET_INGEVULD}`,
   })
 
   return docs

@@ -126,30 +126,30 @@ const defaults: ExerciseConfig = {
 }
 
 const IT_MATURITY_OPTIONS: { id: ITMaturity; label: string }[] = [
-  { id: "low",    label: "Low" },
-  { id: "medium", label: "Medium" },
-  { id: "high",   label: "High" },
+  { id: "low",    label: "Laag" },
+  { id: "medium", label: "Gemiddeld" },
+  { id: "high",   label: "Hoog" },
 ]
 
 const DIFFICULTY_OPTIONS: { id: DifficultyLevel; label: string }[] = [
-  { id: "beginner",     label: "Beginner" },
-  { id: "intermediate", label: "Intermediate" },
-  { id: "advanced",     label: "Advanced" },
+  { id: "beginner",     label: "Beginnend" },
+  { id: "intermediate", label: "Gevorderd" },
+  { id: "advanced",     label: "Ervaren" },
 ]
 
 const TEAM_STRUCTURE_OPTIONS: { id: TeamStructure; label: string; disabled?: boolean }[] = [
-  { id: "crisis_only", label: "Crisis Team only" },
-  { id: "it_only",     label: "IT Team only",              disabled: true },
-  { id: "crisis_it",   label: "Crisis + IT",               disabled: true },
-  { id: "full",        label: "Crisis + IT + Comms/Legal", disabled: true },
+  { id: "crisis_only", label: "Alleen crisisteam" },
+  { id: "it_only",     label: "Alleen IT-team",              disabled: true },
+  { id: "crisis_it",   label: "Crisisteam + IT",            disabled: true },
+  { id: "full",        label: "Crisisteam + IT + comms/legal", disabled: true },
 ]
 
 const PLAN_OPTIONS = [
-  { id: "ir_plan",         label: "IR plan available" },
-  { id: "crisis_comms_plan", label: "Crisis communication plan" },
-  { id: "backup_procedure",  label: "Backup procedure" },
-  { id: "nis2_process",      label: "NIS2 process documented" },
-  { id: "none",              label: "No documented process" },
+  { id: "ir_plan",         label: "IR-plan aanwezig" },
+  { id: "crisis_comms_plan", label: "Crisiscommunicatieplan" },
+  { id: "backup_procedure",  label: "Back-upprocedure" },
+  { id: "nis2_process",      label: "NIS2-proces vastgelegd" },
+  { id: "none",              label: "Niets vastgelegd" },
 ]
 
 export function SetupForm() {
@@ -465,13 +465,13 @@ export function SetupForm() {
             <div className="flex items-center gap-3">
               <Sparkles className="size-4 text-primary shrink-0" />
               <p className="font-mono text-xs text-primary">
-                Using scenario graph: <span className="font-bold">{graphName ?? graphId}</span> — velden die door de graph worden bepaald zijn grijs.
+                Je speelt scenario <span className="font-bold">{graphName ?? graphId}</span> — velden die het scenario zelf bepaalt staan grijs.
               </p>
             </div>
             <button
               type="button"
               onClick={() => {
-                if (!confirm("Graph loskoppelen? Dan wordt de setup weer een gewone AI-oefening en verlies je de graph-koppeling.")) return
+                if (!confirm("Scenario loskoppelen? Dan verlies je de koppeling met dit scenario en moet je de oefening opnieuw inrichten.")) return
                 setGraphIdOverride("")
                 setLoadedGraph(null)
                 setGraphAnalysis(null)
@@ -479,7 +479,7 @@ export function SetupForm() {
               }}
               className="rounded border border-primary/40 bg-background px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/10"
             >
-              Remove graph
+              Scenario loskoppelen
             </button>
           </div>
           {graphLoadError && (
@@ -489,16 +489,16 @@ export function SetupForm() {
             <div className="flex flex-col gap-1.5 border-t border-primary/20 pt-2 mt-1">
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">
-                  {graphAnalysis.roundCount} round(s)
+                  {graphAnalysis.roundCount} {graphAnalysis.roundCount === 1 ? "ronde" : "rondes"}
                 </span>
                 {graphAnalysis.hasDecisions && (
                   <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">
-                    · branching
+                    · met aftakkingen
                   </span>
                 )}
                 {graphAnalysis.hasOutcomes && (
                   <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">
-                    · outcome-driven
+                    · uitkomst-gestuurd
                   </span>
                 )}
                 {graphAnalysis.specialTypes.length > 0 && (
@@ -509,7 +509,7 @@ export function SetupForm() {
               </div>
               {graphAnalysis.requiredRoles.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">Required roles:</span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70">Rollen die dit scenario nodig heeft:</span>
                   {graphAnalysis.requiredRoles.map(r => (
                     <span key={r} className="rounded border border-primary/40 bg-background px-1.5 py-0.5 font-mono text-[10px] text-primary">
                       {ROLE_META[r].label}
@@ -519,7 +519,7 @@ export function SetupForm() {
               )}
               {graphAnalysis.unmatchedDecisionOptions.length > 0 && (
                 <p className="font-mono text-[10px] text-yellow-600 dark:text-yellow-400">
-                  ⚠ {graphAnalysis.unmatchedDecisionOptions.length} decision option(s) reference an unknown roleAction id — branching may not work automatically.
+                  ⚠ {graphAnalysis.unmatchedDecisionOptions.length} keuzeoptie(s) verwijzen naar een onbekende rolactie — de aftakking werkt dan niet automatisch.
                 </p>
               )}
               {/* These values are substituted into inject and round text, so a
@@ -644,27 +644,43 @@ export function SetupForm() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <FieldRow label="Sector" hint="Branche van de gesimuleerde organisatie">
-            <Select value={config.sector} onValueChange={(v) => update("sector", v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{sectors.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
-          </FieldRow>
+        <div className="flex flex-col gap-5">
+          {/* Zonder klant is er niets dat deze velden controleert, terwijl ze
+              wél in de teksten van de deelnemers terechtkomen. Dus zeggen we
+              dat hier hardop in plaats van iets plausibels voor te vullen. */}
+          <div className="flex flex-col gap-1 rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400">
+              Dit scenario hangt niet onder een klant
+            </span>
+            <p className="font-mono text-[11px] leading-relaxed text-muted-foreground">
+              Wat je hier invult lezen je deelnemers terug — in hun organisatieprofiel, in
+              documenten en in scenario-teksten. Vul het in zoals het bij dít scenario hoort,
+              of laat het leeg. Laat je het leeg, dan laten we het weg in plaats van er iets
+              bij te verzinnen.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <FieldRow label="Sector" hint="Branche van de gesimuleerde organisatie">
+              <Select value={config.sector} onValueChange={(v) => update("sector", v)}>
+                <SelectTrigger><SelectValue placeholder="Kies een sector" /></SelectTrigger>
+                <SelectContent>{sectors.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              </Select>
+            </FieldRow>
 
-          <FieldRow label="Grootte" hint="Aantal medewerkers">
-            <Select value={config.companySize} onValueChange={(v) => update("companySize", v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{sizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-            </Select>
-          </FieldRow>
+            <FieldRow label="Grootte" hint="Aantal medewerkers">
+              <Select value={config.companySize} onValueChange={(v) => update("companySize", v)}>
+                <SelectTrigger><SelectValue placeholder="Kies een grootte" /></SelectTrigger>
+                <SelectContent>{sizes.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              </Select>
+            </FieldRow>
+          </div>
         </div>
       )}
 
       {/* Section 2 — Exercise setup */}
       <SectionHeader label="Instellingen" />
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <FieldRow label={`Scenario type${graphId ? " (uit graph)" : ""}`} hint={graphId ? "Wordt bepaald door de scenario graph" : "The primary attack pattern to simulate"}>
+        <FieldRow label={`Scenario type${graphId ? " (uit graph)" : ""}`} hint={graphId ? "Wordt bepaald door het scenario" : "Het aanvalspatroon dat je wilt simuleren"}>
         <div className={graphId ? "opacity-40 pointer-events-none select-none" : ""}>
           <Select value={config.scenarioType} onValueChange={handleScenarioTypeChange}>
             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -752,10 +768,10 @@ export function SetupForm() {
           <SectionHeader label="Context" />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <FieldRow label="Kritieke systemen" hint="Systemen wier uitval materiële impact heeft op de operatie">
-              <Textarea value={config.criticalSystems} onChange={(e) => update("criticalSystems", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
+              <Textarea value={config.criticalSystems} onChange={(e) => update("criticalSystems", e.target.value)} rows={3} placeholder="Laat leeg als je het niet weet" className="resize-none font-mono text-sm" />
             </FieldRow>
             <FieldRow label="Kroonjuwelen" hint="Meest gevoelige data of assets om te beschermen">
-              <Textarea value={config.crownJewels} onChange={(e) => update("crownJewels", e.target.value)} rows={3} className="resize-none font-mono text-sm" />
+              <Textarea value={config.crownJewels} onChange={(e) => update("crownJewels", e.target.value)} rows={3} placeholder="Laat leeg als je het niet weet" className="resize-none font-mono text-sm" />
             </FieldRow>
           </div>
         </>

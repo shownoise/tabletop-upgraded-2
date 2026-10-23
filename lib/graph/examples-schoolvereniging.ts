@@ -59,6 +59,13 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
 **Externe communicatie**
 - Bestuurder autoriseert. Ouders informeren via Magister-berichten en de
   website. Journalisten uitsluitend via bestuurder of woordvoerder.`,
+  // De situatieschets per ronde is bewust een KORTE ALGEMENE introductie:
+  // waar staan we, hoeveel tijd is verstreken, wat is de stand van zaken, en
+  // welke beslisvraag ligt aan het eind van deze ronde op tafel. Alles wat
+  // rolspecifiek is of door een inject moet worden ontdekt, hoort NIET hier —
+  // de header is het enige dat alle rollen tegelijk lezen, dus wat hier staat
+  // is verklapt. Dat haalt de onderzoeksvraag uit de ronde (issue #105 §3).
+  // De wizardregel `rule13_situation_no_spoiler` meet die overlap terug.
   rounds: [
     // ══════════════════════════════════════════════════════════════
     // Ronde 1 — Dag 0 ochtend — Ambigue signalen
@@ -66,7 +73,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       title: "R1 — Vreemde signalen op maandagochtend",
       situation:
-        "Maandag 4 november, 09:15. Op de eerste schooldag na de herfstvakantie meldt lerares Nederlands mevrouw Van der Meer dat haar klassenplanner leeg lijkt: leerlinggegevens laden niet. Twee collega's op locatie Noord bevestigen dat Magister traag doet en dat gedeelde bestanden 'raar reageren'. WestNet ICT heeft in het MSP-dashboard om 08:42 een low-severity alert gezet ('ongebruikelijke schrijfactiviteit op FS-01'), maar dat is niet doorgezet naar een ticket. IT-coördinator Rob de Vries is op vakantie in Portugal — WhatsApp aan, mobiel op stil. Meerdere ouders melden bij de administratie dat ze een vreemde SMS hebben gehad over een wachtwoord-reset.",
+        "Maandag 4 november, 09:15 — de eerste schooldag na de herfstvakantie. Sinds het eerste lesuur komen er van verschillende locaties losse meldingen binnen over dingen die niet werken zoals ze horen te werken. Niets is hard, niemand heeft het hele plaatje, en degene die de techniek van binnenuit kent is deze week niet op school. Jullie hebben een kwartier om te bepalen of dit ruis is of een incident — en wie dat besluit neemt.",
       timerMinutes: 15,
       openingPrompts: [
         "Wat weten we zeker en wat is aanname op dit moment?",
@@ -222,7 +229,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       title: "R2 — Ransomnote in de finance-share",
       situation:
-        "Voortbouwend op de netwerk-isolatie FS-01/02 en de WestNet-piketoproep van vanochtend is het beeld nu bevestigd. Maandag 13:40. WestNet-engineer Kevin heeft na een piketoproep om 11:15 remote ingelogd. Bevestigd: Play-ransomware. Ongeveer 68% van de shares op FS-01 en FS-02 is versleteld, waaronder cijferadministratie voor rapportvergadering deze week, allergiegegevens leerlingzorg, en financiële reconciliatie voor lesgeldincasso. Op de share /financien staat een tekstbestand HELLO_PLAY.txt: ransomeis €680.000 in Monero binnen 72 uur, anders publicatie op de leaksite. Rob is inmiddels bereikbaar maar zit in Faro zonder werk-laptop — de enige persoon met kennis van de Magister-koppelingsdatabase is dus niet ter plaatse. Er zijn signalen dat de aanvaller data heeft ge-exfiltreerd — WestNet ziet uitgaand verkeer van ~4 GB naar een onbekend IP in de nacht van zaterdag op zondag. Ouders beginnen te bellen omdat de website afwijkend traag doet.",
+        "Maandag 13:40 — ruim vier uur later. Het beeld van vanmorgen is niet langer ambigu: dit is een aanval, en groter dan de ochtend liet vermoeden. De enige persoon met diepe kennis van de kernsystemen is nog steeds niet ter plaatse. Wat jullie vóór de lunch afspraken over de meldingsklok en over wie mandaat heeft, staat nu onder spanning: alle sporen openen tegelijk. Aan het eind van deze ronde moet helder zijn welk spoor vandaag voorgaat.",
       timerMinutes: 15,
       openingPrompts: [
         "Kunnen we vandaag nog een geloofwaardig bericht naar ouders sturen — en zo ja, wat?",
@@ -397,7 +404,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       title: "R3 — Regelklok tikt en de pers belt",
       situation:
-        "Voortbouwend op de AP-melding indienen als voorlopig van gisteren en de bestuurder belt-terug naar teams: Dinsdag 10:30 — 26 uur na detectie. NIS2 early-warning had gisteren 08:42 al ingediend moeten zijn; als jullie dat gemist hebben is dat een formeel gebrek. AVG art. 33-klok verstrijkt donderdag 08:42. RTV Oost belt: journalist Sanne Bruijns wil vandaag om 14:00 op locatie een gesprek — 'we hebben van meerdere ouders begrepen dat er iets gaande is'. Magister-contract 48u-klok: nog 22 uur. Ouders posten in Facebook-groepen dat 'de school is gehackt'. Een oudervereniging-voorzitter mailt of hij vanmiddag geïnformeerd kan worden. Restore-test op eerste backup-set draait — Rob heeft vanuit Faro het commando gegeven via WestNet.",
+        "Dinsdag 10:30 — 26 uur na detectie. Wat jullie gisteren met de AP-melding indienden en wat jullie intern hebben gezegd, bepaalt vandaag jullie bewegingsruimte. Buiten de vereniging gaat het verhaal nu zijn eigen gang; binnen de vereniging wachten mensen op duidelijkheid. Aan het eind van deze ronde moet vastliggen wie namens de vereniging spreekt en welke formele verplichtingen vandaag worden nagekomen.",
       timerMinutes: 15,
       openingPrompts: [
         "Als we de NIS2 24u-melding hebben gemist, hoe verantwoorden we dat richting NCSC?",
@@ -587,7 +594,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       title: "R4 — Betalen, onderhandelen of weigeren",
       situation:
-        "Terugblik op dinsdag: de AP-completering is verzonden, de bestuurder heeft persoonlijk RTV Oost teruggebeld. Woensdag 09:00 — 48 uur na detectie. Ransom-deadline nog 24 uur. Univé-onderhandelaar meldt: aanvaller staat op €680k, realistisch haalbaar €340k met bewijs van deletion. Bij herstelfase blijkt de restore-test op de eerste cold-backup te FALEN — Wasabi-object corrupt sinds september (niet gemerkt). Tweede backup-set draait nu; verwachte uitkomst 15:30. Univé vraagt schriftelijke incident-scope voordat zij eventuele betaling autoriseren; zonder scope geen dekking, en de verzekeringspolis heeft uitzonderingsclausules die zich nu concreet manifesteren. Bestuur en Raad van Toezicht willen om 14:00 een videocall. RTV Oost heeft gisteravond uitgezonden — feitelijk maar streng ('kwetsbare gegevens van 4000 leerlingen mogelijk op straat'). Een parent posted op Facebook dat hij AP-klacht gaat indienen — hij heeft dat inmiddels ook daadwerkelijk gedaan.",
+        "Woensdag 09:00 — 48 uur na detectie. De AP-completering en de lijn die jullie gisteren naar buiten kozen liggen achter jullie; vandaag komt de rekening van beide. De eis staat nog, er ligt een tegenbod van €340k op tafel en de termijn van de daders verloopt binnen een dag. De verzekeringspolis heeft uitzonderingen die niemand ooit heeft gelezen. Deze ronde eindigt met één expliciet besluit over het losgeld, en met de criteria waarop jullie dat nemen.",
       timerMinutes: 15,
       openingPrompts: [
         "Op basis waarvan hakken wij de knoop door op wel/niet betalen?",
@@ -740,7 +747,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       title: "R5 — Herstel loopt en de keten komt terug",
       situation:
-        "Voortbouwend op het besluit niet betalen en de onderhandelaar 24u laten rekken: Donderdag 09:00 — 72 uur na detectie. Restore-set 2 werkt gedeeltelijk: alle roosters en zorgdossiers terug (peildatum vorige week), cijfers Q1 gedeeltelijk terug. Bij herstelfase blijkt de tweede backup-set beter dan de eerste, maar niet foutloos — de restore-drill was voor het incident jaren niet volledig uitgevoerd. Magister heeft een alternatieve tenant beschikbaar gesteld — technisch klaar, maar docenten moeten hun cijfers handmatig opnieuw invoeren. LoonBureau Oost belt: zij hebben ontdekt dat een gedeeld service-account tussen hen en ons systeem in de exfil zit — hun eigen systemen zijn mogelijk ook gecompromitteerd via die weg. Vakbond AOb heeft een statement uitgegeven ('scholen worden systemisch te licht beveiligd') en noemt Onderwijsvereniging Noord-Oost als voorbeeld. Ouders vragen: 'kunnen mijn kinderen morgen wel of niet naar school?'",
+        "Donderdag 09:00 — 72 uur na detectie. Wat jullie gisteren besloten over niet betalen of over de onderhandelaar ligt achter jullie. Bij herstelfase blijkt de back-up-restoretest jaren niet volledig gedraaid: wat terugkomt, komt onvolledig terug. Tegelijk wordt de kring rond dit incident groter — buiten de vereniging melden zich partijen met een eigen belang en een eigen termijn. Deze ronde moet opleveren wie welke partij aanspreekt en hoe lang jullie de noodprocessen volhouden.",
       timerMinutes: 15,
       openingPrompts: [
         "Wat betekent de LoonBureau-melding voor onze scope- en communicatie-afhandeling?",
@@ -882,7 +889,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       title: "R6 — Verantwoording aan AP, RvT en verzekeraar",
       situation:
-        "Maandag 11 november, 10:00 — vijf dagen na detectie. Herstel voor 91% voltooid; laatste 9% (cijfers laatste twee weken oktober) definitief kwijt en handmatig gereconstrueerd. AP verzoekt schriftelijke follow-up onder art. 33 en heeft aangegeven dat een vervolg-inspectie op art. 32 (technische en organisatorische maatregelen) waarschijnlijk is. NIS2 30-dagen final report opent nu, moet uiterlijk 5 december binnen. Raad van Toezicht komt woensdag bij elkaar en wil een schriftelijk incident-post-mortem. Univé wil final claim binnen 3 weken met alle documentatie. Voorzitter oudervereniging vraagt om betrokkenheid bij het verbeterplan. Pers is verstomd — het weekend heeft de aandacht verplaatst.",
+        "Maandag 11 november, 10:00 — vijf dagen na detectie. Het acute deel is voorbij: het herstel is grotendeels gelukt, de aandacht van buiten is weggezakt en de keuzes rond de ketenpartners en het personeel liggen achter jullie. Wat nu begint is de verantwoording, en die loopt weken tot maanden door. Deze ronde gaat over wat er op papier komt, wie daar eigenaar van is en wanneer het klaar moet zijn.",
       timerMinutes: 15,
       openingPrompts: [
         "Wat verandert er maandag over twee weken in onze IT-organisatie?",
@@ -1039,7 +1046,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       afterRoundIndex: 0,
       authorId: "d1-r1-ambigue",
-      prompt: "Na R1 — Ambigue signalen: koers bepalen zonder volle informatie",
+      prompt: "Na R1 — Is dit ruis of een incident, en wie neemt nu welk besluit?",
       perRole: true,
       options: [
         // CISO — cross-role driver: activeert retainer, ontsluit forensiek in R3
@@ -1189,7 +1196,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       afterRoundIndex: 1,
       authorId: "d2-r2-forensiek-comms",
-      prompt: "Na R2 — Bevestiging: kies je forensiek-first of communicatie-first?",
+      prompt: "Na R2 — Welk spoor gaat vandaag voor: forensiek eerst of communicatie eerst?",
       perRole: true,
       options: [
         // CEO
@@ -1338,7 +1345,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       afterRoundIndex: 2,
       authorId: "d3-r3-comms-meldingen",
-      prompt: "Na R3 — Communicatie- en meldingsregie: transparant of voorzichtig?",
+      prompt: "Na R3 — Wie spreekt namens de vereniging, en welke meldingen gaan vandaag de deur uit?",
       perRole: true,
       options: [
         // Head of comms — coupling with CEO's earlier public-statement decision
@@ -1485,7 +1492,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       afterRoundIndex: 3,
       authorId: "d4-r4-losgeld",
-      prompt: "Na R4 — Losgeld: betalen, onderhandelen, of weigeren?",
+      prompt: "Na R4 — Betalen, onderhandelen of weigeren, en op welke criteria besluiten jullie dat?",
       perRole: true,
       options: [
         // CEO — the primary decision
@@ -1635,7 +1642,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       afterRoundIndex: 4,
       authorId: "d5-r5-ketenverbreding",
-      prompt: "Na R5 — Ketenverbreding: LoonBureau, AOb, PMR-onrust",
+      prompt: "Na R5 — Wie spreekt welke ketenpartij aan, en hoe lang houden jullie de noodprocessen vol?",
       perRole: true,
       options: [
         // CEO
@@ -1784,7 +1791,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
     {
       afterRoundIndex: 5,
       authorId: "d6-r6-verankering",
-      prompt: "Na R6 — Verankering: welke governance-verandering wordt schriftelijk?",
+      prompt: "Na R6 — Welke verandering leggen jullie vast, met welke eigenaar en welke deadline?",
       perRole: true,
       options: [
         // CEO

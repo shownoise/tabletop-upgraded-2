@@ -104,17 +104,20 @@ export const ERROR_MESSAGES = {
     "Geen enkele inject in deze graph draagt `triggersRegulatoryNotification: true` — de meldplicht wordt tijdens spel nooit geopend.",
 } as const
 
-// ─── Facilitator guide (event-mode help + BOB-hint) ───────────────────────
+// ─── Facilitator guide (event-modus + hint bij de overlegfase) ────────────
 
 export const FACILITATOR_GUIDE = {
+  // De kern van deze fase is: overleg, dan pakt de gemandateerde rol de keuze.
+  // BOB is daarbij een hulpmiddel dat het team mag gebruiken, niet de
+  // ruggengraat van de oefening (issue #105).
   bobHint:
-    "Overweeg BOB (Beeldvorming — Oordeelvorming — Besluitvorming) om deze fase te structureren. Het team beslist zelf of ze de methode toepassen.",
+    "In deze fase overlegt het team en legt daarna elke gemandateerde rol één keuze vast. Wil je het gesprek structureren, dan kan BOB (beeld — oordeel — besluit) helpen; het team kiest zelf of het die methode gebruikt.",
   eventMode: {
     heading: "Event-modus",
     intro: "Één notulist bedient de iPad; deelnemers spelen op het grote scherm mee.",
-    step_briefing: "Briefing: introduceer scenario, teams, en werkwijze.",
-    step_push: "Push injects, sluit ronde met LOCK. Reveal + leaderboard verschijnt automatisch op het grote scherm.",
-    step_review: "Review: bespreek keuzes, alternatieven, en scoring per dimensie.",
+    step_briefing: "Briefing: introduceer scenario, teams en werkwijze.",
+    step_push: "Zet de injects door en sluit de ronde af. De reveal en het scorebord verschijnen automatisch op het grote scherm.",
+    step_review: "Review: bespreek de keuzes, de alternatieven en de score per dimensie.",
   },
 } as const
 
