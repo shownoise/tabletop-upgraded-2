@@ -1,4 +1,4 @@
-import type { ExerciseConfig, FactCheckTag, FiledMelding, InjectChannel, InjectType, MeldingType, RegulatoryObligationState, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, SupervisionReportEdits, Urgency } from "./types"
+import type { ExerciseConfig, FactCheckTag, InjectChannel, InjectType, RegulatoryObligationState, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, SupervisionReportEdits, Urgency } from "./types"
 import type { SupervisionReport } from "./engine/supervision"
 
 async function post<T = unknown>(url: string, body?: unknown): Promise<T> {
@@ -91,8 +91,6 @@ export const api = {
     post<{ ok: true }>("/api/session/special/complete", { specialId }),
   markReady: (participantId: string) =>
     post<{ ok: true }>("/api/session/ready", { participantId }),
-  fileMelding: (input: { participantId: string; momentId: string; typeId: string; freeText?: string }) =>
-    post<{ ok: true; melding: FiledMelding }>("/api/session/melding", input),
   replotInjects: () =>
     post<{ ok: true; version?: number }>("/api/session/replot-injects", {}),
   tagInject: (input: { participantId: string; injectId: string; tag: FactCheckTag }) =>

@@ -176,8 +176,9 @@ dat ze niet terugvallen op de ruwe enum-waarde.
   `components/admin/builder/compliance-rail.tsx`.
   **Let op**: `MeldingMoment` op ronde (`lib/graph/types.ts:68`) is het *oude*,
   tweede mechanisme. De wizard genereert die momenten nog en de builder
-  valideert ze, maar er is geen deelnemers-UI meer voor; `/api/session/melding`
-  en `fileMelding()` zijn daarmee onbereikbaar geworden.
+  valideert ze, maar er is geen deelnemers-UI meer voor; het meldpad erlangs
+  (`/api/session/melding`, `api.fileMelding`, `fileMelding()`) is op 2026-10-23
+  verwijderd. Niets vult `session.meldingen` nog, dus `MeldingenPanel` blijft leeg.
 - **Notulist** — persoon achter de ene iPad in event modus, submitteert namens
   de hele groep. Genoemd in `lib/types.ts:603` (comment). Geen aparte `Role` in
   het type-union.

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle, FileText, Gavel, Loader2, ShieldCheck, Users } from "lucide-react"
+import { CheckCircle, ChevronDown, ChevronRight, FileText, Gavel, Loader2, ShieldCheck, Users } from "lucide-react"
 import { ROLE_META, ROLE_ORDER, type Role, type SessionState } from "@/lib/types"
 import { roleCoverage } from "@/lib/session-roles"
 import { api } from "@/lib/api-client"
@@ -268,6 +268,7 @@ export function StepWelcome({
 }) {
   const extra = view.all.filter(r => r !== view.active)
   const mandated = new Set(mandatedRoles)
+  const [extraOpen, setExtraOpen] = useState(false)
 
   return (
     <>
@@ -304,10 +305,23 @@ export function StepWelcome({
 
       {extra.length > 0 && (
         <section className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 px-4 py-3">
-          <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+          {/* Ingeklapt beginnen. Een solo-deelnameer draagt alle zeven andere
+              rollen, en uitgeklapt was dit blok het grootste deel van stap 1.
+              Welke rollen je erbij hebt staat al in de regel van de knop; de
+              mandaatomschrijving per rol is naslag. */}
+          <button
+            type="button"
+            onClick={() => setExtraOpen(v => !v)}
+            aria-expanded={extraOpen}
+            className="flex items-center gap-2 text-left font-mono text-[9px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+          >
+            {extraOpen ? <ChevronDown className="size-3" aria-hidden /> : <ChevronRight className="size-3" aria-hidden />}
             Je draagt er nog {extra.length} {extra.length === 1 ? "rol" : "rollen"} bij
-          </span>
-          <ul className="flex flex-col gap-1.5">
+            <span className="font-sans normal-case tracking-normal text-muted-foreground/70">
+              {extra.map(r => ROLE_META[r].label).join(", ")}
+            </span>
+          </button>
+          <ul className={`flex flex-col gap-1.5 ${extraOpen ? "" : "hidden"}`}>
             {extra.map(role => (
               <li key={role} className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-medium text-foreground">{ROLE_META[role].label}</span>
@@ -320,11 +334,14 @@ export function StepWelcome({
               </li>
             ))}
           </ul>
-          <p className="text-[11px] text-muted-foreground">
+          <p className={`text-[11px] text-muted-foreground ${extraOpen ? "" : "hidden"}`}>
             Niemand heeft deze rollen geclaimd, dus jij neemt ze erbij. Bij de keuze zegt het scherm
             namens welke rol je indient.
           </p>
-          <div className="flex flex-wrap gap-1.5">
+          {/* De rolwisselaar hoort bij dit detail: ingeklapt zie je één regel,
+              uitgeklapt de mandaten plus de knoppen om te wisselen. Zeven chips
+              permanent in beeld las als een menu. */}
+          <div className={`flex flex-wrap gap-1.5 ${extraOpen ? "" : "hidden"}`}>
             {view.all.map(role => (
               <button
                 key={role}
@@ -341,7 +358,7 @@ export function StepWelcome({
               </button>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground">
+          <p className={`text-[11px] text-muted-foreground ${extraOpen ? "" : "hidden"}`}>
             Dit bepaalt alleen welk mandaat je nu bovenaan ziet. Indienen kan voor al je rollen.
           </p>
         </section>
