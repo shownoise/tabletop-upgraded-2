@@ -189,8 +189,9 @@ function ConfirmationCard({
   )
 }
 
-// Small helper used by ReviewCommentary to render an advice sentence in
-// the "Uitkomst deze ronde" section.
+// Eén regel over de meldplicht voor de reviewstap (`steps/step-review.tsx`).
+// Stond hier als "helper voor ReviewCommentary", maar die component las hem
+// nooit; de reviewstap doet dat nu wel.
 export function regulatoryAdviceSentence(
   obligations: RegulatoryObligationState[],
   regimeId: string,

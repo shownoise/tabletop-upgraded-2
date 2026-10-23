@@ -1,1034 +1,197 @@
 "use client"
 
 import Link from "next/link"
-import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Component, useCallback, useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
-import { ArrowLeft, CheckCircle, ChevronDown, FileText, Info, Loader2, ShieldAlert, Users } from "lucide-react"
+import { ArrowLeft, ShieldAlert } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
-import type { Inject, LiveEvent, Participant, Role, RoleDocument, SessionState, SpecialEvent, SubmittedDecision } from "@/lib/types"
-import { ROLE_META, ROLE_ORDER } from "@/lib/types"
+import type { Inject, LiveEvent, Role, SubmittedDecision } from "@/lib/types"
 import { analyzeGraph } from "@/lib/graph/analyze"
 import { api } from "@/lib/api-client"
-import { getGoal } from "@/lib/goals/registry"
-import type { GoalId } from "@/lib/engine/types"
+import { roleCoverageInUse } from "@/lib/session-roles"
 import { InjectFeed } from "./inject-feed"
 import { TeamPicker } from "./team-picker"
-import { ConfidenceTally } from "./confidence-tally"
 import { AchievementsToaster } from "./achievements"
 import { UrgentInjectModal } from "./urgent-inject-modal"
-import { RoundTimerCompact } from "./round-timer"
-import { RoundPhaseTimeline } from "./round-phase-timeline"
-import { FactCheckReview } from "./fact-check-review"
-import { ReviewCommentary } from "./review-commentary"
+import { RoundTimerCompact, useDeadlineLabel } from "./round-timer"
 import { SessionHUD } from "./session-hud"
-import { FeedbackScreen } from "./feedback-screen"
 import { SessionClosing } from "./session-closing"
 import { DecisionPanel } from "./decision-panel"
 import { RegulatoryNotificationButton } from "./regulatory-notification-button"
-import { OpeningBriefing } from "./opening-briefing"
 import { SpecialModal } from "./special-modal"
-import { PhaseTimer, PhaseSegments } from "./phase-timer"
 import { Empty } from "@/components/ui/empty"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
-import { stripMarkdown } from "@/lib/render-markdown"
 import { playNotificationSound } from "@/lib/sounds"
+import { activeRoleView } from "./steps/active-role"
+import {
+  clampStep,
+  highestOpenStep,
+  landingStep,
+  phaseKey,
+  type FlowInput,
+  type StepId,
+} from "./steps/flow"
+import { mandateView } from "./steps/mandate"
+import { Onboarding } from "./steps/onboarding"
+import { StepShell, type StepPrimary } from "./steps/step-shell"
+import { StepWelcome } from "./steps/step-welcome"
+import { StepDiscussion, StepRound } from "./steps/step-round"
+import { StepChoice } from "./steps/step-choice"
+import { StepReview } from "./steps/step-review"
+
+// De deelnemersconsole. Eén scherm per stap, zeven stappen, en de stap volgt de
+// fase die de facilitator zet.
+//
+// Dit bestand was 1442 regels met alle panelen van alle fasen tegelijk in beeld
+// (issue #105 §2). Het is nu alleen nog de router: het leidt de rol en de stap
+// af en kiest welk stapscherm aan de beurt is. De inhoud van de stappen staat
+// in `./steps/`.
 
 const NAME_KEY = "ctt:name"
 const ID_KEY = "ctt:participantId"
-const ROLE_KEY = "ctt:role"
-const ACTIVE_ROLE_KEY = "ctt:activeRole"
-const FEEDBACK_KEY = "ctt:feedback_rounds"
+// Welke van de eigen rollen actief is. Nadrukkelijk een *voorkeur*: de rollen
+// zelf komen uit de serverstate via `activeRoleView()`. Zie steps/active-role.ts
+// voor waarom (issue #105 §1).
+const ROLE_PREFERENCE_KEY = "ctt:activeRole"
 
-// ─── Session lead ─────────────────────────────────────────────
-// The session lead chairs the meeting: advances BOB/OODA phases.
-// Priority: CEO first, then first available crisis management role.
-const SESSION_LEAD_PRIORITY: Role[] = [
-  'ceo', 'ciso', 'cfo', 'ops_manager', 'legal', 'head_of_comms', 'hr_lead', 'it_manager', 'it_manager',
-]
-
-function getSessionLeadRole(participants: { role?: Role | null }[]): Role | null {
-  const assigned = new Set(participants.map(p => p.role).filter(Boolean) as Role[])
-  return SESSION_LEAD_PRIORITY.find(r => assigned.has(r)) ?? null
-}
-
-function stripBobPrefix(text: string): string {
-  return text
-    .replace(/^\[(Beeldvorming|Oordeelvorming|Besluit(?:vorming)?)\][:\s]*/i, "")
-    .replace(/^(Beeldvorming|Oordeelvorming|Besluit(?:vorming)?)\s*[:\-–—]\s*/i, "")
-    .trim()
-}
-
-// ─── Error boundary ───────────────────────────────────────────
 class DecisionBoundary extends Component<{ children: ReactNode }, { crashed: boolean }> {
   state = { crashed: false }
   static getDerivedStateFromError() { return { crashed: true } }
   render() {
     if (this.state.crashed) return (
-      <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-6 text-center font-mono text-xs text-destructive">
-        Decision panel kon niet laden — ververs de pagina.
-      </div>
+      <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-4 text-center font-mono text-xs text-destructive">
+        De keuzekaart kon niet laden — ververs de pagina.
+      </p>
     )
     return this.props.children
   }
 }
 
-// ─── Framework explanation ────────────────────────────────────
-
-const PARTICIPANT_PHASE_NAMES: Record<'bob' | 'ooda', string[]> = {
-  bob:  ['Beeldvorming', 'Oordeelsvorming', 'Besluitvorming'],
-  ooda: ['Observe', 'Orient', 'Decide', 'Act'],
-}
-
-const FRAMEWORK_DESCRIPTIONS: Partial<Record<string, string>> = {
-  bob:     "Discussies volgen BOB: Beeldvorming (wat weten we?), Oordeelsvorming (wat zijn onze opties?) en Besluitvorming (wat besluiten we?). Het crisisteam bewaakt zelf de overgang naar de volgende fase via de knop in het scherm.",
-  ooda:    "Discussies volgen de OODA-cyclus: Observe, Orient, Decide, Act. Het crisisteam bepaalt samen wanneer de volgende stap wordt gezet.",
-  dair:    "Deze oefening gebruikt DAIR: Detect, Assess, Inform, Respond — de standaard incident response-cyclus.",
-  nist_ir: "Deze oefening volgt de NIST IR-cyclus: Prepare, Detect, Contain, Eradicate, Recover, Post-Incident.",
-  free:    "Deze oefening gebruikt vrije discussie — geen vast raamwerk. Leg de nadruk op heldere redenering en expliciete beslissingsverantwoordelijkheid.",
-}
-
-// ─── Intro overlay ───
-function IntroOverlay({
-  lang,
-  onReady,
-  operationName,
-  session,
-  participantId,
-  participantRole,
-}: {
-  lang: ReturnType<typeof useLang>[0]
-  onReady: () => void
-  operationName?: string
-  session: SessionState | null
-  participantId: string | null
-  participantRole?: Role
-}) {
-  const [marking, setMarking] = useState(false)
-
-  const goalId = session?.config.goalId as GoalId | undefined
-  const goal = goalId ? (() => { try { return getGoal(goalId) } catch { return null } })() : null
-  const frameworkDesc = FRAMEWORK_DESCRIPTIONS.bob
-
-  async function handleReady() {
-    if (participantId && !marking) {
-      setMarking(true)
-      try { await api.markReady(participantId) } catch { /* ignore */ }
-    }
-    onReady()
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-tt-bg px-4 py-8">
-      <div className="grid-bg pointer-events-none fixed inset-0 opacity-20" aria-hidden />
-      <div className="relative z-10 mx-auto w-full max-w-lg flex flex-col gap-6">
-
-        {/* Operation header */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="size-4 text-tt-accent" />
-            <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">CYBER_TABLETOP</span>
-          </div>
-          {operationName && (
-            <h1 className="font-mono text-3xl font-bold tracking-tight text-tt-accent leading-tight">
-              {operationName.toUpperCase()}
-            </h1>
-          )}
-          <p className="font-mono text-[10px] text-tt-dim">
-            {tr(lang, "welcomeSub")}
-          </p>
-        </div>
-
-        {/* Goal-specific participant briefing */}
-        {goal?.participantBriefing && (
-          <div
-            className="flex flex-col gap-3 border border-tt-border bg-tt-surface p-5"
-            style={{ borderLeft: "3px solid #e8ff40" }}
-          >
-            <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">
-              Waar deze oefening over gaat
-            </span>
-            {goal.participantBriefing.split("\n").filter(l => l.trim()).map((line, i) => (
-              <p key={i} className="font-mono text-xs text-tt-dim leading-relaxed">{line}</p>
-            ))}
-          </div>
-        )}
-
-        {/* Who you are this exercise. Deliberately not the scenario summary:
-            that text is identical to round 1's situation_update, so showing it
-            here would just repeat what they read a minute later. */}
-        {(() => {
-          const cfg = session?.config
-          const rows: Array<[string, string]> = []
-          if (cfg?.sector) rows.push(["Sector", cfg.sector])
-          if (cfg?.companySize) rows.push(["Omvang", `${cfg.companySize} medewerkers`])
-          if (cfg?.criticalSystems) rows.push(["Kritieke systemen", cfg.criticalSystems])
-          if (cfg?.crownJewels) rows.push(["Kroonjuwelen", cfg.crownJewels])
-          if (rows.length === 0) return null
-          return (
-            <div className="flex flex-col gap-3 border border-tt-border bg-tt-surface p-4">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">Dit is jullie organisatie</span>
-              {rows.map(([label, value]) => (
-                <div key={label} className="flex flex-col gap-0.5">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">{label}</span>
-                  <span className="font-mono text-xs text-tt-bright">{value}</span>
-                </div>
-              ))}
-            </div>
-          )
-        })()}
-
-        {/* Your role, or picking one. The picker used to sit behind this
-            overlay, so you declared yourself ready first and only then chose a
-            role — and markParticipantReady does not require one, so a whole
-            team could read "klaar" with nobody holding a seat. */}
-        {participantRole ? (
-          <div className="flex flex-col gap-2 border border-tt-border bg-tt-surface p-4">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">Jouw rol</span>
-            <span className="font-mono text-sm font-bold text-tt-bright">{ROLE_META[participantRole].label}</span>
-            <p className="font-mono text-[10px] text-tt-dim">{ROLE_META[participantRole].description}</p>
-          </div>
-        ) : session && participantId ? (
-          <RolePickerLobby
-            session={session}
-            participantId={participantId}
-            myRole={undefined}
-            lang={lang}
-          />
-        ) : null}
-
-        {/* Framework explanation */}
-        {frameworkDesc && (
-          <div className="flex flex-col gap-2 border border-tt-border bg-tt-surface p-4">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">Hoe beslissingen werken</span>
-            <p className="font-mono text-xs text-tt-dim leading-relaxed">{frameworkDesc}</p>
-          </div>
-        )}
-
-        {/* How the exercise runs. Always shown: the goal briefing above says
-            what you are practising, this says how the app works. They used to
-            be either/or, which meant whichever goal had a briefing replaced the
-            mechanics explanation entirely. */}
-        <div
-          className="flex flex-col gap-3 border border-tt-border bg-tt-surface p-5"
-          style={{ borderLeft: "3px solid #e8ff40" }}
-        >
-            <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">
-              {tr(lang, "howItWorks")}
-            </span>
-            {[
-              tr(lang, "intro1"),
-              tr(lang, "intro2"),
-              tr(lang, "intro3"),
-              tr(lang, "intro4"),
-              tr(lang, "intro5"),
-              tr(lang, "intro6"),
-            ].map((s, i) => (
-              <div key={i} className="flex gap-3">
-                <span className="font-mono text-[10px] text-tt-accent mt-0.5 shrink-0">{i + 1}.</span>
-                <p className="font-mono text-xs text-tt-dim leading-relaxed">{s}</p>
-              </div>
-            ))}
-          <div className="border border-tt-border bg-tt-bright/5 px-4 py-2.5 mt-1">
-            <p className="font-mono text-[10px] text-tt-dim">{tr(lang, "timerNote")}</p>
-          </div>
-        </div>
-
-        {!participantRole && (
-          <p className="font-mono text-[10px] text-tt-warn">
-            Kies eerst je rol hierboven — daarna kun je je klaarmelden.
-          </p>
-        )}
-
-        <button
-          onClick={handleReady}
-          disabled={marking || !participantRole}
-          className="flex items-center justify-center gap-2 bg-[#e8ff40] px-6 py-4 font-mono text-sm uppercase tracking-widest text-[#0d0f0f] hover:bg-[#e8ff40]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {tr(lang, "readyBtn")}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─── Round situation card ───
-const SEVERITY_COLORS = ["#e8ff40", "#ffb340", "#ff4d3d", "#ff4d3d"] as const
-const SEVERITY_LABELS = ["MEDIUM", "HOOG", "KRITIEK", "KRITIEK"] as const
-
-function RoundSituationCard({ session, totalRounds, lang }: { session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>; totalRounds: number; lang: ReturnType<typeof useLang>[0] }) {
-  const roundIdx = session.currentRound
-  const currentRound = roundIdx >= 0 ? session.scenario.rounds[roundIdx] : null
-  const [expanded, setExpanded] = useState(true)
-
-  if (!currentRound) return null
-
-  const severityIdx = Math.min(roundIdx, SEVERITY_COLORS.length - 1)
-  const severityColor = SEVERITY_COLORS[severityIdx]
-  const severityLabel = SEVERITY_LABELS[severityIdx]
-
-  return (
-    <div
-      className="border border-tt-border bg-tt-surface overflow-hidden"
-      style={{ borderLeft: `3px solid ${severityColor}` }}
-    >
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2.5 bg-black/25 border-b border-tt-border hover:bg-black/40 transition-colors"
-      >
-        <div className="flex items-center gap-3">
-          <span
-            className="font-mono text-[10px] font-bold tracking-widest shrink-0"
-            style={{ color: severityColor }}
-          >
-            {tr(lang, "round").toUpperCase()} {roundIdx + 1}{session.mode === 'event' ? '' : `/${totalRounds}`}
-          </span>
-          <span className="font-mono text-[10px] text-tt-dim truncate">{currentRound.title}</span>
-          <span
-            className="hidden sm:inline font-mono text-[9px] border px-1.5 py-0.5"
-            style={{ color: severityColor, borderColor: `${severityColor}40` }}
-          >
-            {severityLabel}
-          </span>
-        </div>
-        <ChevronDown
-          className="size-4 text-tt-dim shrink-0 transition-transform ml-2"
-          style={{ transform: expanded ? "rotate(180deg)" : undefined }}
-        />
-      </button>
-      {expanded && (
-        <div className="px-4 pb-4 flex flex-col gap-4 pt-4">
-          <p className="font-mono text-xs leading-relaxed text-tt-bright whitespace-pre-wrap">
-            {stripMarkdown(currentRound.situation_update)}
-          </p>
-
-          {/* Opening prompts — kickstart voor het overleg */}
-          {(currentRound as { openingPrompts?: string[] }).openingPrompts &&
-           ((currentRound as { openingPrompts?: string[] }).openingPrompts?.length ?? 0) > 0 && (
-            <div className="border border-tt-accent/30 bg-tt-accent/5 px-3 py-2">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-tt-accent mb-1.5">
-                Meteen te bespreken
-              </p>
-              <ul className="flex flex-col gap-1">
-                {(currentRound as { openingPrompts?: string[] }).openingPrompts!.map((p, i) => (
-                  <li key={i} className="flex gap-2">
-                    <span className="font-mono text-[10px] text-tt-accent shrink-0">•</span>
-                    <span className="font-mono text-[11px] text-tt-bright">{p}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {session.mode !== 'event' && currentRound.learningObjectives && currentRound.learningObjectives.length > 0 && (
-            <div className="flex flex-col gap-1.5 border-t border-tt-border pt-3">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">
-                Ronde doelen
-              </span>
-              {currentRound.learningObjectives.map(obj => (
-                <div key={obj.id} className="flex items-start gap-2">
-                  <span className={`font-mono text-[10px] shrink-0 mt-px ${obj.achieved ? "text-tt-green" : "text-[#2a3030]"}`}>
-                    {obj.achieved ? "✓" : "□"}
-                  </span>
-                  <span className={`font-mono text-[10px] leading-snug ${obj.achieved ? "text-tt-green" : "text-tt-dim"}`}>
-                    {obj.description}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Real-time role picker (lobby) ───────────────────────────
-
-// Crisis-management seats only — excludes the IT lead, kept in the same
-// canonical order as ROLE_ORDER so the lobby, builder and setup form all
-// agree on how roles are listed.
-const CRISIS_ROLES_ORDERED: readonly Role[] = ROLE_ORDER.filter(r => r !== "it_manager")
-
-function LobbyWaitingPanel({
-  session,
-  participantRole,
-  lang,
-  onRereadExplanation,
-}: {
-  session: SessionState
-  participantRole: Role | undefined
-  lang: ReturnType<typeof useLang>[0]
-  onRereadExplanation: () => void
-}) {
-  const total = session.participants.length
-  const ready = session.participants.filter(p => p.readyAt).length
-
-  return (
-    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6">
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-2">
-          <span className="relative flex size-2">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
-            <span className="relative inline-flex size-2 rounded-full bg-primary" />
-          </span>
-          <span className="font-mono text-xs uppercase tracking-wider text-primary">
-            {participantRole ? tr(lang, "lobbyCheckedIn") : tr(lang, "waitingToStart")}
-          </span>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {participantRole ? tr(lang, "lobbyWaitingBody") : tr(lang, "lobbyPickRoleFirst")}
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        {participantRole && (
-          <div className="flex flex-col">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-              {tr(lang, "lobbyYourRole")}
-            </span>
-            <span className="font-mono text-sm text-foreground">{ROLE_META[participantRole].label}</span>
-          </div>
-        )}
-        <div className="flex flex-col">
-          <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-            {tr(lang, "participants")}
-          </span>
-          <span className="font-mono text-sm text-foreground tabular-nums">
-            {tr(lang, "lobbyReadyCount", { ready: String(ready), total: String(total) })}
-          </span>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={onRereadExplanation}
-        className="self-start font-mono text-[10px] uppercase tracking-wider text-primary underline hover:no-underline"
-      >
-        {tr(lang, "rereadExplanation")}
-      </button>
-    </div>
-  )
-}
-
-function RolePickerLobby({
-  session,
-  participantId,
-  myRole,
-  lang,
-}: {
-  session: SessionState
-  participantId: string
-  myRole: Role | undefined
-  lang: ReturnType<typeof useLang>[0]
-}) {
-  const [claiming, setClaiming] = useState<Role | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const takenRoles = new Map<Role, Participant>()
-  for (const p of session.participants) {
-    if (p.role) takenRoles.set(p.role, p)
-  }
-
-  async function claimRole(role: Role) {
-    if (claiming) return
-    setClaiming(role)
-    setError(null)
-    try {
-      let joinCode: string | undefined
-      try { joinCode = localStorage.getItem("ctt:joinCode") ?? undefined } catch { /* noop */ }
-      await api.assignRole({ participantId, role, joinCode })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Rol claimen mislukt")
-    } finally {
-      setClaiming(null)
-    }
-  }
-
-  const allowedRoles: readonly Role[] = (session.config.selectedRoles?.length ?? 0) > 0
-    ? ROLE_ORDER.filter(r => session.config.selectedRoles!.includes(r))
-    : CRISIS_ROLES_ORDERED
-
-  return (
-    <div className="flex flex-col gap-6 rounded-xl border border-primary/20 bg-primary/5 p-6">
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-2">
-          <Users className="size-4 text-primary" />
-          <span className="font-mono text-xs uppercase tracking-wider text-primary">Kies uw rol</span>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Elke rol kan maar door één deelnemer worden geclaimd. De facilitator start de oefening zodra iedereen klaar is.
-        </p>
-      </div>
-
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
-      )}
-
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {allowedRoles.map(role => {
-          const meta = ROLE_META[role]
-          const takenBy = takenRoles.get(role)
-          const isMine = myRole === role
-          const isTaken = !!takenBy && !isMine
-          const isClaiming = claiming === role
-
-          return (
-            <button
-              key={role}
-              onClick={() => !isTaken && !isMine && claimRole(role)}
-              disabled={isTaken || isClaiming || !!claiming}
-              className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-left transition-all disabled:cursor-not-allowed ${
-                isMine
-                  ? "border-primary bg-primary/10"
-                  : isTaken
-                  ? "border-border bg-card/30 opacity-50"
-                  : "border-border bg-card hover:border-primary/40 hover:bg-primary/5"
-              }`}
-            >
-              {isClaiming ? (
-                <Loader2 className="size-4 shrink-0 animate-spin text-primary mt-0.5" />
-              ) : isMine ? (
-                <CheckCircle className="size-4 shrink-0 text-primary mt-0.5" />
-              ) : (
-                <div className={`size-4 shrink-0 mt-0.5 rounded-full border-2 ${isTaken ? "border-border" : "border-primary/40"}`} />
-              )}
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className={`font-mono text-sm font-medium ${isMine ? "text-primary" : isTaken ? "text-muted-foreground" : "text-foreground"}`}>
-                  {meta.label}
-                </span>
-                <span className="text-[11px] text-muted-foreground leading-tight">{meta.description}</span>
-                {isTaken && takenBy && (
-                  <span className="font-mono text-[10px] text-muted-foreground mt-0.5">
-                    Geclaimd door {takenBy.name}
-                  </span>
-                )}
-                {isMine && (
-                  <span className="font-mono text-[10px] text-primary mt-0.5">Uw rol</span>
-                )}
-              </div>
-            </button>
-          )
-        })}
-      </div>
-
-      {myRole && (
-        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-background px-4 py-3">
-          <CheckCircle className="size-4 text-primary shrink-0" />
-          <p className="text-sm text-muted-foreground">
-            U speelt als <span className="font-semibold text-foreground">{ROLE_META[myRole].label}</span>. Wacht tot de facilitator de oefening start.
-          </p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Role documents panel ───
-function RoleDocumentsPanel({ docs }: { docs: RoleDocument[] }) {
-  const [openId, setOpenId] = useState<string | null>(null)
-  if (docs.length === 0) return null
-  const typeLabel: Record<string, string> = {
-    policy: "Polis", checklist: "Checklist", template: "Sjabloon", plan: "Plan", reference: "Referentie",
-  }
-  return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="border-b border-border px-4 py-2.5 flex items-center gap-2">
-        <FileText className="size-3.5 text-primary" />
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Uw documenten</span>
-      </div>
-      <div className="flex flex-col divide-y divide-border">
-        {docs.map(doc => (
-          <div key={doc.id}>
-            <button
-              onClick={() => setOpenId(openId === doc.id ? null : doc.id)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors text-left"
-            >
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-sm font-medium text-foreground truncate">{doc.title}</span>
-                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{typeLabel[doc.type] ?? doc.type}</span>
-              </div>
-              <ChevronDown className={`size-4 text-muted-foreground shrink-0 ml-2 transition-transform ${openId === doc.id ? "rotate-180" : ""}`} />
-            </button>
-            {openId === doc.id && (
-              <div className="px-4 pb-4 border-t border-border bg-muted/20">
-                <pre className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed font-mono pt-3 overflow-x-auto">{doc.content}</pre>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Team role-switcher (EVENT mode only) ───
-// One device per team, the team picks which role they're answering AS before
-// submitting. Backend keys submissions on (participantId, roundIndex, role) so
-// every role of the team gets its own decision on this same device.
-function TeamRoleSwitcher({
-  session,
-  participantId,
-  activeRole,
-  onPick,
-}: {
-  session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>
-  participantId?: string
-  activeRole?: Role
-  onPick: (r: Role) => void
-}) {
-  const roles: Role[] = useMemo(() => {
-    // Graph options define the actual mandates in this round, including roles
-    // without a separately joined participant on the team device.
-    const decisionRoles = new Set<Role>()
-    for (const option of session.activeDecision?.options ?? []) {
-      if (option.allowedRole) decisionRoles.add(option.allowedRole)
-    }
-    for (const decision of session.submittedDecisions ?? []) {
-      if (decision.roundIndex === session.currentRound) decisionRoles.add(decision.role)
-    }
-    if (decisionRoles.size > 0) return ROLE_ORDER.filter(role => decisionRoles.has(role))
-    const configured = session.config.selectedRoles ?? []
-    if (configured.length) return configured
-    const claimed = new Set<Role>()
-    for (const p of session.participants) if (p.role) claimed.add(p.role)
-    return [...claimed]
-  }, [session.activeDecision?.options, session.submittedDecisions, session.currentRound, session.config.selectedRoles, session.participants])
-  const submitted = session.submittedDecisions ?? []
-  const round = session.currentRound
-  const groupId = session.participants.find(participant => participant.id === participantId)?.groupId
-
-  if (roles.length === 0) return null
-
-  return (
-    <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
-          Team console · Kies rol
-        </span>
-        {activeRole ? (
-          <span className="font-mono text-[10px] text-muted-foreground">
-            Nu actief: <span className="text-foreground">{ROLE_META[activeRole]?.label ?? activeRole}</span>
-          </span>
-        ) : (
-          <span className="font-mono text-[10px] text-destructive">Nog geen rol gekozen</span>
-        )}
-      </div>
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
-        {roles.map(r => {
-          const hasSubmission = submitted.some(d => d.roundIndex === round && d.role === r && (groupId ? d.groupId === groupId : d.participantId === participantId))
-          const isActive = activeRole === r
-          return (
-            <button
-              key={r}
-              type="button"
-              onClick={() => onPick(r)}
-              className={`rounded border px-2 py-2 font-mono text-[10px] uppercase tracking-wide text-left transition-colors ${
-                isActive
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : hasSubmission
-                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:border-primary/40"
-                  : "border-border bg-background hover:border-primary/40"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className="truncate">{ROLE_META[r]?.label ?? r}</span>
-                {hasSubmission && <span aria-label="submitted">✓</span>}
-              </div>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ─── Decision ticket — één UI voor graph-DecisionNodes ───
-// perRole=true → participants submitten zelf. Leest van activeDecision
-// (peek-ahead vanuit de round tijdens decision-fase). qualityRank + commentary
-// zijn alleen bevolkt in review-fase.
-//
-// Phase 4 — solo/understaffed play: if the projection carries a
-// pendingByParticipant entry, the ticket presents one option at a time in the
-// participant's role sequence. When the current role is an inherited (not
-// primary) role, a hand-off notice is shown so the participant knows they are
-// stepping into a different mandate.
-function DecisionTicket({
-  session,
-  participantId,
-  participantRole,
-}: {
-  session: NonNullable<ReturnType<typeof useSessionStream>["state"]["session"]>
-  participantId?: string
-  participantRole?: Role
-}) {
-  const [submitting, setSubmitting] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const ad = (session as unknown as { activeDecision?: {
-    nodeId: string
-    prompt: string
-    perRole: boolean
-    options: Array<{ optionId: string; optionLabel: string; allowedRole?: Role }>
-    pendingByParticipant?: Record<string, {
-      roleSequence: Role[]
-      currentIndex: number
-      total: number
-      completed: number
-    }>
-  } }).activeDecision
-  if (!ad || !ad.perRole) return null
-
-  const isEventMode = session.mode === "event"
-  const roundIndex = session.currentRound
-
-  // Solo/understaffed queue: which role is this participant acting for right now?
-  // Event mode still respects the team-switcher (participantRole prop); we only
-  // consult the pending queue in non-event flows.
-  const pending = participantId && !isEventMode
-    ? ad.pendingByParticipant?.[participantId]
-    : undefined
-  const primaryRole = pending?.roleSequence[0]
-  const queueCurrentRole = pending && pending.currentIndex < pending.roleSequence.length
-    ? pending.roleSequence[pending.currentIndex]
-    : undefined
-  const activeRole: Role | undefined = queueCurrentRole ?? participantRole
-  const canSubmit = !!participantId && !!activeRole
-
-  // Completion in queue mode is when we've walked past the last item.
-  const queueDone = !!pending && pending.completed >= pending.total
-
-  // In event mode fall back to the legacy per-round already-submitted lookup.
-  const groupId = session.participants.find(p => p.id === participantId)?.groupId
-  const already = isEventMode
-    ? (session.submittedDecisions ?? []).find(
-        d => (groupId ? d.groupId === groupId : d.participantId === participantId)
-          && d.roundIndex === roundIndex
-          && d.role === participantRole,
-      )
-    : undefined
-
-  // Pick the option to present. In queue mode: the option whose allowedRole
-  // matches the current role in the sequence. Otherwise fall back to the
-  // legacy filter (options the acting role is allowed to submit).
-  const visibleOptions = pending
-    ? ad.options.filter(o => o.allowedRole === queueCurrentRole)
-    : (activeRole
-      ? ad.options.filter(o => !o.allowedRole || o.allowedRole === activeRole)
-      : ad.options)
-
-  async function pick(optionId: string) {
-    if (!participantId || !canSubmit || !activeRole) return
-    setError(null)
-    setSubmitting(optionId)
-    try {
-      await api.submitDecision({
-        participantId,
-        participantName: session.participants.find(p => p.id === participantId)?.name ?? "",
-        roundIndex,
-        actionId: optionId,
-        reasoning: "",
-        // WHY: in queue mode the acting role can differ from the stored role,
-        // so we pass it through explicitly to dedupe on the right tuple.
-        activeRole: (pending || isEventMode) ? activeRole : undefined,
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Indienen mislukt")
-    } finally {
-      setSubmitting(null)
-    }
-  }
-
-  if (queueDone) {
-    return (
-      <div className="rounded-xl border-2 border-emerald-500/40 bg-emerald-500/5 px-4 py-3 flex items-center gap-2">
-        <CheckCircle className="size-4 text-emerald-600 dark:text-emerald-400" />
-        <span className="font-mono text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-          Alle beslissingen voor deze ronde ingediend
-        </span>
-      </div>
-    )
-  }
-
-  const isMulti = !!pending && pending.total > 1
-  const isHandoff = !!pending && !!queueCurrentRole && !!primaryRole && queueCurrentRole !== primaryRole
-  const headline = already
-    ? "Jouw keuze is ingediend"
-    : (isMulti ? `Beslissing ${pending!.completed + 1} van ${pending!.total}` : "Kies voor jouw rol")
-
-  return (
-    <div className="rounded-xl border-2 border-yellow-500/40 bg-yellow-500/5 px-4 py-3 flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-lg">🎯</span>
-        <span className="font-mono text-[11px] uppercase tracking-wider text-yellow-700 dark:text-yellow-400">
-          {headline}
-        </span>
-        {activeRole && (
-          <span className="font-mono text-[9px] rounded-full border border-yellow-500/40 px-1.5 py-0.5 text-yellow-700 dark:text-yellow-400">
-            {ROLE_META[activeRole]?.label ?? activeRole}
-          </span>
-        )}
-      </div>
-      <p className="text-sm font-medium">{ad.prompt}</p>
-      {isHandoff && queueCurrentRole && (
-        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="size-3.5 text-amber-700 dark:text-amber-400" />
-            <span className="font-mono text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-400">
-              Deze rol is in deze sessie niet bezet: {ROLE_META[queueCurrentRole]?.label ?? queueCurrentRole}
-            </span>
-          </div>
-          <p className="text-xs leading-relaxed text-amber-900 dark:text-amber-100">
-            Normaal beslist deze rol hierover. Omdat er nu niemand voor die rol is, neem jij deze
-            beslissing er ook bij. Zet even je hoed van {ROLE_META[queueCurrentRole]?.label ?? queueCurrentRole} op —
-            mandaat en perspectief zijn anders dan bij je hoofdrol.
-          </p>
-          <p className="text-xs italic text-amber-900/80 dark:text-amber-100/80">
-            Focus: {ROLE_META[queueCurrentRole]?.mandateSummary ?? ROLE_META[queueCurrentRole]?.description ?? ''}
-          </p>
-        </div>
-      )}
-      {already && (
-        <div className="rounded border border-tt-border bg-tt-bright/5 px-2 py-1.5 text-xs">
-          Ingediend: <span className="font-medium">{already.actionLabel}</span>
-        </div>
-      )}
-      <div className="flex flex-col gap-1">
-        {visibleOptions.map(opt => {
-          const isSubmitting = submitting === opt.optionId
-          const isThisChoice = already?.actionId === opt.optionId
-          return (
-            <button
-              key={opt.optionId}
-              type="button"
-              onClick={() => canSubmit && !already && pick(opt.optionId)}
-              disabled={!canSubmit || !!already || isSubmitting}
-              className={`flex items-center gap-2 rounded border px-2 py-1.5 text-xs text-left transition-colors ${
-                isThisChoice
-                  ? "border-tt-accent/60 bg-tt-accent/5"
-                  : canSubmit && !already
-                    ? "border-border bg-background hover:border-yellow-500/60 hover:bg-yellow-500/5 cursor-pointer"
-                    : "border-border bg-background/40 cursor-default"
-              }`}
-            >
-              <span className={isThisChoice ? "text-tt-accent" : "text-yellow-600 dark:text-yellow-400"}>
-                {isThisChoice ? "•" : "→"}
-              </span>
-              <span className="flex-1">{opt.optionLabel}</span>
-              {opt.allowedRole && (
-                <span className="font-mono text-[9px] rounded-full border border-border px-1.5 py-0.5 text-muted-foreground">
-                  {ROLE_META[opt.allowedRole]?.label ?? opt.allowedRole}
-                </span>
-              )}
-              {isSubmitting && <span className="font-mono text-[9px] text-muted-foreground">…</span>}
-            </button>
-          )
-        })}
-      </div>
-      {error && <p className="text-[10px] text-destructive">{error}</p>}
-    </div>
-  )
-}
-
-// ─── Pacing prompt banner (40% + 80% van round timer) ───
-function PacingBanner({ roundStartedAt, timerMinutes }: { roundStartedAt?: number; timerMinutes?: number }) {
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 3000)
-    return () => clearInterval(id)
-  }, [])
-  if (!roundStartedAt || !timerMinutes) return null
-  const totalSec = timerMinutes * 60
-  const elapsedSec = Math.floor((now - roundStartedAt) / 1000)
-  const frac = elapsedSec / totalSec
-
-  // Show banner in specific windows
-  let prompt: { emoji: string; text: string; tone: "info" | "warn" | "critical" } | null = null
-  if (frac >= 0.4 && frac < 0.45) {
-    prompt = { emoji: "💭", text: "Wat is jullie eerste inschatting? Feit vs aanname?", tone: "info" }
-  } else if (frac >= 0.8 && frac < 0.85) {
-    prompt = { emoji: "⚡", text: "Rond het overleg af — beslis binnen 2 minuten.", tone: "warn" }
-  } else if (frac >= 0.95) {
-    prompt = { emoji: "🚨", text: "BESLIS NU — tijd is bijna om.", tone: "critical" }
-  }
-  if (!prompt) return null
-
-  const cls =
-    prompt.tone === "critical" ? "border-destructive/50 bg-destructive/10 text-destructive animate-pulse"
-    : prompt.tone === "warn" ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
-    : "border-primary/40 bg-primary/5 text-primary"
-  return (
-    <div className={`border rounded-md px-4 py-2 flex items-center gap-3 ${cls}`}>
-      <span className="text-lg">{prompt.emoji}</span>
-      <span className="font-mono text-xs uppercase tracking-wider">{prompt.text}</span>
-    </div>
-  )
-}
-
-// ─── Escalation overlay ───
-function EscalationOverlay({ roundIndex }: { roundIndex: number }) {
-  if (roundIndex < 2) return null
-  const isCritical = roundIndex >= 3
-  return (
-    <div className={`pointer-events-none fixed inset-x-0 top-0 z-20 h-1.5 ${
-      isCritical
-        ? "bg-destructive animate-pulse"
-        : "bg-orange-500/70"
-    }`} />
-  )
-}
-
-// ─── Main view ───
 export function PlayView() {
-  const [lang, setLang] = useLang()
+  const [lang] = useLang()
   const { state, connected, expired, onEvent } = useSessionStream()
 
-  // Bounce back to /join if the session went away or auth expired.
+  // Terug naar /join als de sessie verdwijnt of de deelname verloopt.
   useEffect(() => {
     if (!expired) return
-    try {
-      localStorage.removeItem("ctt:participantId")
-    } catch { /* noop */ }
+    try { localStorage.removeItem(ID_KEY) } catch { /* noop */ }
     window.location.replace("/join")
   }, [expired])
 
   const [name, setName] = useState<string | null>(null)
   const [participantId, setParticipantId] = useState<string | null>(null)
-  // Dismissal is remembered per session: someone joining after the start still
-  // gets the explanation once, while a mid-round refresh does not throw the
-  // full-screen overlay back over a live round.
-  const [showIntro, setShowIntro] = useState(true)
-  const introKey = state.session?.id ? `ctt:intro-seen:${state.session.id}` : null
-  useEffect(() => {
-    if (!introKey) return
-    try { if (localStorage.getItem(introKey)) setShowIntro(false) } catch { /* noop */ }
-  }, [introKey])
-  const dismissIntro = useCallback(() => {
-    setShowIntro(false)
-    if (introKey) { try { localStorage.setItem(introKey, "1") } catch { /* noop */ } }
-  }, [introKey])
-  const [urgent, setUrgent] = useState<Inject | null>(null)
-  const [banner, setBanner] = useState<{ id: number; text: string; type?: string } | null>(null)
-  const [feedbackFor, setFeedbackFor] = useState<{ round: number; isFinal: boolean } | null>(null)
-  const [specialDismissed, setSpecialDismissed] = useState<Set<string>>(new Set())
-  const [timerPaused, setTimerPaused] = useState(false)
-  const [soundMutedState, setSoundMutedState] = useState(() => {
-    if (typeof window === 'undefined') return false
-    try { return localStorage.getItem("ctt:sound_muted") === "true" } catch { return false }
-  })
-  const [doneFeedbackRounds, setDoneFeedbackRounds] = useState<Set<number>>(() => {
-    if (typeof window === 'undefined') return new Set<number>()
-    try {
-      const stored = localStorage.getItem(FEEDBACK_KEY)
-      return stored ? new Set<number>(JSON.parse(stored)) : new Set<number>()
-    } catch { return new Set<number>() }
-  })
-  const prevRoundRef = useRef<number>(-1)
-  const sessionIdRef = useRef<string | null>(null)
-  // Cached role from sessionStorage — only read client-side to avoid hydration mismatch
-  const [storedRole, setStoredRole] = useState<Role | undefined>(undefined)
-  // Event-mode team-console: the role the team is currently answering AS. Persisted
-  // in sessionStorage so a page reload preserves the pick.
-  const [activeRole, setActiveRoleState] = useState<Role | undefined>(undefined)
-
+  const [rolePreference, setRolePreference] = useState<Role | null>(null)
   useEffect(() => {
     try {
       setName(window.localStorage.getItem(NAME_KEY))
       setParticipantId(window.localStorage.getItem(ID_KEY))
-      const r = window.sessionStorage.getItem(ROLE_KEY)
-      if (r) setStoredRole(r as Role)
-      const ar = window.sessionStorage.getItem(ACTIVE_ROLE_KEY)
-      if (ar) setActiveRoleState(ar as Role)
-    } catch {}
+      setRolePreference(window.sessionStorage.getItem(ROLE_PREFERENCE_KEY) as Role | null)
+    } catch { /* noop */ }
   }, [])
 
   const session = state.session
 
-  // Derive participant role from session (authoritative) or sessionStorage fallback.
-  // Never reads window directly — avoids hydration mismatch and null-session crashes.
-  const participantRole: Role | undefined = useMemo(() => {
-    if (session && participantId) {
-      const p = session.participants.find(p => p.id === participantId)
-      if (p?.role) return p.role
-    }
-    return storedRole
-  }, [session, participantId, storedRole])
+  // ── Onboarding ───────────────────────────────────────────────────────
+  // Eén keer per sessie, ook voor wie later binnenkomt.
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const onboardingKey = session?.id ? `ctt:onboarding:${session.id}` : null
+  useEffect(() => {
+    if (!onboardingKey) return
+    try { setShowOnboarding(!localStorage.getItem(onboardingKey)) } catch { setShowOnboarding(true) }
+  }, [onboardingKey])
+  const dismissOnboarding = useCallback(() => {
+    setShowOnboarding(false)
+    if (onboardingKey) { try { localStorage.setItem(onboardingKey, "1") } catch { /* noop */ } }
+  }, [onboardingKey])
 
-  // In event mode the "acting role" is whichever role the team picked on the switcher;
-  // in other modes it's just the participant's assigned role.
-  const isEventMode = session?.mode === "event"
-  const effectiveRole: Role | undefined = isEventMode ? activeRole : participantRole
+  // ── Rol en mandaat, uit de serverstate ───────────────────────────────
+  const roles = useMemo(
+    () => activeRoleView(session, participantId, rolePreference),
+    [session, participantId, rolePreference],
+  )
+  const mandate = useMemo(
+    () => (session ? mandateView(session, participantId) : null),
+    [session, participantId],
+  )
 
-  function setActiveRole(r: Role) {
-    setActiveRoleState(r)
-    try { window.sessionStorage.setItem(ACTIVE_ROLE_KEY, r) } catch { /* noop */ }
+  // ── Stap ─────────────────────────────────────────────────────────────
+  // Event-modus kent het teamdevice: niemand claimt een rol en dat ene tablet
+  // speelt namens álle rollen. Zo'n device heeft wél recht om door te spelen en
+  // mag dus niet op stap 1 blijven hangen. Zelfde regel als `roleCoverageInUse`
+  // op de server: zodra iemand wél een rol claimt geldt de echte dekking.
+  const hasStanding = roles.hasRole
+    || (session?.mode === "event" && !!participantId && !roleCoverageInUse(session))
+
+  const flow: FlowInput = {
+    status: session?.status ?? "lobby",
+    roundPhase: session?.roundPhase,
+    currentRound: session?.currentRound ?? -1,
+    hasRole: hasStanding,
+  }
+  const highest = highestOpenStep(flow)
+  const landing = landingStep(flow)
+  const key = phaseKey(flow)
+
+  // Terugbladeren mag; zodra de facilitator de fase verzet springt het scherm
+  // naar de nieuwe landingsstap in plaats van op een oude stap te blijven staan.
+  const [desired, setDesired] = useState<StepId | null>(null)
+  useEffect(() => { setDesired(null) }, [key])
+  const step = clampStep(desired ?? landing, highest)
+
+  // ── Live meldingen ───────────────────────────────────────────────────
+  const [urgent, setUrgent] = useState<Inject | null>(null)
+  const [banner, setBanner] = useState<{ id: number; text: string; type?: string } | null>(null)
+  const [specialDismissed, setSpecialDismissed] = useState<Set<string>>(new Set())
+  const [timerPaused, setTimerPaused] = useState(false)
+  const [soundMutedState, setSoundMutedState] = useState(() => {
+    if (typeof window === "undefined") return false
+    try { return localStorage.getItem("ctt:sound_muted") === "true" } catch { return false }
+  })
+  // De eventlistener wordt één keer opgezet, dus de mute-stand komt uit
+  // localStorage in plaats van uit een closure die bij de eerste render hoort.
+  const isMuted = () => {
+    try { return localStorage.getItem("ctt:sound_muted") === "true" } catch { return false }
   }
 
-  // Session lead: chairs the meeting, advances BOB/OODA phases
-  const sessionLeadRole = useMemo(
-    () => session ? getSessionLeadRole(session.participants) : null,
-    [session?.participants]
-  )
-  const isSessionLead = !!participantRole && participantRole === sessionLeadRole
-
-  // Detect round transitions → trigger feedback
-  useEffect(() => {
-    if (!session) return
-    // Reset prevRound tracking when a new session replaces the old one
-    if (session.id !== sessionIdRef.current) {
-      sessionIdRef.current = session.id
-      prevRoundRef.current = -1
-      setDoneFeedbackRounds(new Set<number>())
-      try { localStorage.removeItem(FEEDBACK_KEY) } catch {}
-    }
-    const idx = session.currentRound
-    // Key stored as prevRoundRef.current + 1 (1-indexed) in handleFeedbackDone
-    if (idx !== prevRoundRef.current && prevRoundRef.current >= 0 && !doneFeedbackRounds.has(prevRoundRef.current + 1)) {
-      setFeedbackFor({ round: prevRoundRef.current + 1, isFinal: false })
-    }
-    if (session.status === "ended" && !doneFeedbackRounds.has(-1)) {
-      setFeedbackFor({ round: session.scenario.rounds.length, isFinal: true })
-    }
-    prevRoundRef.current = idx
-  }, [session?.currentRound, session?.status, session?.id])
-
-  // Derived: find the special assigned to this participant (not dismissed)
   const activeSpecial = useMemo(() => {
     if (!participantId || !session) return null
     return (session.specialEvents ?? []).find(
-      sp => sp.assignedParticipantId === participantId && !specialDismissed.has(sp.id)
+      sp => sp.assignedParticipantId === participantId && !specialDismissed.has(sp.id),
     ) ?? null
   }, [session, participantId, specialDismissed])
 
-  const soundMuted = () => { try { return localStorage.getItem("ctt:sound_muted") === "true" } catch { return false } }
-
   useEffect(() => {
     return onEvent((e: LiveEvent) => {
+      const ping = (kind: "inject" | "urgent" | "round") => {
+        if (!isMuted()) playNotificationSound(kind)
+      }
       if (e.name === "special_triggered") {
-        if (!soundMuted()) playNotificationSound('inject')
-        setBanner({ id: Date.now(), text: "Er is een speciaal event getriggerd!", type: "special" })
+        ping("inject")
+        setBanner({ id: Date.now(), text: "Er is een speciaal event getriggerd", type: "special" })
       } else if (e.name === "push_inject" || e.name === "surprise_inject") {
         const inj = (e.payload as { inject?: Inject }).inject
         if (inj && (inj.urgency === "critical" || e.name === "surprise_inject")) {
-          if (!soundMuted()) playNotificationSound('urgent')
+          ping("urgent")
           setUrgent(inj)
         } else if (inj) {
-          if (!soundMuted()) playNotificationSound('inject')
-          setBanner({ id: Date.now(), text: `Nieuw inject: ${inj.title}`, type: "inject" })
+          ping("inject")
+          setBanner({ id: Date.now(), text: `Nieuw bericht: ${inj.title}`, type: "inject" })
         }
       } else if (e.name === "next_round") {
         const idx = (e.payload as { roundIndex?: number }).roundIndex
-        if (!soundMuted()) playNotificationSound('round')
-        if (typeof idx === "number") setBanner({ id: Date.now(), text: tr(lang, "round") + ` ${idx + 1} — ${session?.scenario.rounds[idx]?.title ?? ""}`, type: "round" })
+        ping("round")
+        if (typeof idx === "number") {
+          setBanner({ id: Date.now(), text: `Ronde ${idx + 1} is geopend`, type: "round" })
+        }
       } else if (e.name === "start_session") {
-        if (!soundMuted()) playNotificationSound('round')
+        ping("round")
         setBanner({ id: Date.now(), text: "Oefening gestart", type: "start" })
       } else if (e.name === "session_ended") {
         setBanner({ id: Date.now(), text: "Oefening afgerond", type: "end" })
       }
     })
-  }, [onEvent, lang, session])
+  }, [onEvent])
 
   useEffect(() => {
     if (!banner) return
@@ -1036,34 +199,29 @@ export function PlayView() {
     return () => clearTimeout(t)
   }, [banner])
 
-  const currentRound = useMemo(() => {
-    if (!session || session.currentRound < 0) return null
-    return session.scenario.rounds[session.currentRound] ?? null
-  }, [session])
-
-  function handleFeedbackDone(fb: { worked: string; didnt: string; gap: string }) {
-    if (!feedbackFor) return
-    const key = feedbackFor.isFinal ? -1 : feedbackFor.round
-    // The closing reflection belongs to the round the session ended on; the
-    // inter-round one to the round that just finished (feedbackFor.round is 1-based).
-    const roundIndex = feedbackFor.isFinal
-      ? Math.max(0, session?.currentRound ?? 0)
-      : feedbackFor.round - 1
-    if (participantId && (fb.worked.trim() || fb.didnt.trim() || fb.gap.trim())) {
-      api.submitFeedback({ participantId, roundIndex, ...fb }).catch(() => { /* niet blokkerend */ })
-    }
-    const next = new Set(doneFeedbackRounds).add(key)
-    setDoneFeedbackRounds(next)
-    try { localStorage.setItem(FEEDBACK_KEY, JSON.stringify([...next])) } catch {}
-    setFeedbackFor(null)
-  }
-
   const [slowLoad, setSlowLoad] = useState(false)
   useEffect(() => {
     if (session) return
     const t = setTimeout(() => setSlowLoad(true), 4000)
     return () => clearTimeout(t)
   }, [session])
+
+  const [readyBusy, setReadyBusy] = useState(false)
+  async function markReady() {
+    if (!participantId || readyBusy) return
+    setReadyBusy(true)
+    try { await api.markReady(participantId) } catch { /* de lobby leest de serverstate */ }
+    setReadyBusy(false)
+  }
+
+  const currentRound = session && session.currentRound >= 0
+    ? session.scenario.rounds[session.currentRound] ?? null
+    : null
+  const deadline = useDeadlineLabel(
+    session?.roundStartedAt,
+    currentRound?.timerMinutes ?? 10,
+    session?.status ?? "lobby",
+  )
 
   if (!session) {
     return (
@@ -1077,8 +235,8 @@ export function PlayView() {
             {slowLoad
               ? "Duurt langer dan verwacht. Controleer je verbinding."
               : connected
-              ? "Wacht op de facilitator om de oefening te starten."
-              : "Verbinding met server…"}
+                ? "Wacht tot de facilitator de oefening start."
+                : "Verbinding met server…"}
           </p>
           {slowLoad && (
             <button
@@ -1097,42 +255,139 @@ export function PlayView() {
   }
 
   const status = session.status
-  // scenario.rounds grows one round at a time, so it is never the total. A
-  // facilitator opening /play gets the unstripped state and can count the graph.
+  // scenario.rounds groeit per ronde en is dus nooit het totaal.
   const totalRounds = session.totalRounds
     ?? (session.graph ? analyzeGraph(session.graph).roundCount : session.scenario.rounds.length)
+  const me = participantId ? session.participants.find(p => p.id === participantId) : undefined
+  const needsTeam = session.mode === "event" && me && !me.groupId
 
-  // Deel B §4 — team-picker verschijnt in EVENT-mode zolang deelnemer geen groupId heeft.
-  const currentParticipant = participantId ? session.participants.find(p => p.id === participantId) : undefined
-  const needsTeam = session.mode === "event" && currentParticipant && !currentParticipant.groupId
+  // Eén primaire actie per stap. Bij het wachten op de facilitator is er geen.
+  let primary: StepPrimary | undefined
+  let note: string | undefined
+
+  if (step === "welkom" && status === "lobby") {
+    if (!hasStanding) {
+      note = "Kies hierboven een rol. Daarna kun je je klaarmelden."
+    } else if (me?.readyAt) {
+      note = "Je bent klaargemeld. De facilitator start de oefening."
+    } else {
+      primary = { label: "Ik ben klaar", onClick: markReady, busy: readyBusy }
+    }
+  } else if (step === highest) {
+    note = status === "ended"
+      ? "Dit is het einde van de oefening."
+      : "De facilitator zet de volgende stap open."
+  }
+
+  const content = (() => {
+    switch (step) {
+      case "welkom":
+        return (
+          <StepWelcome
+            session={session}
+            participantId={participantId}
+            view={roles}
+            mandatedRoles={mandate?.mandate.mandatedRoles ?? []}
+            canPickRole={session.mode !== "event"}
+            onPreferRole={role => {
+              setRolePreference(role)
+              try { window.sessionStorage.setItem(ROLE_PREFERENCE_KEY, role) } catch { /* noop */ }
+            }}
+          />
+        )
+
+      case "ronde":
+        return (
+          <StepRound
+            round={currentRound}
+            roundNumber={session.currentRound + 1}
+            totalRounds={session.mode === "event" ? 0 : totalRounds}
+            mandate={mandate}
+            deadline={deadline}
+          />
+        )
+
+      case "injects":
+        return (
+          <>
+            <InjectFeed
+              pushed={session.pushedInjects}
+              lang={lang}
+              participantRole={roles.active}
+              extraRoles={roles.all}
+              participants={session.participants}
+              session={session}
+              participantId={participantId ?? undefined}
+            />
+            {participantId && <RegulatoryNotificationButton session={session} participantId={participantId} />}
+          </>
+        )
+
+      case "overleg":
+        return (
+          <>
+            <StepDiscussion round={currentRound} mandate={mandate} deadline={deadline} />
+            {participantId && <RegulatoryNotificationButton session={session} participantId={participantId} />}
+          </>
+        )
+
+      case "keuze":
+        return (
+          <DecisionBoundary>
+            {session.graph ? (
+              <StepChoice
+                session={session}
+                participantId={participantId}
+                participantName={name ?? ""}
+                view={mandate}
+                deadline={deadline}
+              />
+            ) : currentRound?.roleActions && participantId ? (
+              // Sessies zonder scenariograph hebben geen `activeDecision`; daar
+              // zijn de rolacties van de ronde het beslismoment.
+              <DecisionPanel
+                key={`decision-${session.currentRound}-${roles.active ?? "none"}`}
+                roundIndex={session.currentRound}
+                roundActions={currentRound.roleActions}
+                participantId={participantId}
+                participantName={name ?? ""}
+                participantRole={roles.active}
+                isEventMode={session.mode === "event"}
+                existingDecision={(session.submittedDecisions ?? []).find(
+                  d => d.participantId === participantId && d.roundIndex === session.currentRound,
+                ) as SubmittedDecision | undefined}
+                lang={lang}
+              />
+            ) : (
+              <p className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+                Voor deze ronde staat geen keuze open.
+              </p>
+            )}
+          </DecisionBoundary>
+        )
+
+      case "review":
+        return <StepReview session={session} participantId={participantId} view={mandate} />
+
+      case "afronding":
+        return (
+          <SessionClosing
+            session={session}
+            closing={session.participantClosing}
+            participantId={participantId}
+          />
+        )
+    }
+  })()
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Team-picker in EVENT-mode zonder groep */}
       {needsTeam && participantId && (
-        <TeamPicker
-          session={session}
-          participantId={participantId}
-          onJoined={() => { /* stream update refetcht session, groupId verschijnt vanzelf */ }}
-        />
+        <TeamPicker session={session} participantId={participantId} onJoined={() => { /* de stream levert groupId */ }} />
       )}
-      {/* Achievement-toasts — verschijnen bij triggers */}
       {participantId && <AchievementsToaster session={session} participantId={participantId} />}
-
-      {/* Intro overlay */}
-      {showIntro && session.status !== "ended" && (
-        <IntroOverlay
-          lang={lang}
-          onReady={dismissIntro}
-          operationName={session.scenario.scenario_title}
-          session={session}
-          participantId={participantId}
-          participantRole={participantRole}
-        />
-      )}
-
-      {/* Special event modal */}
-      {!isEventMode && activeSpecial && participantId && (
+      {showOnboarding && status !== "ended" && <Onboarding onDone={dismissOnboarding} />}
+      {session.mode !== "event" && activeSpecial && participantId && (
         <SpecialModal
           special={activeSpecial}
           participantId={participantId}
@@ -1140,300 +395,46 @@ export function PlayView() {
         />
       )}
 
-      {/* Feedback screen */}
-      {feedbackFor && (
-        <FeedbackScreen
-          roundNumber={feedbackFor.round}
-          totalRounds={totalRounds}
-          isFinal={feedbackFor.isFinal}
-          lang={lang}
-          onContinue={handleFeedbackDone}
-        />
-      )}
+      <SessionHUD session={session} connected={connected} name={name} participantRole={roles.active} lang={lang} />
 
-      {/* Escalation overlay */}
-      {!isEventMode && session.status === "active" && session.currentRound >= 0 && (
-        <EscalationOverlay roundIndex={session.currentRound} />
-      )}
-
-      {/* HUD header */}
-      <SessionHUD session={session} connected={connected} name={name} participantRole={participantRole} lang={lang} setLang={setLang} />
-
-      {/* Whole-round phase timeline (four top-level phases) */}
-      {currentRound && status !== "ended" && session.activeRoundPhaseState && (
-        <div className="mx-auto max-w-6xl px-4 pt-3 md:px-8">
-          <RoundPhaseTimeline state={session.activeRoundPhaseState} />
-        </div>
-      )}
-
-      {/* Round timer + inline banner zone */}
       {currentRound && status !== "ended" && (
-        <div className="sticky top-[var(--ctt-hud-h,57px)] z-30 bg-background/95 backdrop-blur border-b border-border">
-          <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-2 md:px-8">
+        <div className="sticky top-[var(--ctt-hud-h,57px)] z-30 border-b border-border bg-background/95 backdrop-blur">
+          <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-2">
             <RoundTimerCompact
               roundStartedAt={session.roundStartedAt}
               timerMinutes={currentRound.timerMinutes ?? 10}
               status={status}
               lang={lang}
-              paused={!isEventMode && session.roundPhase === "discussion" ? timerPaused : undefined}
-              onTogglePause={!isEventMode && session.roundPhase === "discussion" ? () => setTimerPaused(p => !p) : undefined}
+              paused={session.roundPhase === "discussion" ? timerPaused : undefined}
+              onTogglePause={session.roundPhase === "discussion" ? () => setTimerPaused(p => !p) : undefined}
             />
             {banner && (
-              <div className={`flex items-center gap-2 rounded-md px-3 py-1.5 border font-mono text-xs animate-fade-in ${
-                banner.type === "round" ? "border-primary/30 bg-primary/10 text-primary" : "border-destructive/30 bg-destructive/10 text-destructive"
-              }`}>
-                <span className="size-1.5 rounded-full bg-current animate-pulse" />
+              <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 font-mono text-xs text-primary">
+                <span className="size-1.5 animate-pulse rounded-full bg-current" />
                 {banner.text}
               </div>
             )}
-            <div className="ml-auto flex items-center gap-3">
             <button
               onClick={() => {
                 const next = !soundMutedState
                 setSoundMutedState(next)
-                try { localStorage.setItem("ctt:sound_muted", next ? "true" : "false") } catch {}
+                try { localStorage.setItem("ctt:sound_muted", next ? "true" : "false") } catch { /* noop */ }
               }}
               title={soundMutedState ? "Geluid inschakelen" : "Geluid uitschakelen"}
               aria-label={soundMutedState ? "Geluid inschakelen" : "Geluid uitschakelen"}
               aria-pressed={soundMutedState}
-              className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground hover:text-foreground border border-border px-2 py-1 shrink-0"
+              className="ml-auto shrink-0 border border-border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
             >
               {soundMutedState ? "🔇" : "🔔"}
             </button>
-            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              {status === "lobby" ? tr(lang, "waitingToStart") :
-               isEventMode ? `Ronde ${session.currentRound + 1}` : tr(lang, "roundOf", { n: String(session.currentRound + 1), total: String(totalRounds) })}
-            </div>
-            </div>
           </div>
         </div>
       )}
 
       <main className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
-        {status === "ended" ? (
-          <SessionClosing session={session} closing={session.participantClosing} />
-        ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Feed — main column; flex allows order-first on DecisionPanel for mobile */}
-          <div className="flex flex-col gap-5 lg:col-span-2">
-            {/* Lobby status — what a participant sees while waiting for the start.
-                Also the only way back into the explanation: the intro overlay is
-                one-shot, so anyone joining late never saw it. */}
-            {participantId && status === "lobby" && (
-              <LobbyWaitingPanel
-                session={session}
-                participantRole={participantRole}
-                lang={lang}
-                onRereadExplanation={() => setShowIntro(true)}
-              />
-            )}
-
-            {/* Role picker — alleen in ASSESSMENT mode. In EVENT: iPad = team, geen individuele rol nodig. */}
-            {participantId && session.mode !== "event" && (status === "lobby" || !participantRole) && (
-              <RolePickerLobby
-                session={session}
-                participantId={participantId}
-                myRole={participantRole}
-                lang={lang}
-              />
-            )}
-
-            {/* Team role-switcher — in EVENT mode this one device answers for every role.
-                The team picks which role they're acting as before each decision. */}
-            {/* Pacing banner — appears at 40%/80%/95% of round timer */}
-            {!isEventMode && currentRound && status === "active" && (
-              <PacingBanner
-                roundStartedAt={session.roundStartedAt}
-                timerMinutes={currentRound.timerMinutes ?? 10}
-              />
-            )}
-
-            {/* Opening briefing — per-role mandate + playbook gaps. Shown once at
-                session start; retrievable mid-session from the collapse panel. */}
-            {!isEventMode && status === "active" && (
-              <OpeningBriefing session={session} participantId={participantId ?? undefined} />
-            )}
-
-            {/* Soft-decision ticket — shown when graph is on a Decision node */}
-            {!isEventMode && status === "active" && session.roundPhase === "decision" && <DecisionTicket session={session} participantId={participantId ?? undefined} participantRole={effectiveRole} />}
-
-            {/* Round situation */}
-            {currentRound ? (
-              <RoundSituationCard session={session} totalRounds={totalRounds} lang={lang} />
-            ) : status === "lobby" ? (
-              !participantId && (
-                <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card/50 py-12 text-center">
-                  <div className="flex gap-1.5">
-                    {[0,1,2].map(i => <span key={i} className="size-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: `${i*0.3}s` }} />)}
-                  </div>
-                  <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "waitingToStart")}</p>
-                </div>
-              )
-            ) : (
-              <div className="flex flex-col items-center gap-4 rounded-xl border border-border bg-card/50 py-12 text-center">
-                <div className="flex gap-1.5">
-                  {[0,1,2].map(i => <span key={i} className="size-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: `${i*0.3}s` }} />)}
-                </div>
-                <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                  Wachten op eerste ronde…
-                </p>
-              </div>
-            )}
-
-            {isEventMode && status === 'active' && (
-              <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} session={session} participantId={participantId ?? undefined} />
-            )}
-            {isEventMode && status === 'active' && session.roundPhase === 'decision' && (
-              <>
-                <TeamRoleSwitcher session={session} participantId={participantId ?? undefined} activeRole={activeRole} onPick={setActiveRole} />
-                <DecisionTicket session={session} participantId={participantId ?? undefined} participantRole={effectiveRole} />
-              </>
-            )}
-
-            {/* DECISION PHASE — pinned to top on mobile, natural order on desktop */}
-            {/* Legacy roleActions panel — only for sessions without a scenario
-                graph. A graph session gets DecisionTicket above, and rendering
-                both showed two different questions in the same phase: because
-                submitDecision dedupes on (participantId, roundIndex, role),
-                answering this one replaced the graph answer and threw away its
-                outcomeVector, resetting the decision queue. */}
-            {session.roundPhase === "decision" && currentRound?.roleActions && participantId && !session.graph && (() => {
-              const roundDecisions = (session.submittedDecisions ?? []).filter(d => d.roundIndex === session.currentRound)
-              return (
-                <div className="order-first lg:order-none flex flex-col gap-2">
-                  <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest text-tt-dim">
-                    <span className="size-1.5 rounded-full bg-tt-accent animate-pulse" />
-                    {roundDecisions.length} {roundDecisions.length === 1 ? "keuze" : "keuzes"} ingediend
-                  </div>
-                  <DecisionBoundary>
-                    <DecisionPanel
-                      key={`decision-${session.currentRound}-${effectiveRole ?? "none"}`}
-                      roundIndex={session.currentRound}
-                      roundActions={currentRound.roleActions}
-                      participantId={participantId}
-                      participantName={name ?? ""}
-                      participantRole={effectiveRole}
-                      isEventMode={isEventMode}
-                      existingDecision={(session.submittedDecisions ?? []).find(
-                        d => d.participantId === participantId
-                          && d.roundIndex === session.currentRound
-                          && (!isEventMode || d.role === effectiveRole)
-                      ) as SubmittedDecision | undefined}
-                      lang={lang}
-                    />
-                  </DecisionBoundary>
-                </div>
-              )
-            })()}
-
-            {/* BOB/OODA discussion prompts + prep uitgezet voor cleane story-modus */}
-
-            {/* Fact-check review — shown when the current round reaches the review phase */}
-            {!isEventMode && session.roundPhase === "review" && participantId && (
-              <FactCheckReview session={session} participantId={participantId} roundIndex={session.currentRound} />
-            )}
-            {/* IR-retainer commentary op ingediende keuzes tijdens review */}
-            {!isEventMode && session.roundPhase === "review" && participantId && (
-              <ReviewCommentary session={session} participantId={participantId} roundIndex={session.currentRound} />
-            )}
-            {/* Confidence-tally — persoonlijk overzicht van eigen zekerheid per ronde */}
-            {!isEventMode && (session.roundPhase === "review") && participantId && (
-              <ConfidenceTally session={session} participantId={participantId} />
-            )}
-
-            {/* Regulatory notification — appears when a data-driven regime obligation opens. */}
-            {!isEventMode && participantId && <RegulatoryNotificationButton session={session} participantId={participantId} />}
-
-
-            {/* Inject feed — always shown for context */}
-            {!isEventMode && <InjectFeed pushed={session.pushedInjects} lang={lang} participantRole={participantRole} participants={session.participants} session={session} participantId={participantId ?? undefined} />}
-          </div>
-
-          {/* Sidebar */}
-          <aside className="flex flex-col gap-4">
-            {/* Players */}
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="border-b border-border px-4 py-2.5">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "players")}</span>
-              </div>
-              <ul aria-label="Deelnemers in deze oefening" className="flex flex-col divide-y divide-border max-h-48 overflow-y-auto">
-                {session.participants.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between px-4 py-2.5">
-                    <div className="flex items-center gap-2.5">
-                      <div aria-hidden="true" className="size-6 rounded-full border border-border bg-background font-mono text-[9px] uppercase text-muted-foreground flex items-center justify-center">
-                        {p.name.slice(0, 2)}
-                      </div>
-                      <span className="text-sm">{p.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {p.role && (
-                        <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px font-mono text-[8px] uppercase tracking-wider text-primary">
-                          {ROLE_META[p.role].label}
-                        </span>
-                      )}
-                      {p.role && p.role === sessionLeadRole && (
-                        <span title="Voorzitter" className="font-mono text-[9px] text-tt-accent">⬡</span>
-                      )}
-                      <span className="size-1.5 rounded-full bg-primary" />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Documents — filtered to this participant's role */}
-            {!isEventMode && participantRole && (() => {
-              const myDocs = (session.documents ?? []).filter(d => d.targetRole === participantRole)
-              return <RoleDocumentsPanel docs={myDocs} />
-            })()}
-
-            {/* Role authorities card — shown when participant has a role */}
-            {!isEventMode && participantRole && (() => {
-              const meta = ROLE_META[participantRole]
-              return (
-                <div className="rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-primary/15">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-primary">Uw bevoegdheden</span>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{meta.label}</p>
-                  </div>
-                  <div className="px-4 py-3 flex flex-col gap-2.5">
-                    <ul className="flex flex-col gap-1.5">
-                      {meta.authorities.map((a, i) => (
-                        <li key={i} className="flex gap-2 text-xs text-foreground">
-                          <span className="text-primary shrink-0 mt-0.5">✓</span>
-                          <span>{a}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="rounded-md border border-border bg-background/60 px-3 py-2">
-                      <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground mb-0.5">Niet uw verantwoordelijkheid</p>
-                      <p className="text-[11px] text-muted-foreground">{meta.notResponsibleFor}</p>
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Session info */}
-            {!isEventMode && <div className="rounded-xl border border-border bg-card px-4 py-4 flex flex-col gap-3">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "eventLog")}</span>
-              <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
-                {[...session.timeline].reverse().slice(0, 20).map((ev) => (
-                  <div key={ev.id} className="flex items-start gap-2 text-xs">
-                    <span className="font-mono text-[9px] text-muted-foreground shrink-0 mt-0.5">
-                      {new Date(ev.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                    <span className="text-muted-foreground leading-relaxed">
-                      {ev.type.replace(/_/g, " ")}
-                      {(ev.data as { name?: string }).name ? ` — ${(ev.data as { name?: string }).name}` : ""}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>}
-          </aside>
-        </div>
-        )}
+        <StepShell step={step} highest={highest} onGo={setDesired} primary={primary} note={note}>
+          {content}
+        </StepShell>
       </main>
 
       <UrgentInjectModal inject={urgent} onClose={() => setUrgent(null)} lang={lang} />

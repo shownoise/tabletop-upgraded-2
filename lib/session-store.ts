@@ -417,6 +417,10 @@ function projectActiveDecision(session: SessionState): import("./types").ActiveD
           qualityRank: o.qualityRank,
           facilitatorCommentary: o.facilitatorCommentary,
           lessonLearned: o.lessonLearned,
+          // Zonder deze vector kan de deelnemer in de review de zes dimensies
+          // niet zien en bleef de scorebespreking eenzijdig bij de facilitator.
+          // Hij hangt bewust achter dezelfde review-poort als het commentaar.
+          outcomeVector: o.outcomeVector,
         }
       : {}),
   }))

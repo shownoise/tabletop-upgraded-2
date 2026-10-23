@@ -779,6 +779,10 @@ export interface ActiveDecisionPending {
   qualityRank?: ChoiceQuality
   facilitatorCommentary?: string
   lessonLearned?: string
+  // Ook pas in de review-fase. Vóór de keuze zou dit de scoring verklappen;
+  // in de review is het juist het gesprek: wat deed deze keuze op de zes assen,
+  // en wat zouden de alternatieven hebben gedaan.
+  outcomeVector?: OutcomeVector
 }
 
 // Sequential presentation of pending options for one participant. Enables

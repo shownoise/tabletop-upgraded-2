@@ -7,8 +7,6 @@ import { ROLE_META } from "@/lib/types"
 import { analyzeGraph } from "@/lib/graph/analyze"
 import type { Lang } from "@/lib/i18n"
 import { tr, ESCALATION_KEYS } from "@/lib/i18n"
-import { LangToggle } from "@/components/lang-toggle"
-import { ThemeToggle } from "@/components/theme-toggle"
 
 const ESCALATION_BADGE = [
   "border-tt-dim/40 bg-tt-dim/10 text-tt-dim",
@@ -17,13 +15,16 @@ const ESCALATION_BADGE = [
   "border-tt-red/40 bg-tt-red/10 text-tt-red",
 ] as const
 
+// Geen taal- of themaschakelaar in deze balk. De Eye-banner
+// (`components/shared/eye-header.tsx`) staat erboven en heeft ze al; beide
+// headers zijn `sticky top-0 z-40`, dus live stonden er twee nl/en-knoppen
+// boven elkaar (issue #105 §3).
 interface Props {
   session: SessionState
   connected: boolean
   name: string | null
   participantRole?: Role
   lang: Lang
-  setLang: (l: Lang) => void
 }
 
 function SessionTimer({ startedAt }: { startedAt: number }) {
@@ -66,7 +67,7 @@ function RoundDots({ current, total }: { current: number; total: number }) {
   )
 }
 
-export function SessionHUD({ session, connected, name, participantRole, lang, setLang }: Props) {
+export function SessionHUD({ session, connected, name, participantRole, lang }: Props) {
   const status = session.status
   // scenario.rounds grows one round at a time, so it is never the total. A
   // facilitator opening /play gets the unstripped state and can count the graph.
@@ -154,9 +155,6 @@ export function SessionHUD({ session, connected, name, participantRole, lang, se
               : <WifiOff className="size-3 text-tt-red" />
             }
           </div>
-
-          <LangToggle lang={lang} setLang={setLang} />
-          <ThemeToggle />
         </div>
       </div>
 

@@ -24,6 +24,22 @@ function useCountdown(roundStartedAt: number | undefined, timerMinutes: number, 
   return secondsLeft
 }
 
+// De resterende tijd als één regel tekst, voor de beslisvraag-kaart. Die staat
+// op drie stappen in beeld en moet de deadline noemen zonder een tweede klok
+// naast de klok in de balk te zetten.
+export function useDeadlineLabel(
+  roundStartedAt: number | undefined,
+  timerMinutes: number,
+  status: string,
+): string | undefined {
+  const secondsLeft = useCountdown(roundStartedAt, timerMinutes, status)
+  if (secondsLeft === null) return undefined
+  if (secondsLeft === 0) return "de tijd is om"
+  const mins = Math.floor(secondsLeft / 60)
+  const secs = secondsLeft % 60
+  return `nog ${mins}:${String(secs).padStart(2, "0")}`
+}
+
 function timerColor(secondsLeft: number, totalSeconds: number): string {
   const frac = totalSeconds > 0 ? secondsLeft / totalSeconds : 1
   if (frac < 0.15 || secondsLeft < 30) return "var(--tt-red)"
