@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import { NL_AVG_NIS2_REGIME } from "../regulatory/regimes"
 import { applyRegulatoryAdjustment } from "../regulatory/scoring-adjustment"
 import { classifyRegulatoryTiming } from "../session-store"
+import { denominatorFromReport } from "../scoring/denominator"
 import type {
   AssessmentReport,
 } from "../scoring"
@@ -50,6 +51,10 @@ function makeReport(perRound: Array<{ round: number; hasSubmissions: boolean }>)
       hasSubmissions: r.hasSubmissions,
     })),
     totalPoints: 0,
+    // Alleen rondes met een inzending konden punten opleveren, dus alleen die
+    // horen in de noemer — zie lib/scoring/denominator.ts.
+    scorableRounds: perRound.filter(r => r.hasSubmissions).map(r => r.round),
+    maxPoints: perRound.filter(r => r.hasSubmissions).length * 100,
     spider: {
       team: { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 },
       perDimensionAcrossRounds: [],
@@ -111,6 +116,29 @@ describe("regulatory obligation scoring adjustment", () => {
     expect(r5.perDimension.JUR).toBe(-2)
     expect(r5.perDimension.VER).toBe(-1)
     expect(classifyRegulatoryTiming(expired, NL_AVG_NIS2_REGIME)).toBe("omitted")
+  })
+
+  it("een extra outcome-rij voor een verzuim laat de noemer ongemoeid", () => {
+    // De aanpassing zet een rij bij voor ronde 5, die nooit een uitkomst had.
+    // Zou de weergave weer `outcomes.length * 100` rekenen, dan groeit de
+    // noemer mee met een ronde waarin niets te verdienen was (issue #105).
+    const expired: RegulatoryObligationState = {
+      regimeId: NL_AVG_NIS2_REGIME.id,
+      milestoneId: "initial",
+      status: "expired",
+      openedAtRound: 2,
+      openedAtHour: 0,
+      expiredAtRound: 5,
+    }
+    const session = makeSession({ regulatoryObligations: [expired] })
+    const before = makeReport([{ round: 1, hasSubmissions: true }])
+    const adjusted = applyRegulatoryAdjustment(session, before)
+
+    expect(adjusted.outcomes).toHaveLength(2)
+    expect(adjusted.scorableRounds).toEqual([1])
+    expect(adjusted.maxPoints).toBe(100)
+    expect(denominatorFromReport(adjusted).maxPoints).toBe(100)
+    expect(denominatorFromReport(adjusted).rounds).toEqual([1])
   })
 })
 

@@ -1,4 +1,4 @@
-import { scoreExerciseByGroup, type ScoringOutput } from "./scoring"
+import { scoreDenominator, scoreExerciseByGroup, type ScoringOutput } from "./scoring"
 import { sessionToScoringInput } from "./scoring/graph-adapter"
 import type { OutcomeVector } from "./graph/types"
 import { ROLE_META } from "./types"
@@ -65,7 +65,12 @@ export function buildParticipantClosing(session: SessionState, participantId: st
     }
   })
 
-  const scoredRounds = (mine?.outcomes ?? []).filter(o => o.hasSubmissions)
+  // De noemer komt uit dezelfde helper als het facilitatorrapport. Dit stond
+  // hier eerder als `scoredRounds.length * 100` — dat telt alleen rondes waarin
+  // het team wél iets indiende, dus een gemiste ronde maakte de score juist
+  // mooier. Issue #105 eist dat deelnemer, facilitator en rapport exact dezelfde
+  // noemer tonen, dus mag er maar één implementatie van die regel bestaan.
+  const denom = input ? scoreDenominator(input.scenario, mine?.outcomes ?? [], mine?.totalPoints ?? 0) : null
   const groups = session.groups ?? []
   const standings = groups
     .filter(g => perGroup[g.id])
@@ -74,10 +79,10 @@ export function buildParticipantClosing(session: SessionState, participantId: st
 
   return {
     rounds,
-    ...(mine && scoredRounds.length > 0
+    ...(mine && denom && !denom.nothingToScore
       ? {
           totalPoints: mine.totalPoints,
-          maxPoints: scoredRounds.length * 100,
+          maxPoints: denom.maxPoints,
           scoringVersion: mine.scoringVersion,
         }
       : {}),
