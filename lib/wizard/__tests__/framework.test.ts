@@ -166,7 +166,7 @@ function baseGraph(): ScenarioGraph {
 }
 
 describe("wizard framework — passing baseline", () => {
-  it("baseGraph + baseConfig passes all 13 rules", () => {
+  it("baseGraph + baseConfig passes all 14 rules", () => {
     const graph = baseGraph()
     const config = baseConfig()
     const result = validateFramework(graph, config)
@@ -174,7 +174,7 @@ describe("wizard framework — passing baseline", () => {
       throw new Error(`baseline expected to pass but got: ${result.failures.map(f => f.ruleId + ': ' + f.violation).join(' | ')}`)
     }
     expect(result.ok).toBe(true)
-    expect(FRAMEWORK_RULE_IDS.length).toBe(13)
+    expect(FRAMEWORK_RULE_IDS.length).toBe(14)
   })
 })
 

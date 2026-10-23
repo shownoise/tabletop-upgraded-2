@@ -21,10 +21,15 @@ import type { Scenario } from "@/lib/types"
 //    adjacent RoleMeta.domain), then by sorted role id.
 //
 // Invariants:
-//  - Every present participant retains their primary role. The CEO seat is
-//    never handed off to someone else (`isTopDecisionMaker`).
+//  - Every present participant retains their primary role. Niemand raakt een
+//    zelf geclaimde rol kwijt bij een herberekening.
 //  - Every authored role is either assigned to some present participant or
 //    appears in `unassignedRoles`.
+//  - Elke onbezette rol wordt overgenomen, óók de CEO-stoel (#105 §3). Vroeger
+//    werd `ceo` overgeslagen, waardoor niemand ooit de CEO-keuzes dekte en de
+//    ronde permanent op die keuze bleef wachten. De scoring heeft hier geen
+//    last van: die werkt via `lib/scoring/role-resolution.ts` op
+//    `roster.presentRoles` en kent de verdeling niet.
 
 export interface AuthoredWorkload {
   role: Role
@@ -129,7 +134,6 @@ export function distributeRoles(input: DistributeRolesInput): RoleDistributionSn
   )
 
   for (const role of absentSorted) {
-    if (role === 'ceo') continue  // top decision-maker's content never re-owned; scoring drops it
     // Pick the participant with the lowest workload, tie-broken by best domain match
     // to the role, then by sorted participant id.
     const ranked = stableSort(entries, (a, b) => {
@@ -146,12 +150,14 @@ export function distributeRoles(input: DistributeRolesInput): RoleDistributionSn
     target.workload += wt(role)
   }
 
-  const unassignedRoles = absentSorted.filter(r => r === 'ceo' && !primaryTaken.has(r))
   const covered = new Set<Role>()
   for (const e of entries) {
     covered.add(e.primaryRole)
     for (const r of e.inheritedRoles) covered.add(r)
   }
+  // Afgeleid uit de uitkomst in plaats van uit een hardgecodeerde uitzondering:
+  // wat niemand dekt is onbezet, wat dan ook de reden is.
+  const unassignedRoles = [...authored].filter(r => !covered.has(r))
   const authoredCount = [...authored].length
   const coverage = authoredCount === 0 ? 1 : [...authored].filter(r => covered.has(r)).length / authoredCount
 

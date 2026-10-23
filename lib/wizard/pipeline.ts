@@ -59,7 +59,13 @@ export interface PipelineResult {
   warnings: RuleFailure[]
 }
 
-const DRAFT_WARNING_RULES = new Set(['rule3_no_dominant', 'rule5_cross_round_lesson'])
+// rule13 is een heuristiek op woordoverlap: hij mag een generatie nooit laten
+// vastlopen, maar de facilitator moet hem wél in de builder te zien krijgen.
+const DRAFT_WARNING_RULES = new Set([
+  'rule3_no_dominant',
+  'rule5_cross_round_lesson',
+  'rule13_situation_no_spoiler',
+])
 
 function validateWizardGraph(graph: ScenarioGraph, config: WizardConfig): RuleFailure[] {
   const frameworkFailures = validateFramework(graph, config).failures
@@ -245,6 +251,12 @@ C. Standaard-zwakte in het verhaal. Kies ÉÉN van deze zwaktes en verweef 'm do
 
 D. Consequent één taal. Alle vrije-tekstvelden in het Nederlands: titel, content, opties, briefings, prompts, facilitatorNotes. Engelse vaktermen (SLA, MSP, EPD, MDR, DPO, SOC) zijn OK. Volledige Engelse zinnen of losse Engelse woorden ('urgency', 'assumption failed', 'critical event' als label) niet. Consistent = alle scenario-tekst is NL-first.
 
+E. De rondeheader verklapt niets. Het veld round.situation is een KORTE ALGEMENE introductie van maximaal 3 à 4 zinnen: waar staan we, hoeveel tijd is er verstreken sinds de detectie, wat is de algemene stand van zaken, en — expliciet — welke beslisvraag aan het eind van deze ronde op tafel ligt. Die beslisvraag staat ook als vraag in decision.prompt (één regel, met vraagteken).
+   NIET in de situatieschets: namen van personen, afzenders, systemen of bedragen die een inject van diezelfde ronde nog moet brengen; rolspecifieke feiten; signalen, tijdstempels of bevindingen die uit een inject komen. Alles wat hier staat heeft iedereen al gelezen voordat de eerste inject binnenkomt, en dan is de onderzoeksvraag weg: niemand hoeft nog iets te ontdekken en rolgericht uitvragen heeft geen zin meer.
+   WEL in de situatieschets: tijd en dag, hoe lang het incident loopt, de grove stand van herstel of communicatie, de keuze uit de vorige ronde waarop deze ronde voortbouwt (regel 5), en de beslisvraag.
+   Fout: "WestNet heeft om 08:42 een low-severity alert gezet en lerares Van der Meer meldt dat haar klassenplanner leeg is." — dat zijn twee injects, letterlijk vooruitverteld.
+   Goed: "Maandag 09:15. Sinds het eerste lesuur komen er van verschillende locaties losse meldingen binnen over dingen die niet werken. Niets is hard, niemand heeft het hele plaatje. Jullie hebben een kwartier om te bepalen of dit ruis is of een incident — en wie dat besluit neemt."
+
 Framework-regels die de code toetst:
 1. Elke decision heeft een setup-inject in dezelfde of vorige ronde (inject.setsUpDecisionNodeId).
 2. Per decision: exact ${config.optionsPerRolePerRound} opties per rol (minimum uit config is 3; geen binaire wel-of-niet).
@@ -258,13 +270,14 @@ Framework-regels die de code toetst:
 10. Elke ronde heeft facilitatorNotes.discussionGoal; feiten/namen in de goal moeten ook in de ronde-inhoud staan.
 11. Minstens één rol heeft roleBriefings.<role>.playbookGaps met minstens één ingang — daar landt de standaard-zwakte (richtlijn C).
 12. Taalconsistentie: geen losse Engelse zinnen of typische Engelse UI-woorden (urgency/high/critical/handled/dismissed) in NL-teksten. Vaktermen (SLA, MSP, EPD) zijn OK.
+13. De situatieschets (round.situation) verklapt de injects van diezelfde ronde NIET. Zie richtlijn E — de code meet letterlijke fragmenten en gedeelde inject-eigen woorden terug.
 
 Geef ALLEEN geldige JSON terug volgens het WizardPlan schema, geen markdown, geen uitleg.`
 }
 
 // Build the outline prompt — round titles + one-sentence situations.
 function buildOutlinePrompt(config: WizardConfig): string {
-  return `Genereer eerst een OUTLINE: geef als JSON exact { "rounds": [{ "title": "…", "situation": "1 zin" }, …] } met precies ${config.rounds} entries. Geen andere velden.`
+  return `Genereer eerst een OUTLINE: geef als JSON exact { "rounds": [{ "title": "…", "situation": "1 zin" }, …] } met precies ${config.rounds} entries. Geen andere velden. Die ene zin is de algemene stand van zaken van die ronde — geen namen of signalen die later uit een inject moeten komen (richtlijn E).`
 }
 
 // Build the per-round generation prompt.
@@ -279,6 +292,8 @@ function buildRoundPrompt(config: WizardConfig, roundIdx: number, outline: Outli
   return `Genereer ronde ${roundIdx + 1} van ${config.rounds}. Outline (alle ${config.rounds} rondes): ${outlineJson}.${previousContext}
 
 Consistentie: hou rekening met de outline van vorige én latere rondes zodat het narratief samenhangt.
+
+Rondeheader (richtlijn E, regel 13): "situation" is een korte algemene introductie van maximaal 3 à 4 zinnen plus de beslisvraag van deze ronde. Geen namen, afzenders, bedragen, tijdstempels of bevindingen die een inject van DEZE ronde nog moet brengen — die staan alleen in de inject zelf. Zet dezelfde beslisvraag als vraag met vraagteken in decision.prompt.
 
 Geef als JSON: { "round": WizardPlanRound, "decision": WizardPlanDecision } — decision is VERPLICHT, nooit null. De decision hoort bij deze ronde (afterRoundIndex=${roundIdx}) en heeft perRole=true. Kies de rol(len) uit ${config.rolesIncluded.join(', ')} die hier mandaat hebben; alleen die rollen krijgen elk precies ${config.optionsPerRolePerRound} opties. Elke optie heeft allowedRole en een expliciete outcomeVector met de zes numerieke assen CONT/FOR/BC/JUR/VER/KOS; 0 betekent geen effect op die as. Gebruik author-id's zoals "r${roundIdx + 1}-d1" voor decision en "r${roundIdx + 1}-i1", "r${roundIdx + 1}-i2" voor injects. Elke inject die een decision opzet, zet setsUpDecisionNodeId op de decision's author-id.`
 }

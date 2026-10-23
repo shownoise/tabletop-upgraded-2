@@ -18,25 +18,25 @@ function generateRecommendations(flags: GovernanceFlag[], hasIrPlan: boolean, gr
 
   if (wrongRoleCount > 0) {
     recs.push(
-      `${wrongRoleCount} action(s) were taken by participants outside their authorized role. Review and clarify RACI ownership for each IR phase before the next exercise.`
+      `${wrongRoleCount} ${wrongRoleCount === 1 ? "actie is" : "acties zijn"} genomen door een rol zonder dat mandaat. Leg vóór de volgende oefening per IR-fase vast wie waarover beslist.`
     )
   }
   if (irDeviationCount > 0) {
     if (hasIrPlan) {
       recs.push(
-        `${irDeviationCount} action(s) deviated from the IR plan. Update the IR plan to include explicit guidance on these decision points, or provide pre-authorized escalation paths.`
+        `${irDeviationCount} ${irDeviationCount === 1 ? "actie week" : "acties weken"} af van het IR-plan. Neem deze beslispunten expliciet in het plan op, of leg vooraf goedgekeurde escalatieroutes vast.`
       )
     } else {
       recs.push(
-        `${irDeviationCount} action(s) deviated from recommended best practice. Consider formalizing these decision points in an Incident Response plan to give participants clear guidance during a real crisis.`
+        `${irDeviationCount} ${irDeviationCount === 1 ? "actie week" : "acties weken"} af van de goede praktijk. Leg deze beslispunten vast in een IR-plan, zodat deelnemers in een echte crisis houvast hebben.`
       )
     }
   }
   if (wrongRoleCount === 0 && irDeviationCount === 0) {
-    recs.push("Excellent governance observed. All decisions were taken by authorized roles and aligned with recommended best practice.")
+    recs.push("Het team bleef binnen de rolgrenzen en volgde de goede praktijk — geen signalen vastgelegd.")
   }
-  recs.push("Schedule a follow-up tabletop exercise within 90 days to reinforce lessons learned.")
-  recs.push("Assign owners to each gap identified in the post-incident review within 5 business days.")
+  recs.push("Plan binnen 90 dagen een vervolgoefening om de lessen te toetsen.")
+  recs.push("Wijs binnen vijf werkdagen een eigenaar aan voor elk gat uit de evaluatie.")
   return recs
 }
 
@@ -46,10 +46,12 @@ export async function GET() {
   const { getSession } = await import("@/lib/session-store")
   const session = await getSession()
   if (!session) {
-    return NextResponse.json({ error: "No active session." }, { status: 404 })
+    // Nederlandse foutteksten: report-view toont `error` rechtstreeks aan de
+    // facilitator.
+    return NextResponse.json({ error: "Geen actieve sessie." }, { status: 404 })
   }
   if (session.status !== "ended") {
-    return NextResponse.json({ error: "Report is only available after the session has ended." }, { status: 400 })
+    return NextResponse.json({ error: "Het rapport is pas beschikbaar nadat de sessie is afgerond." }, { status: 400 })
   }
 
   const decisions: SubmittedDecision[] = session.submittedDecisions ?? []

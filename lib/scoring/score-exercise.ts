@@ -1,4 +1,5 @@
 import { SCORING_VERSION } from './constants'
+import { scorableRounds, POINTS_PER_ROUND } from './denominator'
 import { computeRoundOutcome } from './outcome-round'
 import { resolveRoles } from './role-resolution'
 import type { ExerciseInput, ScoringOutput } from './types'
@@ -25,11 +26,18 @@ export function scoreExerciseByGroup(input: ExerciseInput): Record<string, Scori
 
 // Hoofd-entry: input → volledige ScoringOutput. Puur, geen I/O.
 export function scoreExercise(input: ExerciseInput): ScoringOutput {
-  const { scenario, roster, events, mode } = input
+  const { scenario, roster, events, mode, playedRounds } = input
   const resolution = resolveRoles(roster, scenario, firstStart(events))
 
-  const outcomes = scenario.rounds.map(r => computeRoundOutcome(scenario, events, r.number, mode === 'EVENT'))
+  // Alleen werkelijk gespeelde rondes krijgen een uitkomst. Een niet-gespeelde
+  // ronde levert n=0 submissions op → normalized 0 → 50 punten die niet in
+  // totalPoints landen maar wél de noemer opblazen. Dat was de "0 van 600"-bug.
+  const played = playedRounds ? new Set(playedRounds) : null
+  const roundsToScore = played ? scenario.rounds.filter(r => played.has(r.number)) : scenario.rounds
+
+  const outcomes = roundsToScore.map(r => computeRoundOutcome(scenario, events, r.number, mode === 'EVENT'))
   const totalPoints = outcomes.reduce((total, outcome) => total + (outcome.hasSubmissions ? outcome.points : 0), 0)
+  const scorable = scorableRounds(scenario, outcomes)
 
   // Een beantwoorde optionele keuze telt al mee in de score en mag in het rapport
   // daarom niet als overgeslagen worden beschreven.
@@ -46,6 +54,8 @@ export function scoreExercise(input: ExerciseInput): ScoringOutput {
     },
     outcomes,
     totalPoints,
+    scorableRounds: scorable.map(o => o.round),
+    maxPoints: scorable.length * POINTS_PER_ROUND,
     droppedOptionalDecisions,
   }
 }

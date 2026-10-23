@@ -506,6 +506,7 @@ export function InjectFeed({
   pushed,
   lang,
   participantRole,
+  extraRoles,
   participants,
   session,
   participantId,
@@ -513,6 +514,10 @@ export function InjectFeed({
   pushed: PushedInject[]
   lang: Lang
   participantRole?: Role
+  // Alle rollen die deze deelnemer draagt, inclusief overgenomen rollen. Een
+  // bericht dat alleen een overgenomen rol bereikt hoort hij ook te zien —
+  // anders mist hij de informatie waarop hij straks namens die rol beslist.
+  extraRoles?: Role[]
   participants?: Array<{ role?: Role | null }>
   session?: SessionState
   participantId?: string
@@ -540,19 +545,26 @@ export function InjectFeed({
   const handledIds = new Set(myView?.handled ?? [])
   const hideHandledFilter = !isCoreEvent && myView?.filters?.hideHandled === true
 
+  // Elke rol die deze deelnemer draagt telt mee: de actieve rol plus de rollen
+  // die hij erbij heeft gekregen.
+  const myRoles = useMemo<Role[]>(
+    () => [...new Set([...(participantRole ? [participantRole] : []), ...(extraRoles ?? [])])],
+    [participantRole, extraRoles],
+  )
+
   const visibleByRole = pushed.filter((p) => {
     if (p.pushedAt > now) return false
     if (myRoleLabel && isSelfReferential(p.inject.senderName, myRoleLabel)) return false
-    if (!participantRole) return true
+    if (myRoles.length === 0) return true
     if (presentRoles.length === 0) {
       const inject = p.inject
-      if (inject.targetRoles?.length) return inject.targetRoles.includes(participantRole)
+      if (inject.targetRoles?.length) return inject.targetRoles.some(r => myRoles.includes(r))
       return true
     }
     const recipients = session
       ? getInjectRecipients(p.inject, session, teamRoles)
       : resolveInjectRecipients({ inject: p.inject, presentRoles, teamRoles })
-    return recipients.includes(participantRole)
+    return recipients.some(r => myRoles.includes(r))
   })
 
   // Split: hidden vs shown. Sort newest-first.

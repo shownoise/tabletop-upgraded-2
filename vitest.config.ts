@@ -14,6 +14,9 @@ export default defineConfig({
       'lib/graph/__tests__/**/*.test.ts',
       'lib/wizard/__tests__/**/*.test.ts',
       'app/api/__tests__/**/*.test.ts',
+      // Zonder deze regel liepen de tests onder components/ niet mee en bleven
+      // ze ongemerkt rood; de deelnemer-stapflow test hier zijn rolafleiding.
+      'components/**/__tests__/**/*.test.ts',
     ],
     environment: 'node',
     globals: false,

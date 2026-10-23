@@ -197,7 +197,37 @@ export function sessionToScoringInput(session: SessionState, opts: GraphToScorin
     scenario,
     roster: { presentRoles: specPresent, groups: groups.length > 0 ? groups : undefined },
     events: sessionToEvents(session),
+    playedRounds: playedRoundNumbers(session),
   }
+}
+
+// Welke rondenummers heeft deze sessie werkelijk gespeeld?
+//
+// Bron: `session.scenario.rounds`. Dat is aantoonbaar de juiste bron, want een
+// graph-sessie start met `rounds: []` (create/route.ts vult alleen titel en
+// samenvatting) en `applyEngineStep()` in session-store duwt bij élke
+// `start_round`-output precies één ronde achteraan met
+// `round_number = rounds.length + 1`. De array is dus append-only en bevat per
+// definitie alleen de gematerialiseerde — gespeelde — rondes.
+//
+// Waarom niet `graphState.pathHistory`: die noemt node-ids, en het rondenummer
+// van een node komt uit `numberRoundsFromStart()`, dat alleen de sequence-spine
+// vanaf start volgt. In een vertakte graph valt een bezochte ronde-node daar
+// buiten en krijgt hij geen nummer. Waarom niet `currentRound`: dat is de index
+// ín dezelfde array, dus een zwakkere versie van dezelfde bron.
+//
+// Beslissende reden: submissions dragen `roundIndex` — de index in
+// `scenario.rounds` — en `submittedDecisionToEvent` rekent dat om naar
+// `round = roundIndex + 1`. `scenario.rounds.length` is dus de enige bron met
+// gegarandeerd dezelfde nummering als de events waarop gescoord wordt.
+//
+// Undefined bij een sessie zonder `scenario` (komt voor in tests die een
+// partiële SessionState bouwen): dan is niet te bewijzen wat gespeeld is en
+// blijft het oude gedrag gelden.
+function playedRoundNumbers(session: SessionState): number[] | undefined {
+  const materialised = session.scenario?.rounds?.length
+  if (materialised === undefined) return undefined
+  return Array.from({ length: materialised }, (_, i) => i + 1)
 }
 
 // ── Helpers: inferentie waar velden nog ontbreken ─────────────────────

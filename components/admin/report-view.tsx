@@ -4,34 +4,14 @@ import { useEffect, useState } from "react"
 import { FileText, AlertTriangle, AlertCircle, CheckCircle, TrendingUp, Clock, BookOpen, Wrench, Target } from "lucide-react"
 import type { SessionReport, GovernanceFlag, TimelineEvent, SessionState } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
-import type { OutcomeVector, ScenarioGraph } from "@/lib/graph/types"
-import { scoreByDimension, scoreCoverage } from "@/lib/graph/outcome-selector"
+import { decisionReviewItems } from "@/lib/scoring/decision-review"
+import { DecisionReviewCard } from "@/components/shared/decision-review-card"
 import { api } from "@/lib/api-client"
 import type { Lang } from "@/lib/i18n"
 import { tr } from "@/lib/i18n"
 import { GraphReportSection } from "./graph-report-section"
 import { LessonsLearnedSection } from "./lessons-learned-section"
 import { DimensionScoresSection } from "./dimension-scores-section"
-
-const DIMENSION_LABELS: Record<keyof OutcomeVector, string> = {
-  CONT: "Containment", FOR: "Forensiek", BC: "Continuïteit",
-  JUR: "Juridisch", VER: "Verantwoording", KOS: "Kosten",
-}
-
-function DecisionImpact({ graph, actionId }: { graph: ScenarioGraph; actionId: string }) {
-  const submission = [{ actionId }]
-  if (scoreCoverage(graph, submission).scored === 0) {
-    return <span className="text-xs text-amber-600">Punten niet vastgesteld — bespreek de impact handmatig</span>
-  }
-  const vector = scoreByDimension(graph, submission)
-  return <div className="flex flex-wrap gap-1.5" aria-label="Impact per scoringsdimensie">
-    {(Object.entries(DIMENSION_LABELS) as Array<[keyof OutcomeVector, string]>).map(([dim, label]) => (
-      <span key={dim} className="rounded border border-border bg-background px-2 py-0.5 font-mono text-[10px]">
-        {label} {vector[dim] > 0 ? "+" : ""}{vector[dim]}
-      </span>
-    ))}
-  </div>
-}
 
 function ScoreCard({ label, value, color }: { label: string; value: number; color: "primary" | "amber" | "destructive" }) {
   const colorClass = {
@@ -67,22 +47,24 @@ function generateExecutiveSummary(report: SessionReport): string {
   const process = report.scores.processAdherence
   const role = report.scores.roleCompliance
 
-  const overall = quality >= 70 && process >= 70 && role >= 70 ? "performed well" : "showed gaps in key areas"
+  const overall = quality >= 70 && process >= 70 && role >= 70
+    ? "liep het team goed"
+    : "liet het team gaten zien op belangrijke punten"
   const strengths: string[] = []
   const gaps: string[] = []
 
-  if (quality >= 70) strengths.push("decision quality")
-  else gaps.push("decision quality")
-  if (process >= 70) strengths.push("IR plan adherence")
-  else gaps.push("IR plan adherence")
-  if (role >= 70) strengths.push("role compliance")
-  else gaps.push("role compliance")
+  if (quality >= 70) strengths.push("kwaliteit van de keuzes")
+  else gaps.push("kwaliteit van de keuzes")
+  if (process >= 70) strengths.push("naleving van het IR-plan")
+  else gaps.push("naleving van het IR-plan")
+  if (role >= 70) strengths.push("rolvastheid")
+  else gaps.push("rolvastheid")
 
-  let summary = `During this ${report.mode === "event" ? "event" : "training"} exercise, ${n} decisions were recorded across ${report.totalRounds} rounds. Overall, the team ${overall}.`
-  if (strengths.length) summary += ` Main strengths: ${strengths.join(", ")}.`
-  if (gaps.length) summary += ` Key gaps: ${gaps.join(", ")}.`
-  if (wrongRole > 0) summary += ` ${wrongRole} action${wrongRole !== 1 ? "s were" : " was"} taken outside authorized roles.`
-  if (irDev > 0) summary += ` ${irDev} action${irDev !== 1 ? "s deviated" : " deviated"} from the IR plan.`
+  let summary = `In deze ${report.mode === "event" ? "event" : "trainings"}oefening zijn ${n} keuzes vastgelegd over ${report.totalRounds} rondes. Over het geheel ${overall}.`
+  if (strengths.length) summary += ` Sterke punten: ${strengths.join(", ")}.`
+  if (gaps.length) summary += ` Belangrijkste gaten: ${gaps.join(", ")}.`
+  if (wrongRole > 0) summary += ` ${wrongRole} ${wrongRole !== 1 ? "acties zijn" : "actie is"} buiten de bevoegde rol genomen.`
+  if (irDev > 0) summary += ` ${irDev} ${irDev !== 1 ? "acties weken" : "actie week"} af van het IR-plan.`
   return summary
 }
 
@@ -93,12 +75,12 @@ function generateImprovements(flags: GovernanceFlag[], graphScoring?: SessionRep
 
   const isolationWrongRole = wrongRoleFlags.some(f => f.description.toLowerCase().includes("isolat"))
   if (isolationWrongRole) {
-    improvements.push("Define clear authority: only IT Manager / System Administrator may approve system isolation actions.")
+    improvements.push("Leg het mandaat vast: alleen de IT-manager mag isolatie van systemen goedkeuren.")
   }
 
   const commsIrDev = irDevFlags.some(f => f.description.toLowerCase().includes("communicat"))
   if (commsIrDev) {
-    improvements.push("Define a communication approval workflow — require sign-off from Head of Communications before any external statements are issued.")
+    improvements.push("Leg een goedkeuringsroute voor communicatie vast — geen externe verklaring zonder akkoord van de communicatieverantwoordelijke.")
   }
 
   const ransomIrDev = irDevFlags.some(f =>
@@ -107,31 +89,42 @@ function generateImprovements(flags: GovernanceFlag[], graphScoring?: SessionRep
     f.description.toLowerCase().includes("payment")
   )
   if (ransomIrDev) {
-    improvements.push("Document a ransomware decision process with clear role responsibilities for payment authorization before the next exercise.")
+    improvements.push("Beschrijf vóór de volgende oefening een ransomware-besluitproces, met expliciet wie betaling mag autoriseren.")
   }
 
   if (!graphScoring && wrongRoleFlags.length === 0 && irDevFlags.length === 0) {
-    improvements.push("Team correctly followed role boundaries and best practice — no governance flags recorded. Excellent exercise discipline.")
+    improvements.push("Het team bleef binnen de rolgrenzen en volgde de goede praktijk — geen signalen vastgelegd.")
   }
 
-  improvements.push("Schedule a follow-up exercise in 6 months to validate improvements and test updated runbooks.")
+  improvements.push("Plan over zes maanden een vervolgoefening om de verbeteringen en de bijgewerkte draaiboeken te toetsen.")
   return improvements
 }
 
+// Nederlandse omschrijving per tijdlijn-gebeurtenis. Onbekende types vallen
+// terug op hun eigen naam; dat is beter dan een lege regel.
+const TIMELINE_LABEL_NL: Record<string, string> = {
+  session_created: "Sessie aangemaakt",
+  session_started: "Sessie gestart",
+  session_ended: "Sessie afgerond",
+  phase_changed: "Fase gewijzigd",
+  decision_submitted: "Keuze ingediend",
+  participant_left: "Deelnemer vertrokken",
+}
+
 function formatTimelineLabel(ev: TimelineEvent): string {
-  const type = ev.type.replace(/_/g, " ")
   const data = ev.data as Record<string, unknown>
-  if (ev.type === "participant_joined" && data.name) return `Participant joined — ${data.name}`
-  if (ev.type === "round_changed" && typeof data.roundIndex === "number") return `Round ${(data.roundIndex as number) + 1} started`
+  if (ev.type === "participant_joined" && data.name) return `Deelnemer aangesloten — ${data.name}`
+  if (ev.type === "round_changed" && typeof data.roundIndex === "number") return `Ronde ${(data.roundIndex as number) + 1} gestart`
   if (ev.type === "inject_pushed") {
     const inj = data.inject as { title?: string } | undefined
-    return `Inject pushed${inj?.title ? ` — ${inj.title}` : ""}`
+    return `Inject verstuurd${inj?.title ? ` — ${inj.title}` : ""}`
   }
   if (ev.type === "surprise_inject") {
     const inj = data.inject as { title?: string } | undefined
-    return `Surprise inject${inj?.title ? ` — ${inj.title}` : ""}`
+    return `Verrassingsinject${inj?.title ? ` — ${inj.title}` : ""}`
   }
-  return type.charAt(0).toUpperCase() + type.slice(1)
+  const fallback = ev.type.replace(/_/g, " ")
+  return TIMELINE_LABEL_NL[ev.type] ?? fallback.charAt(0).toUpperCase() + fallback.slice(1)
 }
 
 interface Props {
@@ -153,7 +146,7 @@ export function ReportView({ lang }: Props) {
       .then(([r]) => {
         setReport(r)
       })
-      .catch(err => setError(err instanceof Error ? err.message : "Failed to load report"))
+      .catch(err => setError(err instanceof Error ? err.message : "Rapport kon niet worden geladen"))
       .finally(() => setLoading(false))
   }, [])
 
@@ -172,7 +165,7 @@ export function ReportView({ lang }: Props) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground animate-pulse">Loading report…</span>
+        <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground animate-pulse">Rapport laden…</span>
       </div>
     )
   }
@@ -182,7 +175,7 @@ export function ReportView({ lang }: Props) {
       <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-6">
         <div className="flex items-center gap-2 mb-2">
           <AlertCircle className="size-4 text-destructive" />
-          <span className="font-mono text-xs uppercase tracking-wider text-destructive">Error</span>
+          <span className="font-mono text-xs uppercase tracking-wider text-destructive">Fout</span>
         </div>
         <p className="text-sm text-muted-foreground">{error}</p>
       </div>
@@ -201,6 +194,8 @@ export function ReportView({ lang }: Props) {
   const wrongRoleFlags = report.topFlags.filter(f => f.type === "wrong_role")
   const irDevFlags = report.topFlags.filter(f => f.type === "ir_plan_deviation")
   const sortedTimeline = [...timeline].sort((a, b) => a.timestamp - b.timestamp)
+  // Dezelfde scorebespreking als het assessment-rapport en de deelnemer zien.
+  const reviewRounds = session ? decisionReviewItems(session) : []
 
   return (
     <div className="flex flex-col gap-8 print:gap-6">
@@ -218,8 +213,8 @@ export function ReportView({ lang }: Props) {
         </div>
         <p className="text-muted-foreground">{tr(lang, "reportSub")}</p>
         <div className="flex items-center gap-3 mt-1">
-          <span className="font-mono text-xs text-muted-foreground">Session: {report.sessionId}</span>
-          <span className="font-mono text-xs text-muted-foreground">Generated: {new Date(report.generatedAt).toLocaleString()}</span>
+          <span className="font-mono text-xs text-muted-foreground">Sessie: {report.sessionId}</span>
+          <span className="font-mono text-xs text-muted-foreground">Gegenereerd: {new Date(report.generatedAt).toLocaleString("nl-NL")}</span>
           <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary">
             {report.mode === "event" ? tr(lang, "mode_event") : tr(lang, "mode_training")}
           </span>
@@ -258,16 +253,16 @@ export function ReportView({ lang }: Props) {
 
       {/* Score summary */}
       {!report.graphScoring && <section>
-        <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-3">Summary Scores</h2>
+        <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-3">Samenvattende scores</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <ScoreCard label={tr(lang, "decisionQuality")} value={report.scores.decisionQuality} color={scoreColor(report.scores.decisionQuality)} />
           <ScoreCard label={tr(lang, "processAdherence")} value={report.scores.processAdherence} color={scoreColor(report.scores.processAdherence)} />
           <ScoreCard label={tr(lang, "roleCompliance")} value={report.scores.roleCompliance} color={scoreColor(report.scores.roleCompliance)} />
         </div>
         <div className="mt-3 grid grid-cols-3 gap-4 text-center">
-          <p className="text-xs text-muted-foreground">% of decisions that were recommended actions</p>
-          <p className="text-xs text-muted-foreground">% of decisions aligned with IR plan</p>
-          <p className="text-xs text-muted-foreground">% of decisions by authorized role</p>
+          <p className="text-xs text-muted-foreground">% van de keuzes die een aanbevolen actie waren</p>
+          <p className="text-xs text-muted-foreground">% van de keuzes die het IR-plan volgden</p>
+          <p className="text-xs text-muted-foreground">% van de keuzes door een bevoegde rol</p>
         </div>
       </section>}
 
@@ -345,7 +340,7 @@ export function ReportView({ lang }: Props) {
             {wrongRoleFlags.length > 0 && (
               <div className="flex flex-col gap-2">
                 <p className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-orange-600">{wrongRoleFlags.length} action{wrongRoleFlags.length !== 1 ? "s were" : " was"} taken</span> by unauthorized roles.
+                  <span className="font-semibold text-orange-600">{wrongRoleFlags.length} {wrongRoleFlags.length !== 1 ? "acties zijn" : "actie is"}</span> genomen door een rol zonder dat mandaat.
                 </p>
                 <div className="flex flex-col gap-1.5">
                   {wrongRoleFlags.slice(0, 3).map(f => (
@@ -363,7 +358,7 @@ export function ReportView({ lang }: Props) {
             {irDevFlags.length > 0 && (
               <div className="flex flex-col gap-2">
                 <p className="text-sm text-muted-foreground">
-                  <span className="font-semibold text-destructive">{irDevFlags.length} action{irDevFlags.length !== 1 ? "s deviated" : " deviated"}</span> from the IR plan.
+                  <span className="font-semibold text-destructive">{irDevFlags.length} {irDevFlags.length !== 1 ? "acties weken" : "actie week"} af</span> van het IR-plan.
                 </p>
                 <div className="flex flex-col gap-1.5">
                   {irDevFlags.slice(0, 3).map(f => (
@@ -386,60 +381,71 @@ export function ReportView({ lang }: Props) {
       <section>
         <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-3">{tr(lang, "perRoundBreakdown")}</h2>
         <div className="flex flex-col gap-4">
-          {report.perRound.map(round => (
+          {report.perRound.map(round => {
+            const review = reviewRounds.find(r => r.round === round.roundIndex + 1)
+            return (
             <div key={round.roundIndex} className="rounded-xl border border-border bg-card overflow-hidden">
               <div className="border-b border-border px-5 py-3 flex items-center justify-between">
                 <span className="font-mono text-xs text-foreground">R{round.roundIndex + 1} — {round.roundTitle}</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-muted-foreground">{round.decisions.length} decisions</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {round.decisions.length} {round.decisions.length === 1 ? "keuze" : "keuzes"}
+                  </span>
                   {round.flags.length > 0 && (
                     <span className="rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-destructive">
-                      {round.flags.length} flag{round.flags.length !== 1 ? "s" : ""}
+                      {round.flags.length} {round.flags.length === 1 ? "signaal" : "signalen"}
                     </span>
                   )}
                 </div>
               </div>
-              {round.decisions.length === 0 ? (
+              {review && review.entries.length > 0 ? (
+                <div className="p-5 flex flex-col gap-4">
+                  {review.entries.map(entry => (
+                    <div key={entry.key} className="flex flex-col gap-1.5">
+                      {entry.submission && (entry.submission.isWrongRole || entry.submission.isIrDeviation) && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {entry.submission.isWrongRole && (
+                            <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-orange-600">
+                              {tr(lang, "wrongRoleBadge")}
+                            </span>
+                          )}
+                          {entry.submission.isIrDeviation && (
+                            <span className="rounded-full border border-destructive/40 bg-destructive/10 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-destructive">
+                              {tr(lang, "irDeviationBadge")}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {entry.scored ? (
+                        <DecisionReviewCard item={entry.item} />
+                      ) : (
+                        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3">
+                          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Gekozen</p>
+                          <p className="text-sm text-foreground">{entry.item.chosenLabel}</p>
+                          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                            Punten niet vastgesteld — deze optie heeft geen scorevector. Bespreek de gevolgen op de zes dimensies met het team.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : round.decisions.length === 0 ? (
                 <p className="px-5 py-4 text-xs text-muted-foreground">{tr(lang, "noDecisions")}</p>
               ) : (
-                <div className="p-5">
-                  <div className="flex flex-col gap-2">
-                    {round.decisions.map(d => (
-                      <div key={`${d.participantId}-${d.roundIndex}`} className={`flex items-start gap-3 rounded-lg p-3 ${d.isWrongRole || d.isIrDeviation ? "border border-destructive/20 bg-destructive/5" : "border border-border bg-background/50"}`}>
-                        <div className="size-6 rounded-full border border-border bg-background font-mono text-[8px] uppercase text-muted-foreground flex items-center justify-center shrink-0">
-                          {d.participantName.slice(0, 2)}
-                        </div>
-                        <div className="flex flex-col gap-1 flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-sm">{d.participantName}</span>
-                            <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-primary">
-                              {ROLE_META[d.role]?.label ?? d.role}
-                            </span>
-                            {d.isWrongRole && (
-                              <span className="rounded-full border border-orange-500/40 bg-orange-500/10 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-orange-600">
-                                {tr(lang, "wrongRoleBadge")}
-                              </span>
-                            )}
-                            {d.isIrDeviation && (
-                              <span className="rounded-full border border-destructive/40 bg-destructive/10 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-destructive">
-                                {tr(lang, "irDeviationBadge")}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-sm text-foreground">{d.actionLabel}</span>
-                          {session?.graph && <DecisionImpact graph={session.graph} actionId={d.actionId} />}
-                          {d.reasoning && <span className="text-xs text-muted-foreground italic">"{d.reasoning}"</span>}
-                        </div>
-                        {!d.isWrongRole && !d.isIrDeviation && (
-                          <CheckCircle className="size-4 text-primary shrink-0 mt-0.5" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <ul className="p-5 flex flex-col gap-1.5">
+                  {round.decisions.map(d => (
+                    <li key={`${d.participantId}-${d.roundIndex}-${d.actionId}`} className="text-sm">
+                      <span className="font-medium">{d.participantName}</span>
+                      <span className="text-muted-foreground"> ({ROLE_META[d.role]?.label ?? d.role}) — </span>
+                      {d.actionLabel}
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
       </section>
 
@@ -545,7 +551,7 @@ function DownloadReportButton() {
     try {
       const res = await fetch("/api/session/state", { cache: "no-store" })
       const data = await res.json() as { session?: import("@/lib/types").SessionState }
-      if (!data.session) throw new Error("No session data")
+      if (!data.session) throw new Error("Geen sessiegegevens beschikbaar")
       const { downloadReport } = await import("@/lib/report/export")
       downloadReport(data.session)
     } catch (err) {

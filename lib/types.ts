@@ -779,6 +779,10 @@ export interface ActiveDecisionPending {
   qualityRank?: ChoiceQuality
   facilitatorCommentary?: string
   lessonLearned?: string
+  // Ook pas in de review-fase. Vóór de keuze zou dit de scoring verklappen;
+  // in de review is het juist het gesprek: wat deed deze keuze op de zes assen,
+  // en wat zouden de alternatieven hebben gedaan.
+  outcomeVector?: OutcomeVector
 }
 
 // Sequential presentation of pending options for one participant. Enables
@@ -907,6 +911,10 @@ export interface ParticipantClosingChoice {
 export interface ParticipantClosingRound {
   roundNumber: number
   title: string
+  // De beslisvraag van die ronde. Zonder dit veld viel de afronding terug op de
+  // rondetitel, en dan las de deelnemer in stap 7 een andere kop boven dezelfde
+  // keuze dan in stap 6 en in het facilitatorrapport.
+  decisionPrompt?: string
   choices: ParticipantClosingChoice[]
   // Ronde-uitkomst: gemiddelde van de gekozen vectoren, −2..+2 per as. Weg
   // zodra er niets is ingediend — voor zo'n ronde bestaat geen score.

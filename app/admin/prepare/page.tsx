@@ -49,19 +49,6 @@ function SimpleMarkdown({ text }: { text: string }) {
   )
 }
 
-// ─── Dimension label map ──────────────────────────────────────
-
-const DIM_DESCRIPTIONS: Record<string, string> = {
-  decision_speed:       "How quickly does the team reach a formal decision once the inject lands?",
-  decision_quality:     "Are decisions well-reasoned, with trade-offs considered and alternatives rejected?",
-  escalation_timing:    "Does escalation happen at the right moment — not too early, not too late?",
-  mandate_clarity:      "Is the decision owner explicit and the scope of their authority clear?",
-  framework_adherence:  "Does the team consistently apply the chosen decision framework (BOB/OODA)?",
-  dilemma_participation:"Do all roles engage in dilemma votes rather than deferring to a single voice?",
-  communication_clarity:"Are internal and external communications clear, timed, and role-appropriate?",
-  compliance_awareness: "Does Legal/CISO identify regulatory obligations (GDPR/NIS2) without being prompted?",
-}
-
 // ─── Page ────────────────────────────────────────────────────
 
 export default function PreparePage() {
@@ -87,7 +74,7 @@ export default function PreparePage() {
       await api.startSession()
       router.push(targetView)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Start failed")
+      setError(err instanceof Error ? err.message : "Starten mislukt")
       setStarting(false)
     }
   }
@@ -134,7 +121,7 @@ export default function PreparePage() {
               <ArrowLeft className="size-4" />
             </Link>
             <div className="flex flex-col">
-              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Pre-session brief</span>
+              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Briefing vooraf</span>
               <span className="font-mono text-sm text-foreground truncate max-w-[220px]">{session.scenario.scenario_title}</span>
             </div>
           </div>
@@ -144,7 +131,7 @@ export default function PreparePage() {
             className="gap-2 font-mono uppercase tracking-wider"
           >
             <Play className="size-3.5" />
-            {starting ? "Starting…" : "Start session"}
+            {starting ? "Starten…" : "Start de sessie"}
           </Button>
         </div>
       </header>
@@ -160,7 +147,7 @@ export default function PreparePage() {
           <section className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <ShieldAlert className="size-4 text-primary" />
-              <span className="font-mono text-[10px] uppercase tracking-widest text-primary">Exercise goal</span>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-primary">Doel van de oefening</span>
             </div>
             <h1 className="text-xl font-semibold tracking-tight text-foreground">{goal.name}</h1>
             <p className="font-mono text-sm text-muted-foreground leading-relaxed">{goal.description}</p>
@@ -171,7 +158,7 @@ export default function PreparePage() {
         {/* Facilitator guide */}
         {goal?.facilitatorGuide && (
           <section className="flex flex-col gap-3">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Facilitator guide</span>
+            <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Facilitatorhandleiding</span>
             <div className="rounded-xl border border-border bg-card px-5 py-4">
               <SimpleMarkdown text={goal.facilitatorGuide} />
             </div>
@@ -181,7 +168,7 @@ export default function PreparePage() {
         {/* Round-by-round preview */}
         {session.scenario.rounds.length > 0 && (
           <section className="flex flex-col gap-3">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Round preview</span>
+            <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Rondes vooraf bekijken</span>
             <div className="flex flex-col gap-3">
               {session.scenario.rounds.map((round, i) => {
                 const prompts: string[] = []
@@ -203,7 +190,7 @@ export default function PreparePage() {
                       )}
                       {prompts.length > 0 && (
                         <div className="flex flex-col gap-1">
-                          <span className="font-mono text-[8px] uppercase tracking-widest text-primary">Watch for</span>
+                          <span className="font-mono text-[8px] uppercase tracking-widest text-primary">Let op</span>
                           {prompts.map((p, pi) => (
                             <div key={pi} className="flex gap-2 font-mono text-[10px] text-muted-foreground">
                               <span className="text-primary shrink-0">›</span>{p}
@@ -213,7 +200,7 @@ export default function PreparePage() {
                       )}
                       {redFlags.length > 0 && (
                         <div className="flex flex-col gap-1">
-                          <span className="font-mono text-[8px] uppercase tracking-widest text-destructive">Red flags</span>
+                          <span className="font-mono text-[8px] uppercase tracking-widest text-destructive">Valkuilen</span>
                           {redFlags.map((f, fi) => (
                             <div key={fi} className="flex gap-2 font-mono text-[10px] text-muted-foreground">
                               <span className="text-destructive shrink-0">⚠</span>{f}
@@ -232,7 +219,7 @@ export default function PreparePage() {
         {/* Join code — share with participants */}
         <div className="flex flex-col gap-3 rounded-xl border border-primary/40 bg-primary/10 px-6 py-5">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-primary">Join code</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-primary">Deelnamecode</span>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <span className="font-mono text-4xl font-bold tracking-[0.3em] text-primary">
@@ -247,7 +234,7 @@ export default function PreparePage() {
                 } catch { /* ignore */ }
               }}
             >
-              Copy
+              Kopieer
             </Button>
             <a
               href={typeof window !== "undefined" ? `${window.location.origin}/join?code=${session.joinCode}` : `/join?code=${session.joinCode}`}
@@ -255,29 +242,29 @@ export default function PreparePage() {
               rel="noreferrer"
               className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
             >
-              Open /join
+              Deelnemerspagina openen
             </a>
           </div>
           <p className="font-mono text-[11px] text-muted-foreground">
-            Deel deze code met deelnemers. Zij gaan naar <span className="font-mono text-foreground">/join</span>, vullen de code in en kiezen hun rol.
+            Deel deze code met je deelnemers. Zij gaan naar <span className="font-mono text-foreground">/join</span>, vullen de code in en kiezen hun rol.
           </p>
         </div>
 
         {/* Start CTA at bottom */}
         <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 px-6 py-5">
           <p className="font-mono text-xs text-muted-foreground">
-            Share the join code with your team, then start the session when everyone is in the lobby.
+            Deel de deelnamecode met je team en start de sessie zodra iedereen in de lobby staat.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={startSession} disabled={starting} className="gap-2 font-mono uppercase tracking-wider">
               <Play className="size-3.5" />
-              {starting ? "Starting…" : "Start session"}
+              {starting ? "Starten…" : "Start de sessie"}
             </Button>
             <Link
               href="/admin/dashboard"
               className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
             >
-              Go to live view <ChevronRight className="size-3" />
+              Naar het live dashboard <ChevronRight className="size-3" />
             </Link>
           </div>
         </div>

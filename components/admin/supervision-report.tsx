@@ -22,6 +22,22 @@ const SCORE_LABELS: Record<0 | 1 | 2 | 3, string> = {
   3: "Effectief",
 }
 
+// De opgeslagen waarde blijft de Engelse code (die staat in SupervisionReportEdits);
+// alleen wat de facilitator leest is Nederlands.
+const PRIORITY_NL: Record<string, string> = {
+  critical: "kritiek",
+  high: "hoog",
+  medium: "middel",
+  low: "laag",
+}
+
+const STATUS_NL: Record<string, string> = {
+  open: "open",
+  in_progress: "in uitvoering",
+  blocked: "geblokkeerd",
+  closed: "afgerond",
+}
+
 const SCORE_COLORS: Record<0 | 1 | 2 | 3, string> = {
   0: "bg-red-500 text-white",
   1: "bg-yellow-500 text-black",
@@ -120,10 +136,11 @@ export function SupervisionReportView({ organizationName, facilitatorName }: Pro
               <li key={a.area} className="p-2">
                 <details>
                   <summary className="flex cursor-pointer items-center gap-2 text-xs">
-                    <span className={`inline-flex size-6 items-center justify-center rounded-full font-mono text-[11px] ${SCORE_COLORS[a.score]}`}>{a.score}</span>
+                    <span title={SCORE_LABELS[a.score]} className={`inline-flex size-6 items-center justify-center rounded-full font-mono text-[11px] ${SCORE_COLORS[a.score]}`}>{a.score}</span>
+                    <span className="text-[10px] text-muted-foreground">{SCORE_LABELS[a.score]}</span>
                     <span className="font-mono text-muted-foreground">{meta?.numberLabel}.</span>
                     <span className="flex-1">{meta?.label}</span>
-                    <span className="text-[10px] text-muted-foreground">{a.evidence.length} evidence</span>
+                    <span className="text-[10px] text-muted-foreground">{a.evidence.length} {a.evidence.length === 1 ? "bewijsstuk" : "bewijsstukken"}</span>
                   </summary>
                   <div className="mt-2 pl-8 text-[11px] text-muted-foreground">
                     <div className="italic mb-1">{meta?.question}</div>
@@ -176,7 +193,7 @@ export function SupervisionReportView({ organizationName, facilitatorName }: Pro
       </section>
 
       <section>
-        <h3 className="mb-2 font-mono text-xs uppercase text-muted-foreground">Lessons learned</h3>
+        <h3 className="mb-2 font-mono text-xs uppercase text-muted-foreground">Lessons learned (geleerde lessen)</h3>
         <table className="w-full border-collapse text-[11px]">
           <thead>
             <tr className="text-left text-[10px] uppercase text-muted-foreground">
@@ -210,12 +227,12 @@ export function SupervisionReportView({ organizationName, facilitatorName }: Pro
                   <td className="border-b border-border/40 p-1"><Input className="h-6 text-[11px]" value={le.deadline ?? l.deadline} onChange={e => set({ deadline: e.target.value })} placeholder="YYYY-MM-DD" /></td>
                   <td className="border-b border-border/40 p-1">
                     <select value={le.priority ?? l.priority} onChange={e => set({ priority: e.target.value as never })} className="h-6 rounded border border-border bg-background text-[11px]">
-                      {["critical","high","medium","low"].map(v => <option key={v} value={v}>{v}</option>)}
+                      {Object.entries(PRIORITY_NL).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                     </select>
                   </td>
                   <td className="border-b border-border/40 p-1">
                     <select value={le.status ?? l.status} onChange={e => set({ status: e.target.value as never })} className="h-6 rounded border border-border bg-background text-[11px]">
-                      {["open","in_progress","blocked","closed"].map(v => <option key={v} value={v}>{v}</option>)}
+                      {Object.entries(STATUS_NL).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                     </select>
                   </td>
                   <td className="border-b border-border/40 p-1"><Input className="h-6 text-[11px]" value={le.proofOfClosure ?? l.proofOfClosure ?? ""} onChange={e => set({ proofOfClosure: e.target.value })} /></td>
@@ -292,7 +309,7 @@ function renderMarkdown(report: SupervisionReport, edits: SupervisionReportEdits
     }
     lines.push("")
   }
-  lines.push("## Lessons learned")
+  lines.push("## Lessons learned (geleerde lessen)")
   for (const l of report.lessonsLearned) {
     const le = edits.lessonEdits?.[l.id] ?? {}
     lines.push(`- **${l.finding}** — Bewijs: ${l.evidence} — Impact: ${l.impact} — Oorzaak: ${l.cause} — Corrigerende actie: ${le.correctiveAction ?? l.correctiveAction} — Eigenaar: ${le.owner ?? l.owner} — Deadline: ${le.deadline ?? l.deadline} — Status: ${le.status ?? l.status}`)

@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, ShieldAlert } from "lucide-react"
 import type { SessionState, Role } from "@/lib/types"
 import type { RoleBriefing } from "@/lib/graph/types"
 import { ROLE_META } from "@/lib/types"
-import { effectiveRolesForParticipant } from "@/lib/engine/distribute-roles"
+import { rolesForParticipant } from "@/lib/session-roles"
 
 // Phase 3 — the once-per-session opening briefing.
 // Reads session.graph?.roleBriefings — mounted on the play view.
@@ -17,24 +17,24 @@ export function OpeningBriefing({
   session: SessionState
   participantId?: string
 }) {
-  const [expanded, setExpanded] = useState(true)
+  // Ingeklapt beginnen. Sinds onbezette rollen worden overgenomen draagt een
+  // solo-deelnemer alle acht rollen, en uitgeklapt werd stap 1 daarmee 1042
+  // woorden in plaats van 316 — precies de muur tekst die issue #105 wilde
+  // weghalen. Het mandaat van de actieve rol staat al voluit boven dit blok;
+  // de briefing is naslag, geen introductie.
+  const [expanded, setExpanded] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
   const storageKey = participantId ? `tabletop:opening-briefing:${session.id}:${participantId}` : null
 
-  // Effective roles for this participant, in the same order the queue would show them
-  // (primary first, then inherited).
-  const rolesInOrder: Role[] = useMemo(() => {
-    if (!participantId) return []
-    const entry = session.roleDistribution?.entries.find(e => e.participantId === participantId)
-    if (!entry) {
-      // Fallback to the participant's role if no distribution.
-      const p = session.participants.find(p => p.id === participantId)
-      return p?.role ? [p.role] : []
-    }
-    const overrides = session.roleAssignmentOverrides?.[participantId]
-    return effectiveRolesForParticipant(entry, overrides)
-  }, [session, participantId])
+  // De rollen van deze deelnemer, geclaimde rol eerst. Komt uit
+  // `rolesForParticipant()`: dat is de enige bron waar de serverstate bovenaan
+  // de keten staat, zodat een oudere rolverdeling een verse claim niet
+  // overschrijft (issue #105 §1).
+  const rolesInOrder: Role[] = useMemo(
+    () => rolesForParticipant(session, participantId)?.all ?? [],
+    [session, participantId],
+  )
 
   const briefings = session.graph?.roleBriefings
 

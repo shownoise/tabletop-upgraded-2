@@ -1,7 +1,7 @@
 import type { DecisionNodeData, GraphNode } from "./graph/types"
 import type { Role, RoundPhase, SessionState } from "./types"
 import { ROLE_META } from "./types"
-import { effectiveRolesForParticipant } from "./engine/distribute-roles"
+import { coveredRoles, roleCoverage, roleCoverageInUse } from "./session-roles"
 import { nextPhase } from "./engine/round-phases"
 
 // Client-safe, pure. No DB, no crypto, no fs imports — safe to bundle into
@@ -82,71 +82,79 @@ export function currentDecisionNode(session: SessionState): GraphNode | undefine
         .find(n => n?.type === 'decision')
 }
 
-export function missingEventDecisionAssignments(session: SessionState): Array<{ groupId?: string; role: Role }> {
+// Waarom een rol geen besluit heeft. Draagt het verschil dat de review moet
+// kunnen tonen: niemand speelde de rol, versus wel gespeeld en niet ingediend.
+export type UnsubmittedReason = 'onbezet' | 'niet_ingediend'
+
+export interface UnsubmittedAssignment {
+  groupId?: string
+  role: Role
+  reason: UnsubmittedReason
+}
+
+// Alle (team, rol)-paren op het actuele beslispunt zonder inzending, mét reden.
+// Één afleiding voor beide modi, zodat de "nog wachten op"-teller van de
+// facilitator en de impliciete afronding niet uit elkaar kunnen lopen.
+export function unsubmittedDecisionAssignments(session: SessionState): UnsubmittedAssignment[] {
   const decisionNode = currentDecisionNode(session)
   if (!decisionNode) return []
   const dd = decisionNode.data as DecisionNodeData
   if (dd.perRole !== true) return []
-  const roles = [...new Set(dd.options
+
+  const owning = [...new Set(dd.options
+    // Een impliciete of nog niet vrijgespeelde optie is niet kiesbaar, dus een
+    // rol die alléén zo'n optie bezit is nooit iets verschuldigd — niemand zou
+    // hem ooit kunnen afronden.
     .filter(option => !option.implicit && (!option.requiresCapability || session.flags?.[option.requiresCapability]))
     .map(option => option.allowedRole)
     .filter((role): role is Role => !!role))]
+  if (owning.length === 0) return []
+
+  // Event-modus met een teamdevice: één tablet per team, niemand claimt een rol
+  // en dat device dient namens álle rollen in. Dekking is daar een eigenschap
+  // van het team, niet van een persoon — anders was er nooit iets verschuldigd.
+  // Zodra er in dat team wél iemand een rol claimt, geldt de echte dekking.
+  const teamConsole = session.mode === 'event' && !roleCoverageInUse(session)
+  const covered = teamConsole ? new Set(owning) : coveredRoles(session)
+  const ownerOf = new Map(roleCoverage(session).map(c => [c.role, c.participantId]))
+  const allOptionIds = new Set(dd.options.map(option => option.id))
   const implicitIds = new Set(dd.options.filter(option => option.implicit).map(option => option.id))
-  const units = session.groups?.length ? session.groups.map(group => group.id) : [undefined]
-  const missing: Array<{ groupId?: string; role: Role }> = []
+  const units = session.mode === 'event' && session.groups?.length
+    ? session.groups.map(group => group.id)
+    : [undefined]
+
+  const out: UnsubmittedAssignment[] = []
   for (const groupId of units) {
-    for (const role of roles) {
-      const optionIds = new Set(dd.options.filter(option => option.allowedRole === role).map(option => option.id))
-      const submitted = (session.submittedDecisions ?? []).some(decision =>
-        decision.roundIndex === session.currentRound && decision.role === role &&
-        (optionIds.has(decision.actionId) || implicitIds.has(decision.actionId)) && decision.groupId === groupId,
-      )
-      if (!submitted) missing.push({ groupId, role })
+    for (const role of owning) {
+      const roleOptionIds = new Set(dd.options.filter(option => option.allowedRole === role).map(option => option.id))
+      const submitted = (session.submittedDecisions ?? []).some(decision => {
+        if (decision.roundIndex !== session.currentRound) return false
+        if (decision.role !== role) return false
+        if (session.mode === 'event') {
+          return decision.groupId === groupId
+            && (roleOptionIds.has(decision.actionId) || implicitIds.has(decision.actionId))
+        }
+        if (!allOptionIds.has(decision.actionId)) return false
+        // finalizeDecision legt een onbeantwoorde rol vast als participantId
+        // 'IMPLICIT'. Dat sluit de rol af voor wie hem ook bezat, dus het moet
+        // hier meetellen, anders is de ronde nooit te verlaten.
+        return decision.participantId === 'IMPLICIT' || decision.participantId === ownerOf.get(role)
+      })
+      if (submitted) continue
+      out.push({ groupId, role, reason: covered.has(role) ? 'niet_ingediend' : 'onbezet' })
     }
   }
-  return missing
+  return out
+}
+
+// Alleen de paren die de ronde écht tegenhouden. Een rol die niemand dekt staat
+// hier niet in: die kan niet indienen en blokkeert dus niets (#105 §2).
+export function missingEventDecisionAssignments(session: SessionState): Array<{ groupId?: string; role: Role }> {
+  return unsubmittedDecisionAssignments(session)
+    .filter(assignment => assignment.reason === 'niet_ingediend')
+    .map(({ groupId, role }) => ({ groupId, role }))
 }
 
 export function missingDecisionRoles(session: SessionState): Role[] {
-  const decisionNode = currentDecisionNode(session)
-  if (!decisionNode) return []
-  const dd = decisionNode.data as DecisionNodeData
-  if (dd.perRole !== true) return []
-
-  if (session.mode === 'event') {
-    return missingEventDecisionAssignments(session).map(assignment => assignment.role)
-  }
-
-  const dist = session.roleDistribution
-  if (!dist) return []
-  const overrides = session.roleAssignmentOverrides ?? {}
-  const rolesRequired = new Set<Role>()
-  const optionIds = new Set<string>()
-  for (const opt of dd.options) {
-    optionIds.add(opt.id)
-    // Mirror the event-mode filter above: a participant cannot pick an implicit
-    // or capability-gated option, so a role whose only option is one of those
-    // must not be counted as owing a decision — nobody could ever clear it.
-    if (opt.implicit) continue
-    if (opt.requiresCapability && !session.flags?.[opt.requiresCapability]) continue
-    if (opt.allowedRole) rolesRequired.add(opt.allowedRole)
-  }
-  const missing: Role[] = []
-  for (const entry of dist.entries) {
-    const roles = effectiveRolesForParticipant(entry, overrides[entry.participantId])
-    for (const r of roles) {
-      if (!rolesRequired.has(r)) continue
-      const submittedForRole = (session.submittedDecisions ?? []).some(d =>
-        d.roundIndex === session.currentRound
-        && d.role === r
-        && optionIds.has(d.actionId)
-        // finalizeDecision records an unanswered role as participantId
-        // 'IMPLICIT' (session-store.ts:1337). That settles the role for whoever
-        // owned it, so it has to count here or the round can never be left.
-        && (d.participantId === entry.participantId || d.participantId === 'IMPLICIT'),
-      )
-      if (!submittedForRole) missing.push(r)
-    }
-  }
-  return [...new Set(missing)]
+  return [...new Set(missingEventDecisionAssignments(session).map(assignment => assignment.role))]
 }

@@ -559,6 +559,136 @@ export function ruleLanguageConsistency(graph: ScenarioGraph): RuleResult {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Rule 13 — de situatieschets mag de injects van dezelfde ronde niet verklappen
+//
+// WAAROM: de rondeheader is het enige dat alle rollen tegelijk lezen. Staat
+// daar al in wat de injects straks brengen, dan is de onderzoeksvraag weg —
+// niemand hoeft nog iets te ontdekken en rolgericht uitvragen heeft geen zin.
+// De schets hoort kort en algemeen te zijn (waar staan we, hoeveel tijd is
+// verstreken, wat is de stand van zaken) plus één expliciete beslisvraag.
+//
+// Hoe we het meten — deterministisch, uitlegbaar, geen AI:
+//   1. Letterlijk fragment: een reeks van VERBATIM_WINDOW opeenvolgende woorden
+//      die zowel in de schets als in één inject van dezelfde ronde staat.
+//   2. Inject-eigen woord: een woord van minstens DISTINCTIVE_MIN_LENGTH
+//      letters dat in precies één inject van die ronde voorkomt. Woorden die in
+//      meerdere injects staan zijn de gedeelde taal van de ronde en zeggen
+//      niets. Deelt de schets DISTINCTIVE_SHARED_LIMIT of meer inject-eigen
+//      woorden met dezelfde inject, dan vertelt de schets die inject vooruit.
+//
+// Beide drempels zijn bewust ruim: twee of drie gedeelde namen (de klant, de
+// MSP, het kernsysteem) horen in een algemene schets. Een halve inject
+// overschrijven niet. Dit is een WAARSCHUWING, geen blokkade — de drempel is
+// een heuristiek en de auteur mag hem beargumenteerd negeren.
+// ───────────────────────────────────────────────────────────────────────────
+
+const VERBATIM_WINDOW = 5
+const DISTINCTIVE_MIN_LENGTH = 7
+const DISTINCTIVE_SHARED_LIMIT = 4
+
+// Accenten eerst wegstrippen, anders breekt "coördinator" in twee woorden en
+// matcht hij nooit met zijn eigen voorkomen in een inject.
+function overlapWords(text: string): string[] {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+function wordWindows(words: string[], size: number): Set<string> {
+  const out = new Set<string>()
+  for (let i = 0; i + size <= words.length; i++) out.add(words.slice(i, i + size).join(' '))
+  return out
+}
+
+export interface SituationOverlapFinding {
+  injectTitle: string
+  /** Gedeelde woordreeksen van VERBATIM_WINDOW woorden — letterlijk overgeschreven. */
+  verbatim: string[]
+  /** Inject-eigen woorden die ook in de situatieschets staan. */
+  sharedTerms: string[]
+}
+
+/**
+ * Overlap tussen één situatieschets en de injects van diezelfde ronde.
+ * Geeft per inject een bevinding terug zodra die boven de drempel komt.
+ * Leeg = de schets verklapt niets.
+ */
+export function situationInjectOverlap(
+  situation: string,
+  injects: Array<{ title?: string; content?: string }>,
+): SituationOverlapFinding[] {
+  const situationWords = overlapWords(situation)
+  if (situationWords.length === 0 || injects.length === 0) return []
+  const situationWindows = wordWindows(situationWords, VERBATIM_WINDOW)
+  const situationWordSet = new Set(situationWords)
+
+  const perInject = injects.map(i => new Set(overlapWords(`${i.title ?? ''} ${i.content ?? ''}`)))
+  const injectsPerWord = new Map<string, number>()
+  for (const set of perInject) {
+    for (const word of set) {
+      if (word.length < DISTINCTIVE_MIN_LENGTH) continue
+      injectsPerWord.set(word, (injectsPerWord.get(word) ?? 0) + 1)
+    }
+  }
+
+  const findings: SituationOverlapFinding[] = []
+  injects.forEach((inject, idx) => {
+    const words = overlapWords(`${inject.title ?? ''} ${inject.content ?? ''}`)
+    const verbatim = [...wordWindows(words, VERBATIM_WINDOW)].filter(w => situationWindows.has(w)).sort()
+    const sharedTerms = [...perInject[idx]]
+      .filter(w => w.length >= DISTINCTIVE_MIN_LENGTH && injectsPerWord.get(w) === 1 && situationWordSet.has(w))
+      .sort()
+    if (verbatim.length > 0 || sharedTerms.length >= DISTINCTIVE_SHARED_LIMIT) {
+      findings.push({ injectTitle: inject.title?.trim() || `inject ${idx + 1}`, verbatim, sharedTerms })
+    }
+  })
+  return findings
+}
+
+export interface RoundSpoilerReport {
+  roundNumber: number
+  nodeId: string
+  findings: SituationOverlapFinding[]
+}
+
+/** Alle rondes waarvan de situatieschets haar eigen injects vooruitvertelt. */
+export function roundsRevealingInjects(graph: ScenarioGraph): RoundSpoilerReport[] {
+  const reports: RoundSpoilerReport[] = []
+  for (const r of orderedRounds(graph)) {
+    const injects = injectsInRound(graph, r.roundNumber).map(n => ({
+      title: n.data.title,
+      content: n.data.content,
+    }))
+    const findings = situationInjectOverlap(r.node.data.situation_update ?? '', injects)
+    if (findings.length > 0) reports.push({ roundNumber: r.roundNumber, nodeId: r.node.id, findings })
+  }
+  return reports
+}
+
+export function ruleSituationDoesNotRevealInjects(graph: ScenarioGraph): RuleResult {
+  const reports = roundsRevealingInjects(graph)
+  if (reports.length === 0) return { ok: true }
+  const problems = reports.flatMap(report =>
+    report.findings.map(f => {
+      const why = f.verbatim.length > 0
+        ? `letterlijk fragment "${f.verbatim[0]}"`
+        : `${f.sharedTerms.length} inject-eigen woorden (${f.sharedTerms.slice(0, 5).join(', ')})`
+      return `ronde ${report.roundNumber} verklapt "${f.injectTitle}" — ${why}`
+    }),
+  )
+  return {
+    ok: false,
+    violation: `Situatieschets vertelt injects vooruit: ${problems.slice(0, 6).join('; ')}${problems.length > 6 ? ` (+${problems.length - 6} meer)` : ''}`,
+    hint: 'Maak de situation_update van de genoemde ronde een korte algemene introductie van maximaal 3 à 4 zinnen: waar staan we, hoeveel tijd is verstreken, wat is de algemene stand van zaken, en welke beslisvraag ligt aan het einde van deze ronde op tafel. Geen rol-specifieke feiten, geen namen of signalen die een inject van deze ronde nog moet brengen — die horen in de inject zelf.',
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Aggregate
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -581,6 +711,7 @@ const RULES: Array<{ id: string; fn: (g: ScenarioGraph, c: WizardConfig) => Rule
   { id: 'rule10_facilitator_guidance',  fn: (g)     => ruleFacilitatorGuidanceExists(g) },
   { id: 'rule11_hidden_weakness',       fn: (g)     => ruleHiddenWeaknessAuthored(g) },
   { id: 'rule12_language_consistency',  fn: (g)     => ruleLanguageConsistency(g) },
+  { id: 'rule13_situation_no_spoiler',  fn: (g)     => ruleSituationDoesNotRevealInjects(g) },
 ]
 
 export function validateFramework(graph: ScenarioGraph, config: WizardConfig): FrameworkResult {

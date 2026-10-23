@@ -1,4 +1,4 @@
-import { scoreExerciseByGroup, type ScoringOutput } from "./scoring"
+import { scoreDenominator, scoreExerciseByGroup, type ScoringOutput } from "./scoring"
 import { sessionToScoringInput } from "./scoring/graph-adapter"
 import type { OutcomeVector } from "./graph/types"
 import { ROLE_META } from "./types"
@@ -42,6 +42,20 @@ export function buildParticipantClosing(session: SessionState, participantId: st
     }
   }
 
+  // Beslisvraag per rondenummer. De adapter kent per beslispunt het
+  // rondenummer, en het id van een beslispunt is het node-id van de
+  // decision-node — in event-modus met `::rol` erachter, die knippen we eraf.
+  const promptByRound = new Map<number, string>()
+  const nodeById = new Map((session.graph?.nodes ?? []).map(n => [n.id, n]))
+  for (const dp of input?.scenario.decisionPoints ?? []) {
+    if (promptByRound.has(dp.round)) continue
+    const node = nodeById.get(dp.id.split("::")[0])
+    const prompt = node?.type === "decision"
+      ? (node.data as { prompt?: string }).prompt
+      : undefined
+    if (prompt) promptByRound.set(dp.round, prompt)
+  }
+
   const rounds: ParticipantClosingRound[] = session.scenario.rounds.map((round, i) => {
     const outcome = mine?.outcomes.find(o => o.round === i + 1)
     const choices: ParticipantClosingChoice[] = myDecisions
@@ -58,6 +72,7 @@ export function buildParticipantClosing(session: SessionState, participantId: st
     return {
       roundNumber: i + 1,
       title: round.title,
+      ...(promptByRound.get(i + 1) ? { decisionPrompt: promptByRound.get(i + 1) } : {}),
       choices,
       ...(outcome?.hasSubmissions
         ? { perDimension: outcome.perDimension, points: outcome.points }
@@ -65,7 +80,12 @@ export function buildParticipantClosing(session: SessionState, participantId: st
     }
   })
 
-  const scoredRounds = (mine?.outcomes ?? []).filter(o => o.hasSubmissions)
+  // De noemer komt uit dezelfde helper als het facilitatorrapport. Dit stond
+  // hier eerder als `scoredRounds.length * 100` — dat telt alleen rondes waarin
+  // het team wél iets indiende, dus een gemiste ronde maakte de score juist
+  // mooier. Issue #105 eist dat deelnemer, facilitator en rapport exact dezelfde
+  // noemer tonen, dus mag er maar één implementatie van die regel bestaan.
+  const denom = input ? scoreDenominator(input.scenario, mine?.outcomes ?? [], mine?.totalPoints ?? 0) : null
   const groups = session.groups ?? []
   const standings = groups
     .filter(g => perGroup[g.id])
@@ -74,10 +94,10 @@ export function buildParticipantClosing(session: SessionState, participantId: st
 
   return {
     rounds,
-    ...(mine && scoredRounds.length > 0
+    ...(mine && denom && !denom.nothingToScore
       ? {
           totalPoints: mine.totalPoints,
-          maxPoints: scoredRounds.length * 100,
+          maxPoints: denom.maxPoints,
           scoringVersion: mine.scoringVersion,
         }
       : {}),
