@@ -28,7 +28,10 @@ export { computeRoundOutcome, cumulativeOutcome } from './outcome-round'
 export { buildLeaderboard, divergenceOverGroups } from './points'
 export type { LeaderboardEntry } from './points'
 export { scoreExercise, scoreExerciseByGroup } from './score-exercise'
-export { scorableRounds, scoreDenominator, POINTS_PER_ROUND, NOTHING_TO_SCORE_NL } from './denominator'
+export {
+  scorableRounds, scoreDenominator, denominatorFromReport,
+  POINTS_PER_ROUND, NOTHING_TO_SCORE_NL,
+} from './denominator'
 export type { ScoreDenominator } from './denominator'
 export {
   DIMENSION_META, DIMENSION_ORDER, dimensionImpact, dimensionImpacts,
@@ -36,6 +39,7 @@ export {
 } from './dimensions'
 export type { DimensionImpact, DimensionMeta, ImpactDirection, OutcomeVectorLike } from './dimensions'
 export { decisionReviewItems } from './decision-review'
+export type { DecisionReviewEntry, DecisionReviewRound } from './decision-review'
 export { referenceExercise, REFERENCE_EXPECTED } from './reference-case'
 export {
   isValidTransition, canForceLock, computeImplicitSubmissionsAtLock,

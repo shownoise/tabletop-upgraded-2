@@ -551,7 +551,7 @@ function DownloadReportButton() {
     try {
       const res = await fetch("/api/session/state", { cache: "no-store" })
       const data = await res.json() as { session?: import("@/lib/types").SessionState }
-      if (!data.session) throw new Error("No session data")
+      if (!data.session) throw new Error("Geen sessiegegevens beschikbaar")
       const { downloadReport } = await import("@/lib/report/export")
       downloadReport(data.session)
     } catch (err) {

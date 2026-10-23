@@ -5,27 +5,19 @@ import Link from "next/link"
 import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
 } from "recharts"
-import type { AssessmentReport, ScoringOutput } from "@/lib/scoring"
-import { OUTCOME_DIMENSIONS, type OutcomeDimension } from "@/lib/scoring"
+import type { AssessmentReport, DecisionReviewRound, ScoringOutput } from "@/lib/scoring"
+import { DIMENSION_META, NOTHING_TO_SCORE_NL, OUTCOME_DIMENSIONS, denominatorFromReport, type OutcomeDimension } from "@/lib/scoring"
+import { DecisionReviewCard, DimensionImpactList } from "@/components/shared/decision-review-card"
 
-// Full Dutch labels for the spider chart axes.
-const DIM_LABEL: Record<OutcomeDimension, string> = {
-  CONT: "Containment",
-  FOR:  "Forensische positie",
-  BC:   "Bedrijfscontinuïteit",
-  JUR:  "Juridisch & meldplicht",
-  VER:  "Verantwoording & communicatie",
-  KOS:  "Kosten & schade",
-}
+// Geen eigen labelmapping: de namen van de zes dimensies komen uit
+// lib/scoring/dimensions.ts, zodat deelnemer, facilitator en rapport exact
+// dezelfde termen gebruiken (eis uit issue #105).
+const dimLabel = (d: OutcomeDimension): string => DIMENSION_META[d].label
 
-const DIM_LABEL_SHORT: Record<OutcomeDimension, string> = {
-  CONT: "Containment",
-  FOR:  "Forensiek",
-  BC:   "Continuïteit",
-  JUR:  "Juridisch",
-  VER:  "Comms",
-  KOS:  "Kosten",
-}
+// De mini-spiders per ronde hebben geen ruimte voor "Verantwoording &
+// communicatie". Afgekort uit hetzelfde label in plaats van een tweede
+// handmatige lijst met afkortingen.
+const dimAxisLabel = (d: OutcomeDimension): string => DIMENSION_META[d].label.split(" & ")[0]
 
 export interface AssessmentReportViewProps {
   sessionMeta: {
@@ -46,6 +38,9 @@ export interface AssessmentReportViewProps {
   }>
   report: AssessmentReport
   scoring: ScoringOutput
+  // Dezelfde scorebespreking die de deelnemer en het facilitator-rapport zien.
+  // Server-side opgebouwd met decisionReviewItems(session).
+  reviewRounds: DecisionReviewRound[]
   regulatory: {
     regime: { authorityLabel: string; obligation: string } | null
     obligations: Array<{
@@ -60,12 +55,15 @@ export interface AssessmentReportViewProps {
 }
 
 export function AssessmentReportView(props: AssessmentReportViewProps) {
-  const { sessionMeta, participants, report, scoring, regulatory, retainer } = props
+  const { sessionMeta, participants, report, scoring, reviewRounds, regulatory, retainer } = props
 
   const teamVector = report.spider.team
   const totalPoints = report.totalPoints
-  const maxPoints = report.outcomes.length * 100
-  const scorePct = maxPoints > 0 ? Math.round((totalPoints / maxPoints) * 100) : 0
+  // De noemer komt uit het rapport, niet uit `outcomes.length`. Dat laatste
+  // telde ook rondes mee die nooit gespeeld zijn of geen beslismoment hadden —
+  // daar kwam de "0 van 600" uit de live test vandaan (issue #105).
+  const denom = denominatorFromReport(report)
+  const scorableCount = denom.rounds.length
 
   // Executive summary — pick strongest and weakest dimension by absolute value.
   const dimEntries = OUTCOME_DIMENSIONS.map(d => ({ dim: d, value: teamVector[d] }))
@@ -73,29 +71,45 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
   const strongest = sortedByValue[0]
   const weakest = sortedByValue[sortedByValue.length - 1]
 
-  const execSentences = [
-    `Het team scoorde ${totalPoints} van ${maxPoints} punten (${scorePct}%).`,
-    strongest.value !== 0
-      ? `De sterkste dimensie was ${DIM_LABEL[strongest.dim]} (${strongest.value >= 0 ? "+" : ""}${strongest.value.toFixed(1)}).`
-      : `Alle dimensies liggen dicht bij nul — geen duidelijke uitschieter naar boven.`,
-    weakest.value !== strongest.value
-      ? `De zwakste dimensie was ${DIM_LABEL[weakest.dim]} (${weakest.value >= 0 ? "+" : ""}${weakest.value.toFixed(1)}).`
-      : "",
-    scoring.droppedOptionalDecisions.length > 0
-      ? `${scoring.droppedOptionalDecisions.length} optionele beslispunt(en) zijn vervallen door te weinig rolscheiding.`
-      : `Alle beslispunten zijn gescoord.`,
-  ].filter(Boolean)
+  const execSentences = (denom.nothingToScore
+    ? [
+        NOTHING_TO_SCORE_NL,
+        scorableCount > 0
+          ? `Er ${scorableCount === 1 ? "lag één beslismoment" : `lagen ${scorableCount} beslismomenten`} klaar waarop nog niemand heeft gekozen.`
+          : `In de gespeelde rondes lag nog geen beslismoment.`,
+      ]
+    : [
+        `Het team scoorde ${totalPoints} van ${denom.maxPoints} punten (${denom.percentage}%) over ${scorableCount === 1 ? "één gespeelde ronde" : `${scorableCount} gespeelde rondes`} met een beslismoment.`,
+        denom.measuredRounds.length < scorableCount
+          ? `In ${scorableCount - denom.measuredRounds.length} van die rondes is niets ingediend; die tellen als nul punten mee.`
+          : "",
+        strongest.value !== 0
+          ? `De sterkste dimensie was ${dimLabel(strongest.dim)} (${strongest.value >= 0 ? "+" : ""}${strongest.value.toFixed(1)}).`
+          : `Alle dimensies liggen dicht bij nul — geen duidelijke uitschieter naar boven.`,
+        weakest.value !== strongest.value
+          ? `De zwakste dimensie was ${dimLabel(weakest.dim)} (${weakest.value >= 0 ? "+" : ""}${weakest.value.toFixed(1)}).`
+          : "",
+        scoring.droppedOptionalDecisions.length > 0
+          ? `${scoring.droppedOptionalDecisions.length} optionele beslispunt(en) zijn vervallen door te weinig rolscheiding.`
+          : `Alle beslispunten zijn gescoord.`,
+      ]
+  ).filter(Boolean)
 
   // Team spider chart data — cumulative team vector + ideal profile at value 2.
+  // Het ideaal loopt over de rondes die punten konden opleveren, zodat de
+  // referentielijn niet uitrekt door rondes die buiten de noemer vallen.
+  const idealPerDimension = 2 * scorableCount
   const teamRadar = OUTCOME_DIMENSIONS.map(d => ({
-    axis: DIM_LABEL[d],
+    axis: dimLabel(d),
     team: Number(teamVector[d].toFixed(2)),
-    ideal: 2 * report.outcomes.length,
+    ideal: idealPerDimension,
   }))
 
-  // Scale radial axis to fit both data + ideal.
+  // Scale radial axis to fit both data + ideal. Minimaal 1, anders valt de as
+  // samen tot één punt in een sessie zonder scoorbare ronde.
   const radarMax = Math.max(
-    2 * report.outcomes.length,
+    idealPerDimension,
+    1,
     ...OUTCOME_DIMENSIONS.map(d => Math.abs(teamVector[d])),
   )
   const radarMin = Math.min(0, ...OUTCOME_DIMENSIONS.map(d => teamVector[d]))
@@ -224,16 +238,11 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
                 </RadarChart>
               </ResponsiveContainer>
             </div>
-            <ul className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-xs md:grid-cols-3">
-              {OUTCOME_DIMENSIONS.map(d => (
-                <li key={d} className="flex justify-between">
-                  <span className="text-muted-foreground">{DIM_LABEL[d]}</span>
-                  <span className="font-mono tabular-nums">
-                    {teamVector[d] >= 0 ? "+" : ""}{teamVector[d].toFixed(2)}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            {/* Richting + uitleg + getal per dimensie, uit dezelfde bron als de
+                deelnemer ziet. Geen eigen balkjes of afkortingen meer. */}
+            <div className="mt-4">
+              <DimensionImpactList vector={teamVector} />
+            </div>
           </div>
         </section>
 
@@ -243,11 +252,14 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {report.spider.perDimensionAcrossRounds.map(({ round, vector }) => {
               const data = OUTCOME_DIMENSIONS.map(d => ({
-                axis: DIM_LABEL_SHORT[d],
+                axis: dimAxisLabel(d),
                 value: Number(vector[d].toFixed(2)),
               }))
               const outcome = report.outcomes.find(o => o.round === round)
               const submitted = outcome?.hasSubmissions
+              // Een ronde buiten de noemer kon geen punten opleveren; dan is
+              // "0 pt" misleidend in plaats van informatief.
+              const counts = denom.rounds.includes(round)
               return (
                 <div key={round} className="rounded-xl border border-border bg-card p-4 flex flex-col gap-2 avoid-break">
                   <div className="flex items-baseline justify-between">
@@ -255,7 +267,10 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
                       Ronde {round}
                     </span>
                     <span className={`font-mono text-xs tabular-nums ${submitted ? "text-foreground" : "text-muted-foreground/60"}`}>
-                      {outcome?.points ?? 0} pt
+                      {/* Zonder inzending telt de ronde als nul in totalPoints;
+                          de 50 "neutrale" punten uit computeRoundOutcome zouden
+                          hier een score suggereren die niet is verdiend. */}
+                      {counts ? `${submitted ? outcome?.points ?? 0 : 0} van 100 pt` : "telt niet mee"}
                     </span>
                   </div>
                   <div className="print-mini-chart" style={{ width: "100%", height: 200 }}>
@@ -275,7 +290,11 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
                     </ResponsiveContainer>
                   </div>
                   {!submitted && (
-                    <p className="text-[10px] italic text-muted-foreground">Geen inzendingen — fallback-vector</p>
+                    <p className="text-[10px] italic text-muted-foreground">
+                      {counts
+                        ? "Niemand heeft gekozen — de gevolgen hieronder zijn die van niets doen."
+                        : "Deze ronde had geen beslismoment en telt niet mee in de score."}
+                    </p>
                   )}
                 </div>
               )
@@ -283,7 +302,44 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
           </div>
         </section>
 
-        {/* 5. Timing narrative */}
+        {/* 5. Scorebespreking per beslisvraag — zelfde kaart als deelnemer en
+            facilitator zien, dus dezelfde dimensienamen en dezelfde reden bij
+            "geen besluit". */}
+        {reviewRounds.length > 0 && (
+          <section>
+            <h2 className="font-mono text-xs uppercase tracking-widest text-primary mb-2">
+              Scorebespreking per beslisvraag
+            </h2>
+            <div className="flex flex-col gap-6">
+              {reviewRounds.map(reviewRound => (
+                <div key={reviewRound.round} className="flex flex-col gap-3">
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Ronde {reviewRound.round}
+                    {reviewRound.title ? ` — ${reviewRound.title}` : ""}
+                  </p>
+                  {reviewRound.entries.map(entry =>
+                    entry.scored ? (
+                      <div key={entry.key} className="avoid-break">
+                        <DecisionReviewCard item={entry.item} />
+                      </div>
+                    ) : (
+                      <div key={entry.key} className="avoid-break rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3">
+                        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Gekozen</p>
+                        <p className="text-sm text-foreground">{entry.item.chosenLabel}</p>
+                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                          Punten niet vastgesteld — deze optie heeft geen scorevector. Bespreek de gevolgen op de zes
+                          dimensies met het team.
+                        </p>
+                      </div>
+                    ),
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* 6. Timing narrative */}
         <section className="avoid-break">
           <h2 className="font-mono text-xs uppercase tracking-widest text-primary mb-2">
             Timing — meldplicht &amp; IR-retainer
@@ -341,7 +397,7 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
           </div>
         </section>
 
-        {/* 6. Per-participant table */}
+        {/* 7. Per-participant table */}
         <section className="avoid-break">
           <h2 className="font-mono text-xs uppercase tracking-widest text-primary mb-2">Per deelnemer</h2>
           <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -375,7 +431,7 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
           </div>
         </section>
 
-        {/* 7. Dropped optional decisions */}
+        {/* 8. Dropped optional decisions */}
         {scoring.droppedOptionalDecisions.length > 0 && (
           <section className="avoid-break">
             <h2 className="font-mono text-xs uppercase tracking-widest text-primary mb-2">Vervallen optionele beslispunten</h2>

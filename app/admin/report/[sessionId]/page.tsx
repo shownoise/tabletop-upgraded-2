@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation"
 import { getState } from "@/lib/session-store"
 import { sessionToScoringInput } from "@/lib/scoring/graph-adapter"
-import { buildAssessmentReport, scoreExercise } from "@/lib/scoring"
+import { buildAssessmentReport, decisionReviewItems, scoreExercise } from "@/lib/scoring"
 import { applyRegulatoryAdjustment } from "@/lib/regulatory/scoring-adjustment"
 import { ROLE_META } from "@/lib/types"
 import { AssessmentReportView } from "@/components/admin/assessment-report-view"
@@ -92,6 +92,7 @@ export default async function AssessmentReportPage({
       }))}
       report={report}
       scoring={scoring}
+      reviewRounds={decisionReviewItems(session)}
       regulatory={{
         regime: regime ? {
           authorityLabel: regime.authorityLabel,

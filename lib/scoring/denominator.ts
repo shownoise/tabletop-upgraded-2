@@ -52,6 +52,34 @@ export function scoreDenominator(
   }
 }
 
+// Dezelfde noemer, maar vanuit een al berekend rapport.
+//
+// Waarom een tweede ingang: een weergave heeft geen `ScenarioSpec` bij de hand,
+// en `applyRegulatoryAdjustment()` kan ronde-rijen aan `outcomes` toevoegen voor
+// een meldplicht-verzuim in een ronde die nooit een beslismoment had. Zo'n rij
+// mag de noemer niet laten groeien. De noemer is daarom al vastgesteld in het
+// rapport (`scorableRounds` / `maxPoints`); hier wordt alleen nog geteld welke
+// van die rondes werkelijk een inzending hadden.
+export function denominatorFromReport(report: {
+  outcomes: RoundOutcome[]
+  scorableRounds: number[]
+  maxPoints: number
+  totalPoints: number
+}): ScoreDenominator {
+  const scorable = new Set(report.scorableRounds)
+  const measured = report.outcomes.filter(o => scorable.has(o.round) && o.hasSubmissions)
+  const nothingToScore = measured.length === 0
+  return {
+    rounds: [...report.scorableRounds],
+    maxPoints: report.maxPoints,
+    measuredRounds: measured.map(o => o.round),
+    nothingToScore,
+    percentage: nothingToScore || report.maxPoints === 0
+      ? null
+      : Math.round((report.totalPoints / report.maxPoints) * 100),
+  }
+}
+
 // Eén regel voor alle rapportweergaven, zodat deelnemer, facilitator en rapport
 // hetzelfde lezen als er nog niets gescoord kan worden.
 export const NOTHING_TO_SCORE_NL =

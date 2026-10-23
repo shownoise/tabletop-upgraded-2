@@ -24,7 +24,7 @@ export async function GET(req: Request) {
 
   const state = await getState()
   if (!state.session) {
-    return NextResponse.json({ error: 'no active session' }, { status: 404 })
+    return NextResponse.json({ error: 'Geen actieve sessie.' }, { status: 404 })
   }
   const url = new URL(req.url)
   const format = url.searchParams.get('format') ?? 'json'
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
 
   const input = sessionToScoringInput(state.session, { mode })
   if (!input) {
-    return NextResponse.json({ error: 'session has no graph — scoring requires graph-based scenario' }, { status: 400 })
+    return NextResponse.json({ error: 'Deze sessie heeft geen scenario-graph — scoring vereist een graph-gebaseerd scenario.' }, { status: 400 })
   }
 
   if (byGroup) {
