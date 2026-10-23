@@ -911,6 +911,10 @@ export interface ParticipantClosingChoice {
 export interface ParticipantClosingRound {
   roundNumber: number
   title: string
+  // De beslisvraag van die ronde. Zonder dit veld viel de afronding terug op de
+  // rondetitel, en dan las de deelnemer in stap 7 een andere kop boven dezelfde
+  // keuze dan in stap 6 en in het facilitatorrapport.
+  decisionPrompt?: string
   choices: ParticipantClosingChoice[]
   // Ronde-uitkomst: gemiddelde van de gekozen vectoren, −2..+2 per as. Weg
   // zodra er niets is ingediend — voor zo'n ronde bestaat geen score.

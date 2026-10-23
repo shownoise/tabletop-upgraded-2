@@ -42,6 +42,20 @@ export function buildParticipantClosing(session: SessionState, participantId: st
     }
   }
 
+  // Beslisvraag per rondenummer. De adapter kent per beslispunt het
+  // rondenummer, en het id van een beslispunt is het node-id van de
+  // decision-node — in event-modus met `::rol` erachter, die knippen we eraf.
+  const promptByRound = new Map<number, string>()
+  const nodeById = new Map((session.graph?.nodes ?? []).map(n => [n.id, n]))
+  for (const dp of input?.scenario.decisionPoints ?? []) {
+    if (promptByRound.has(dp.round)) continue
+    const node = nodeById.get(dp.id.split("::")[0])
+    const prompt = node?.type === "decision"
+      ? (node.data as { prompt?: string }).prompt
+      : undefined
+    if (prompt) promptByRound.set(dp.round, prompt)
+  }
+
   const rounds: ParticipantClosingRound[] = session.scenario.rounds.map((round, i) => {
     const outcome = mine?.outcomes.find(o => o.round === i + 1)
     const choices: ParticipantClosingChoice[] = myDecisions
@@ -58,6 +72,7 @@ export function buildParticipantClosing(session: SessionState, participantId: st
     return {
       roundNumber: i + 1,
       title: round.title,
+      ...(promptByRound.get(i + 1) ? { decisionPrompt: promptByRound.get(i + 1) } : {}),
       choices,
       ...(outcome?.hasSubmissions
         ? { perDimension: outcome.perDimension, points: outcome.points }

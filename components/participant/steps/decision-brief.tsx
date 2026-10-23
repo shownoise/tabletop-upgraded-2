@@ -2,7 +2,7 @@
 
 import { HelpCircle, Gavel, MessageSquare, UserX } from "lucide-react"
 import { ROLE_META, type Role } from "@/lib/types"
-import type { MandateView } from "./mandate"
+import { joinNL, type MandateView } from "./mandate"
 
 // De beslisvraag plus wie wat mag. Staat op de ronde-intro, tijdens het overleg
 // én boven de keuze — issue #105 §6: deelnemers wisten niet waarover ze
@@ -72,7 +72,7 @@ export function DecisionBrief({
                 : "Deze keuze is niet aan een rol gebonden — iedereen mag indienen."}
               {myMandates.length > 0 && (
                 <span className="mt-0.5 block text-[11px] text-primary">
-                  Jij dient in namens {myMandates.map(roleLabel).join(" en ")}
+                  Jij dient in namens {joinNL(myMandates.map(roleLabel))}
                   {myMandates.some(r => inherited.has(r)) ? " (overgenomen rol)" : ""}.
                 </span>
               )}

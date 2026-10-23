@@ -186,7 +186,7 @@ export function SessionClosing({ session, closing, participantId }: Props) {
             // (lib/scoring/decision-review.ts gebruikt dezelfde fallbackvector).
             <DecisionReviewCard
               item={{
-                question: round.title,
+                question: round.decisionPrompt ?? round.title,
                 chosenLabel: null,
                 vector: NO_DECISION_FALLBACK_VECTOR,
               }}
@@ -196,7 +196,7 @@ export function SessionClosing({ session, closing, participantId }: Props) {
               const item: DecisionReviewItem = {
                 // De terugblik van de deelnemer draagt de rondetitel, niet de
                 // beslisvraag zelf: `ParticipantClosingRound` bewaart die niet.
-                question: round.title,
+                question: round.decisionPrompt ?? round.title,
                 chosenLabel: `${choice.optionLabel} — ${choice.roleLabel}`,
                 vector: choice.outcomeVector,
                 facilitatorCommentary: choice.debriefNote,

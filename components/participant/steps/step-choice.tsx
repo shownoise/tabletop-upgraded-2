@@ -8,7 +8,7 @@ import { roleCoverageInUse } from "@/lib/session-roles"
 import { ROLE_META, type ActiveDecisionPending, type Role, type SessionState } from "@/lib/types"
 import { api } from "@/lib/api-client"
 import { DecisionBrief } from "./decision-brief"
-import type { MandateView } from "./mandate"
+import { joinNL, type MandateView } from "./mandate"
 
 // Stap 5 — de keuze. Bovenaan de beslisvraag met deadline en mandaatrol, daarna
 // de opties.
@@ -168,7 +168,7 @@ export function StepChoice({
           <span>
             Deze keuze is niet van jou. Jij adviseert
             {view.mandate.mandatedRoles.length > 0
-              ? `: ${view.mandate.mandatedRoles.map(roleLabel).join(" en ")} dient in.`
+              ? `: ${joinNL(view.mandate.mandatedRoles.map(roleLabel))} dient in.`
               : "; de gemandateerde rol dient in."}{" "}
             Zeg hardop wat jouw rol van deze opties vindt.
           </span>

@@ -117,12 +117,19 @@ export function buildRoundReviews(
           ? vectorForOption(hit.option)
           : vectorOverrideFor(roleAction?.allowedRoles?.[0], label) ?? flatVector(roleAction?.qualityRank)
         const primary = session.participants.find(p => p.id === sub.participantId)?.role
+        // finalizeDecision schrijft een onbeantwoorde rol weg als een gewone
+        // inzending met participantId 'IMPLICIT'. Zonder deze tak leest die als
+        // een genomen besluit waarvan het label nu eenmaal 'Geen besluit binnen
+        // de tijd' heet, en mist de kaart de reden en de opvallende opmaak die
+        // issue #105 §6 vraagt. De reden reist mee in `reasoning`.
+        const noDecision = sub.participantId === 'IMPLICIT'
         items.push({
           question: hit?.data.prompt ?? questionFor(nodes, round?.title, roundIndex),
-          chosenLabel: label,
+          chosenLabel: noDecision ? null : label,
           role: sub.role,
-          byName: sub.participantName,
-          viaInheritance: !!primary && primary !== sub.role,
+          byName: noDecision ? undefined : sub.participantName,
+          viaInheritance: !noDecision && !!primary && primary !== sub.role,
+          unoccupied: noDecision && coverage.get(sub.role)?.status === "onbezet",
           reasoning: sub.reasoning || undefined,
           vector,
           facilitatorCommentary: hit

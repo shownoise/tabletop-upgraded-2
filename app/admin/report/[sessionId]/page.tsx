@@ -17,15 +17,14 @@ export default async function AssessmentReportPage({
   params: Promise<{ sessionId: string }>
 }) {
   const { sessionId } = await params
-  if (sessionId !== "current") {
-    // Multi-session persistence not implemented yet — anything other than
-    // 'current' is a 404 for now.
-    notFound()
-  }
-
   const state = await getState()
   const session = state.session
+  // Multi-session persistence bestaat nog niet, dus alleen de sessie die in de
+  // store staat is op te halen. Hij was eerder uitsluitend onder 'current' te
+  // bereiken, waardoor een link met het echte sessie-id een 404 gaf terwijl de
+  // sessie er wel degelijk was. Beide sleutels wijzen nu naar dezelfde sessie.
   if (!session) notFound()
+  if (sessionId !== "current" && sessionId !== session.id) notFound()
 
   const input = sessionToScoringInput(session, { mode: "ASSESSMENT" })
   if (!input) {

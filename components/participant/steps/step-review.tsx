@@ -21,11 +21,11 @@ const QUALITY_LABEL: Record<ChoiceQuality, string> = {
   wrong: "Verkeerde keuze",
 }
 
-// Zie step-choice: de deelnemersprojectie stuurt per optie nog geen
-// `outcomeVector` mee (lib/session-store.ts, projectActiveDecision). Zodra dat
-// gebeurt vult deze kaart zich met de echte zes dimensies; tot die tijd zeggen
-// we eerlijk dat de weging bij de afronding komt in plaats van zes nullen te
-// tonen alsof de keuze geen effect had.
+// De deelnemersprojectie stuurt de `outcomeVector` pas vanaf de review-fase
+// mee, achter dezelfde poort als het facilitatorcommentaar — vóór de keuze zou
+// het de scoring verklappen. Ontbreekt hij alsnog (een optie zonder vastgelegde
+// weging), dan zeggen we dat eerlijk in plaats van zes nullen te tonen alsof de
+// keuze geen effect had.
 type OptionWithVector = ActiveDecisionPending & {
   outcomeVector?: Partial<Record<OutcomeDimension, number>>
 }
@@ -123,7 +123,9 @@ export function StepReview({
             viaInheritance: !!view?.mine?.inherited.includes(d.role),
             reasoning: d.reasoning || undefined,
             vector: opt.outcomeVector,
-            facilitatorCommentary: commentary,
+            // Het kwaliteitslabel hoort bij het commentaar: zonder deze regel
+            // viel 'Goede keuze' weg zodra de kaart de dimensies wél kreeg.
+            facilitatorCommentary: [quality, commentary].filter(Boolean).join("\n\n") || undefined,
           }
           return <DecisionReviewCard key={`${d.actionId}-${d.role}`} item={item} />
         }

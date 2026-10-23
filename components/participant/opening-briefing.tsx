@@ -17,7 +17,12 @@ export function OpeningBriefing({
   session: SessionState
   participantId?: string
 }) {
-  const [expanded, setExpanded] = useState(true)
+  // Ingeklapt beginnen. Sinds onbezette rollen worden overgenomen draagt een
+  // solo-deelnemer alle acht rollen, en uitgeklapt werd stap 1 daarmee 1042
+  // woorden in plaats van 316 — precies de muur tekst die issue #105 wilde
+  // weghalen. Het mandaat van de actieve rol staat al voluit boven dit blok;
+  // de briefing is naslag, geen introductie.
+  const [expanded, setExpanded] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
   const storageKey = participantId ? `tabletop:opening-briefing:${session.id}:${participantId}` : null

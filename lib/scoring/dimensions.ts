@@ -20,6 +20,10 @@ export interface DimensionMeta {
   // zes zinnen hoeft te schrijven.
   up: string
   down: string
+  // Wat een 0 hier betekent. Apart veld omdat `question` een vraag is: die
+  // leest achter "Geen effect — " als een vraag aan de deelnemer in plaats van
+  // als uitleg.
+  flat: string
 }
 
 export const DIMENSION_META: Record<OutcomeDimension, DimensionMeta> = {
@@ -29,6 +33,7 @@ export const DIMENSION_META: Record<OutcomeDimension, DimensionMeta> = {
     question: 'Houden we de aanvaller tegen en breidt het incident zich niet verder uit?',
     up: 'de aanvaller krijgt minder ruimte',
     down: 'de aanval kan zich verder uitbreiden',
+    flat: 'Deze keuze verandert niets aan de bewegingsruimte van de aanvaller.',
   },
   FOR: {
     key: 'FOR',
@@ -36,6 +41,7 @@ export const DIMENSION_META: Record<OutcomeDimension, DimensionMeta> = {
     question: 'Kunnen we achteraf nog vaststellen wat er is gebeurd?',
     up: 'sporen blijven bruikbaar voor onderzoek',
     down: 'bewijs raakt verloren of onbetrouwbaar',
+    flat: 'Deze keuze verandert niets aan wat je achteraf nog kunt vaststellen.',
   },
   BC: {
     key: 'BC',
@@ -43,6 +49,7 @@ export const DIMENSION_META: Record<OutcomeDimension, DimensionMeta> = {
     question: 'Blijft het primaire proces doorlopen?',
     up: 'het werk kan doorgaan',
     down: 'het primaire proces valt (verder) stil',
+    flat: 'Deze keuze raakt het primaire proces niet.',
   },
   JUR: {
     key: 'JUR',
@@ -50,6 +57,7 @@ export const DIMENSION_META: Record<OutcomeDimension, DimensionMeta> = {
     question: 'Staan we juridisch sterk en halen we onze meldtermijnen?',
     up: 'de juridische en meldpositie wordt sterker',
     down: 'er ontstaat juridisch risico of een gemiste termijn',
+    flat: 'Deze keuze verandert de juridische en meldpositie niet.',
   },
   VER: {
     key: 'VER',
@@ -57,6 +65,7 @@ export const DIMENSION_META: Record<OutcomeDimension, DimensionMeta> = {
     question: 'Kunnen we dit uitleggen aan wie het aangaat?',
     up: 'het verhaal naar buiten blijft houdbaar',
     down: 'vertrouwen van betrokkenen loopt schade op',
+    flat: 'Deze keuze verandert niets aan wat je kunt uitleggen.',
   },
   KOS: {
     key: 'KOS',
@@ -64,6 +73,7 @@ export const DIMENSION_META: Record<OutcomeDimension, DimensionMeta> = {
     question: 'Wat kost dit, in geld en in schade?',
     up: 'kosten en schade blijven beperkt',
     down: 'kosten of schade lopen op',
+    flat: 'Deze keuze kost niets extra en voorkomt niets extra.',
   },
 }
 
@@ -96,7 +106,7 @@ export function dimensionImpact(key: OutcomeDimension, value: number): Dimension
   const arrow = v > 0 ? '↑' : v < 0 ? '↓' : '→'
   let explanation: string
   if (v === 0) {
-    explanation = `Geen effect — ${meta.question.toLowerCase()}`
+    explanation = `Geen effect. ${meta.flat}`
   } else if (v > 0) {
     explanation = magnitude === 2 ? `Sterk: ${meta.up}.` : `${capitalise(meta.up)}.`
   } else {

@@ -403,7 +403,10 @@ function projectActiveDecision(session: SessionState): import("./types").ActiveD
   const submittedOptionIds = new Set((session.submittedDecisions ?? []).map(d => d.actionId))
   const visibleOptions = dd.options.filter(o => {
     if (o.implicit) return false
-    if (session.mode !== 'event' && o.consumesOptionAfterUse && submittedOptionIds.has(o.id)) return false
+    // In de review mag een al gekozen optie niet wegvallen: dat is juist de
+    // optie die besproken wordt. Deze filter bestaat om hergebruik tijdens het
+    // spelen te voorkomen, en in de review wordt er niet meer gekozen.
+    if (!isReview && session.mode !== 'event' && o.consumesOptionAfterUse && submittedOptionIds.has(o.id)) return false
     if (o.requiresCapability && !flags[o.requiresCapability]) return false
     return true
   })

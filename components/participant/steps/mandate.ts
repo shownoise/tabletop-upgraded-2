@@ -84,3 +84,11 @@ export function mandateView(
     mine: rolesForParticipant(session, participantId),
   }
 }
+
+// "CISO en CEO en Legal en IT-manager" leest als een opsomming die vergeten is
+// af te maken. Nederlands zet komma's tot het laatste lid.
+export function joinNL(items: string[]): string {
+  if (items.length === 0) return ""
+  if (items.length === 1) return items[0]
+  return `${items.slice(0, -1).join(", ")} en ${items[items.length - 1]}`
+}
