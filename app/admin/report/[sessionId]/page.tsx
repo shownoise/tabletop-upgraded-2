@@ -26,7 +26,13 @@ export default async function AssessmentReportPage({
   if (!session) notFound()
   if (sessionId !== "current" && sessionId !== session.id) notFound()
 
-  const input = sessionToScoringInput(session, { mode: "ASSESSMENT" })
+  // Geen vaste modus meesturen: sessionToScoringInput leidt hem af uit de
+  // sessie. Met een hardgecodeerde 'ASSESSMENT' kregen de beslispunten in een
+  // event-sessie plain node-id's terwijl de inzendingen `node::rol` dragen, dus
+  // matchte geen enkele inzending. Het rapport zei dan "niets te scoren" en
+  // 0 van 100, terwijl de facilitator en de deelnemer 64 van 200 zagen —
+  // precies de inconsistentie die issue #105 verbiedt.
+  const input = sessionToScoringInput(session)
   if (!input) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
