@@ -99,15 +99,18 @@ export function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
           {noDecision ? "Geen besluit binnen de tijd" : item.chosenLabel}
         </p>
         {noDecision && <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{NO_DECISION_REASON}</p>}
-        {!noDecision && roleLabel && (
+        {/* De rol hoort er altijd bij te staan, ook zonder besluit. Stond die
+            er niet, dan kreeg de facilitator bij vier open keuzes vier
+            identieke anonieme kaarten — dat was een van de live klachten. */}
+        {roleLabel && (
           <p className="mt-1 text-xs text-muted-foreground">
             {roleLabel}
-            {item.byName ? ` · ${item.byName}` : ""}
-            {item.viaInheritance ? " · rol overgenomen" : ""}
+            {!noDecision && item.byName ? ` · ${item.byName}` : ""}
+            {!noDecision && item.viaInheritance ? " · rol overgenomen" : ""}
+            {noDecision && (item.unoccupied
+              ? " · was niet bezet en door niemand overgenomen"
+              : " · was bezet, maar heeft niet ingediend")}
           </p>
-        )}
-        {noDecision && item.unoccupied && roleLabel && (
-          <p className="mt-1 text-xs text-muted-foreground">{roleLabel} was niet bezet en is door niemand overgenomen.</p>
         )}
       </div>
 

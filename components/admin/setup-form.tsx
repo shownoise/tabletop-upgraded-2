@@ -99,11 +99,18 @@ const TOKEN_CONFIG_VALUE: Record<DynamicFillToken, (c: ExerciseConfig) => string
   irRetainerName: c => c.irRetainerName,
 }
 
+// De vier organisatievelden starten LEEG en niet op een voorbeeldorganisatie.
+// Deze waarden komen in de teksten die deelnemers lezen (play-view toont ze,
+// {{token}}-scenario's vullen ze in, document-generator gebruikt ze). Stond
+// hier "Financial Services" voorgevuld, dan kreeg een onderwijsscenario zonder
+// klant stilzwijgend een bank als organisatie mee en las de deelnemer onware
+// feiten (issue #105). Leeg is zichtbaar fout; fout voorgevuld is onzichtbaar
+// fout. Hangt het scenario onder een klant, dan vult het klantdossier ze.
 const defaults: ExerciseConfig = {
-  sector: "Financial Services",
-  companySize: "250–500",
-  criticalSystems: "ERP, customer portal, identity provider",
-  crownJewels: "Customer PII, financial records",
+  sector: "",
+  companySize: "",
+  criticalSystems: "",
+  crownJewels: "",
   scenarioType: "Ransomware",
   duration: "90 minutes",
   itMaturity: "medium",

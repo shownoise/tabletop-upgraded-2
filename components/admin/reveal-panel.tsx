@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { POINTS_PER_ROUND } from "@/lib/scoring"
 import type { AssessmentReport, ScoringOutput } from "@/lib/scoring"
 import type { RegulatoryObligationState, RegulatoryRegime, SessionState, Role } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
@@ -162,8 +163,17 @@ export function RevealPanel({
           {/* 2. Trend — only completed rounds */}
           {completedOutcomes.length > 0 && (
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-                Trend over afgeronde rondes
+              {/* Het getal onder elke staaf is de som van de zes dimensies
+                  (−12 … +12), niet een puntenscore. Live stond "R1 −10.0"
+                  naast "21 punten" zonder dat te zien was dat het twee
+                  verschillende schalen zijn — vandaar deze regel erboven. */}
+              <div className="mb-2 flex flex-col">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Trend over afgeronde rondes
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  Som van de zes dimensies per ronde, schaal −12 tot +12. Dit zijn geen punten.
+                </span>
               </div>
               <div className="flex gap-1 items-end">
                 {completedOutcomes.map(o => {
@@ -197,7 +207,13 @@ export function RevealPanel({
                 return (
                   <div key={group.id} className="flex items-center justify-between rounded border border-border bg-background px-3 py-2 text-xs">
                     <span>{group.name}</span>
-                    <span className="font-mono font-semibold">{outcome?.hasSubmissions ? `${outcome.points} punten` : 'Nog niet gemeten'}</span>
+                    {/* Altijd met noemer: POINTS_PER_ROUND is de schaal van één
+                        ronde. "21 punten" zonder noemer was onuitlegbaar. */}
+                    <span className="font-mono font-semibold">
+                      {outcome?.hasSubmissions
+                        ? `${outcome.points} van ${POINTS_PER_ROUND} punten`
+                        : 'Nog niet gemeten'}
+                    </span>
                   </div>
                 )
               })}

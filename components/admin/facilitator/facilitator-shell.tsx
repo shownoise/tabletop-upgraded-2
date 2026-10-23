@@ -7,7 +7,7 @@
 import Link from "next/link"
 import {
   ArrowLeft, ChevronLeft, ChevronRight, Copy, CheckCircle, FileText,
-  Monitor, Square, Wifi, WifiOff, Wrench,
+  Monitor, Play, Square, Wifi, WifiOff, Wrench,
 } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -17,13 +17,14 @@ import { describeNextAction } from "@/lib/session-next-action"
 import { api } from "@/lib/api-client"
 import { tr, ESCALATION_KEYS, type Lang } from "@/lib/i18n"
 import type { RoundPhase, SessionState } from "@/lib/types"
-import { MAIN_STEPS, STEP_LABEL, STEP_PATH, type FacilitatorStep } from "./steps"
+import { MAIN_STEPS, STEP_HEADING, STEP_LABEL, STEP_PATH, type FacilitatorStep } from "./steps"
 
 export const PHASE_ORDER: RoundPhase[] = ["inject", "discussion", "decision", "review"]
 
 export interface FacilitatorActions {
   working: string | null
   run: (label: string, fn: () => Promise<unknown>) => Promise<void>
+  startSession: () => void
   endExercise: () => void
   destroySession: () => void
 }
@@ -151,6 +152,17 @@ export function FacilitatorShell({
           >
             <FileText className="size-3.5" /> Rapport
           </Link>
+          {/* Zelfde rapport in een nieuw tabblad — bleef nodig voor wie het
+              rapport naast het dashboard open wil houden tijdens het nagesprek. */}
+          <a
+            href="/admin/report/current"
+            target="_blank"
+            rel="noreferrer"
+            title="Rapport in nieuw tabblad"
+            className="flex items-center rounded-md border border-border bg-card px-2 py-1.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+          >
+            ↗
+          </a>
           <Link
             href={STEP_PATH.gereedschap}
             aria-current={step === "gereedschap" ? "step" : undefined}
@@ -187,6 +199,16 @@ export function FacilitatorShell({
                 : tr(lang, "exerciseComplete")}
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
+            {isLobby && (
+              <Button
+                size="sm"
+                onClick={actions.startSession}
+                disabled={actions.working !== null}
+                className="gap-2 font-mono uppercase tracking-wider"
+              >
+                <Play className="size-3.5" />{tr(lang, "startSession")}
+              </Button>
+            )}
             {isActive && <NextActionButton session={session} actions={actions} currentPhase={currentPhase} />}
             {!isEnded && (
               <Button
@@ -205,6 +227,11 @@ export function FacilitatorShell({
       </div>
 
       <main data-facilitator-step={step} className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-6 md:px-8 md:py-8">
+        {/* Eén kop per stap, uit STEP_HEADING. Uniek per stap, zodat live te
+            controleren is op welke stap je staat zonder de navigatie te lezen. */}
+        <h1 className="font-mono text-sm uppercase tracking-wider text-muted-foreground">
+          {STEP_HEADING[step]}
+        </h1>
         {error && (
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">{error}</div>
         )}

@@ -14,6 +14,8 @@ import type { DecisionNodeData, ScenarioGraph } from "@/lib/graph/types"
 import {
   NO_DECISION_FALLBACK_VECTOR,
   OUTCOME_DIMENSIONS,
+  POINTS_PER_ROUND,
+  scoreDenominator,
   scoreExercise,
   type OutcomeDimension,
 } from "@/lib/scoring"
@@ -43,20 +45,44 @@ type DecisionOption = DecisionNodeData["options"][number]
 
 // ── Puntentotaal ───────────────────────────────────────────────────────
 
-// De noemer van het puntentotaal hoort uit de engine te komen: welke rondes
-// waren werkelijk te verdienen. Die helper (`scorableRounds` in lib/scoring)
-// bestaat nog niet, en een zelfbedachte noemer naast een getal was precies de
-// klacht uit de live test. Tot die tijd geeft dit null terug en toont de UI
-// geen totaal. Zodra de helper er is: hier één keer aansluiten.
+// De noemer komt uit de engine, niet uit de UI. `scoreDenominator` bepaalt
+// welke rondes te verdienen waren: gespeeld én met minstens één beslismoment.
+// Live stond er "UX-testteam 21 punten" zonder dat ergens de noemer stond —
+// een getal zonder noemer is in een nagesprek niet uit te leggen.
 export interface ScoreTotal {
   earned: number
   possible: number
+  // Rondes die in de noemer meetellen.
   rounds: number
+  // Daarvan de rondes waarin werkelijk iets is ingezonden. Een scoorbare ronde
+  // zonder inzending telt als 0 punten — de kans was er, het team pakte hem niet.
+  measured: number
+  percentage: number | null
 }
 
-export function facilitatorScoreTotal(_rounds: RoundReviewData[]): ScoreTotal | null {
-  return null
+export function facilitatorScoreTotal(session: SessionState): ScoreTotal | null {
+  const input = sessionToScoringInput(session)
+  if (!input) return null
+  try {
+    const output = scoreExercise(input)
+    const denominator = scoreDenominator(input.scenario, output.outcomes, output.totalPoints)
+    // Niets ingezonden of een noemer van nul: dan is elk percentage misleidend
+    // en zegt de UI liever wat er wél gemeten is.
+    if (denominator.nothingToScore || denominator.maxPoints === 0) return null
+    return {
+      earned: output.totalPoints,
+      possible: denominator.maxPoints,
+      rounds: denominator.rounds.length,
+      measured: denominator.measuredRounds.length,
+      percentage: denominator.percentage,
+    }
+  } catch {
+    return null
+  }
 }
+
+// Punten per ronde zijn alleen leesbaar met hun eigen noemer ernaast.
+export { POINTS_PER_ROUND }
 
 // ── Afleiding ──────────────────────────────────────────────────────────
 

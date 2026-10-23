@@ -1,149 +1,69 @@
 "use client"
 
+// De facilitatorconsole. Dit bestand doet nog precies drie dingen: de
+// sessiestate binnenhalen, de acties bundelen, en de juiste stap renderen.
+//
+// Waarom: dit was 700 regels met fase, timer, deelnemers, injectbeheer,
+// specials, reveal, review en feedback onder elkaar op één pagina. Tijdens een
+// live sessie moest de facilitator langs alle injectteksten scrollen om bij de
+// review te komen (issue #105, probleem 1). De inhoud staat nu per stap in
+// components/admin/facilitator/, elk met een eigen URL.
+
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import {
-  ArrowLeft, ChevronLeft, ChevronRight, Copy, Play, Power,
-  ShieldAlert, FileText, Square, Users, Clock, Wifi, WifiOff, CheckCircle,
-  Monitor, Flag
-} from "lucide-react"
+import { useState } from "react"
+import { ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { useSessionStream } from "@/lib/use-session-stream"
 import { api } from "@/lib/api-client"
-import { InjectControls } from "./inject-controls"
-import { DecisionsView } from "./decisions-view"
-import { SpecialsPanel } from "./specials-panel"
-import { GraphPathPanel } from "./graph-path-panel"
-import { InjectRoutePlan } from "./inject-route-plan"
-import { FactCheckPanel } from "./fact-check-panel"
-import { ParticipantFeedbackPanel } from "./participant-feedback-panel"
-import { RegulatoryObligationsPanel } from "./regulatory-obligations-panel"
-import { LiveOverviewPanel } from "./live-overview-panel"
-import { MeldingenPanel } from "./meldingen-panel"
-import { SupervisionReportView } from "./supervision-report"
-import { RevealPanel } from "./reveal-panel"
-import { BUTTON_LABELS, FACILITATOR_GUIDE } from "@/lib/config/texts"
-import { RoundReviewNarrativePanel } from "./round-review-narrative-panel"
-import { PremadeInjectPanel } from "./premade-inject-panel"
-import { GroupProgress } from "./group-progress"
-import { EventModeHelp } from "./event-mode-help"
-import { buildTeamRoles } from "@/lib/team-roster"
 import { useLang } from "@/lib/use-lang"
-import { tr, ESCALATION_KEYS } from "@/lib/i18n"
-import { LangToggle } from "@/components/lang-toggle"
-import { ThemeToggle } from "@/components/theme-toggle"
-import type { RoundPhase } from "@/lib/types"
-import { ROLE_META } from "@/lib/types"
-import { describeNextAction } from "@/lib/session-next-action"
+import { tr } from "@/lib/i18n"
+import { FacilitatorShell, type FacilitatorActions } from "./facilitator/facilitator-shell"
+import { resolveStep, type FacilitatorStep } from "./facilitator/steps"
+import { StepEindbespreking } from "./facilitator/step-eindbespreking"
+import { StepGereedschap } from "./facilitator/step-gereedschap"
+import { StepReview } from "./facilitator/step-review"
+import { StepRonde } from "./facilitator/step-ronde"
+import { StepSessie } from "./facilitator/step-sessie"
 
-const PHASE_ORDER: RoundPhase[] = ["inject", "discussion", "decision", "review"]
-
-// Dutch static hint shown during the DISCUSSION phase — BOB is a suggested
-// working method the team may apply themselves. Zero engine state, zero timers.
-function DiscussionHelper() {
-  return (
-    <div className="rounded-xl border border-primary/20 bg-primary/5 px-5 py-3">
-      <div className="flex items-center gap-3 mb-1">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-primary">Discussie</span>
-      </div>
-      <p className="font-mono text-xs text-muted-foreground leading-relaxed">
-        {FACILITATOR_GUIDE.bobHint}
-      </p>
-    </div>
-  )
-}
-const ESCALATION_CLASSES = [
-  "border-border text-muted-foreground",
-  "border-amber-500/40 text-amber-600",
-  "border-orange-500/40 text-orange-600",
-  "border-destructive/40 text-destructive",
-]
-
-
-function SessionClock({ startedAt }: { startedAt: number }) {
-  const [elapsed, setElapsed] = useState(0)
-  useEffect(() => {
-    const tick = () => setElapsed(Math.floor((Date.now() - startedAt) / 1000))
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [startedAt])
-  const m = Math.floor(elapsed / 60)
-  const s = elapsed % 60
-  return <span className="font-mono text-2xl font-bold tabular-nums text-foreground">{String(m).padStart(2, "0")}:{String(s).padStart(2, "0")}</span>
-}
-
-function RoundTimer({ roundStartedAt, timerMinutes }: { roundStartedAt?: number; timerMinutes: number }) {
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
-  useEffect(() => {
-    if (!roundStartedAt) return
-    const tick = () => setSecondsLeft(Math.max(0, Math.floor((timerMinutes * 60 * 1000 - (Date.now() - roundStartedAt)) / 1000)))
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [roundStartedAt, timerMinutes])
-  if (secondsLeft === null) return null
-  const m = Math.floor(secondsLeft / 60)
-  const s = secondsLeft % 60
-  const isLow = secondsLeft < 120
-  const isUrgent = secondsLeft < 30
-  return (
-    <div className={`flex flex-col gap-0.5 ${isUrgent ? "animate-pulse" : ""}`}>
-      <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Round timer</span>
-      <span className={`font-mono text-2xl font-bold tabular-nums ${isUrgent ? "text-destructive" : isLow ? "text-primary" : "text-foreground"}`}>
-        {String(m).padStart(2, "0")}:{String(s).padStart(2, "0")}
-      </span>
-    </div>
-  )
-}
-
-export function ControlDashboard() {
+// `step` ontbreekt op /admin/dashboard zelf: die URL blijft werken en kiest de
+// stap op basis van de sessiestatus. De stap-URL's geven hun eigen stap mee,
+// zodat een refresh daar dezelfde stap teruggeeft.
+export function ControlDashboard({ step }: { step?: FacilitatorStep } = {}) {
   const [lang, setLang] = useLang()
   const router = useRouter()
   const { state, connected } = useSessionStream()
   const [working, setWorking] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
-  const [decisionsOpen, setDecisionsOpen] = useState(false)
   const session = state.session
-  const totalRounds = session?.graph
-    ? session.graph.nodes.filter(node => node.type === 'round').length
-    : session?.scenario.rounds.length ?? 0
-  const currentIndex = session?.currentRound ?? -1
-  const currentRound = session && currentIndex >= 0 ? session.scenario.rounds[currentIndex] : null
-  const currentPhase: RoundPhase = session?.roundPhase ?? "inject"
-  const isCoreEvent = session?.mode === 'event' && !!session.graph
-  const escalationIndex = Math.min(Math.max(currentIndex, 0), 3)
-
-  async function retreatPhase() {
-    const idx = PHASE_ORDER.indexOf(currentPhase)
-    if (idx > 0) {
-      await run("phase", () => api.setPhase(PHASE_ORDER[idx - 1]))
-    }
-  }
 
   async function run(label: string, fn: () => Promise<unknown>) {
     setWorking(label)
     setError(null)
     try { await fn() }
-    catch (err) { setError(err instanceof Error ? err.message : "Action failed") }
+    catch (err) { setError(err instanceof Error ? err.message : "Actie mislukt") }
     finally { setWorking(null) }
   }
 
-  async function copyJoinCode() {
-    if (!session) return
-    try {
-      await navigator.clipboard.writeText(session.joinCode)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {}
+  async function startSession() {
+    await run("start", async () => {
+      try {
+        await api.startSession()
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        // 409 → nog niet iedereen staat op klaar. De facilitator mag forceren.
+        if (msg.includes("Ready") && window.confirm(`${msg}\n\nToch starten?`)) {
+          await api.startSession({ force: true })
+        } else {
+          throw err
+        }
+      }
+    })
   }
 
-  // Ending and destroying are separate actions. Ending keeps the session, so
-  // the participant closing screen and the report still work; destroying wipes
-  // it. They used to be the same button once a session had ended.
+  // Beëindigen en verwijderen zijn twee acties. Beëindigen bewaart de sessie,
+  // zodat het eindscherm van de deelnemer en het rapport blijven werken;
+  // verwijderen gooit alles weg. Ze stonden eerder op één knop.
   async function endExercise() {
     if (!confirm("Oefening nu beëindigen? Deelnemers zien hun eindscherm met scores. De sessie blijft bewaard.")) return
     await run("end", () => api.endSessionForced())
@@ -162,7 +82,7 @@ export function ControlDashboard() {
         <div className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{tr(lang, "noActiveSession")}</h1>
           <p className="max-w-md text-muted-foreground">
-            {connected ? tr(lang, "configureExercise") : "Connecting to live event stream…"}
+            {connected ? tr(lang, "configureExercise") : "Verbinden met de live sessie…"}
           </p>
         </div>
         <Button asChild><Link href="/admin">{tr(lang, "configureExercise")}</Link></Button>
@@ -170,538 +90,24 @@ export function ControlDashboard() {
     )
   }
 
-  const status = session.status
-  const isActive = status === "active"
-  const isLobby = status === "lobby"
-  const isEnded = status === "ended"
+  const actions: FacilitatorActions = { working, run, startSession, endExercise, destroySession }
+  const activeStep = step ?? resolveStep(session)
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Sticky header */}
-      <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 py-3 md:px-8">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="size-4" />
-            </Link>
-            <div className="flex flex-col">
-              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "facilitatorConsole")}</span>
-              <span className="font-mono text-sm text-foreground truncate max-w-[200px] md:max-w-none">{session.scenario.scenario_title}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Mode badge — read-only. De modus is vastgesteld bij het aanmaken
-                van de sessie en kan tijdens de flow niet meer wijzigen. */}
-            <div
-              title="Modus is vastgesteld bij aanmaken van de sessie"
-              className="hidden items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-primary md:flex"
-            >
-              {session.mode === "event" ? tr(lang, "mode_event") : tr(lang, "mode_training")}
-            </div>
-            {/* Escalation badge */}
-            {isActive && (
-              <div className={`hidden items-center rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider md:flex ${ESCALATION_CLASSES[escalationIndex]}`}>
-                {tr(lang, ESCALATION_KEYS[escalationIndex])}
-              </div>
-            )}
-            <div className={`flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-xs uppercase tracking-wider ${
-              isActive ? "border-primary/40 bg-primary/10" :
-              isEnded ? "border-destructive/40 bg-destructive/10" :
-              "border-border bg-card"
-            }`}>
-              <span className={`size-1.5 rounded-full ${isActive ? "bg-primary pulse-ring" : isEnded ? "bg-destructive" : "bg-muted-foreground"}`} />
-              {isLobby ? tr(lang, "lobby") : isActive ? tr(lang, "live") : tr(lang, "ended")}
-            </div>
-            <div className={`flex items-center gap-1.5 rounded-full border px-2 py-1 ${connected ? "border-border bg-card" : "border-destructive/40 bg-destructive/10"}`}>
-              {connected ? <Wifi className="size-3 text-primary" /> : <WifiOff className="size-3 text-destructive" />}
-            </div>
-            <LangToggle lang={lang} setLang={setLang} />
-            <ThemeToggle />
-            <Link
-              href="/admin/present"
-              className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-              title="Groot scherm — voor de zaal"
-            >
-              <Monitor className="size-3.5" />
-              Groot scherm
-            </Link>
-            <a
-              href="/admin/report/current"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
-              title="Rapport in nieuw tabblad"
-            >
-              <FileText className="size-3.5" /> Rapport ↗
-            </a>
-            {isEnded && (
-              <Link
-                href="/admin/report"
-                className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary hover:bg-primary/20 transition-colors"
-              >
-                <FileText className="size-3.5" /> Rapport
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-5 py-6 md:px-8 md:py-8 flex flex-col gap-6">
-
-        {/* Command bar */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 rounded-xl border border-border bg-card p-5">
-          {/* Join code */}
-          <div className="flex flex-col gap-1.5">
-            <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "joinCodeLabel")}</span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-3xl font-bold tracking-[0.2em] text-primary">{session.joinCode}</span>
-              <button onClick={copyJoinCode} className="rounded-md border border-border bg-background p-1.5 text-muted-foreground hover:text-foreground transition-colors">
-                {copied ? <CheckCircle className="size-3.5 text-primary" /> : <Copy className="size-3.5" />}
-              </button>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Users className="size-3" />
-              <span>{session.participants.length} {tr(lang, "participants").toLowerCase()}</span>
-              {isLobby && session.participants.length > 0 && (() => {
-                const readyCount = session.participants.filter(p => !!p.readyAt).length
-                return (
-                  <span className={`font-mono text-[9px] uppercase tracking-wider ${readyCount === session.participants.length ? "text-primary" : "text-muted-foreground"}`}>
-                    · {readyCount}/{session.participants.length} ready
-                  </span>
-                )
-              })()}
-            </div>
-          </div>
-
-          {/* Session timer */}
-          <div className="flex flex-col gap-1.5">
-            <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "sessionTimer")}</span>
-            {isActive || isEnded ? <SessionClock startedAt={session.startedAt ?? session.createdAt} /> : <span className="font-mono text-2xl font-bold text-muted-foreground">—</span>}
-            <span className="text-xs text-muted-foreground">{isLobby ? tr(lang, "waitingToStartAdmin") : isActive ? tr(lang, "roundProgress", { n: String(currentIndex + 1), total: String(totalRounds) }) : tr(lang, "exerciseComplete")}</span>
-          </div>
-
-          {/* Round timer */}
-          <div className="flex flex-col gap-1.5">
-            <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "roundTimer")}</span>
-            {isActive && currentRound ? (
-              <RoundTimer roundStartedAt={session.roundStartedAt} timerMinutes={currentRound.timerMinutes ?? 10} />
-            ) : <span className="font-mono text-2xl font-bold text-muted-foreground">—</span>}
-            {isActive && currentRound?.timerMinutes && (
-              <span className="text-xs text-muted-foreground">{currentRound.timerMinutes} min round</span>
-            )}
-          </div>
-
-          {/* Round controls */}
-          <div className="flex flex-col gap-2">
-            <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "roundControl")}</span>
-            <div className="flex flex-wrap gap-2">
-              {isLobby && (
-                <Button
-                  size="sm"
-                  onClick={() => run("start", async () => {
-                    try {
-                      await api.startSession()
-                    } catch (err) {
-                      const msg = err instanceof Error ? err.message : String(err)
-                      // 409 → not all participants ready — ask facilitator to confirm.
-                      if (msg.includes("Ready") && window.confirm(`${msg}\n\nToch starten?`)) {
-                        await api.startSession({ force: true })
-                      } else {
-                        throw err
-                      }
-                    }
-                  })}
-                  disabled={working !== null}
-                  className="gap-2 font-mono uppercase tracking-wider"
-                >
-                  <Play className="size-3.5" />{tr(lang, "startSession")}
-                </Button>
-              )}
-              {isActive && (
-                <>
-                  {!isCoreEvent && <Button size="sm" variant="outline" onClick={() => run("prev", () => api.prevRound())} disabled={working !== null || currentIndex <= 0} className="gap-1.5 font-mono uppercase tracking-wider">
-                    <ChevronLeft className="size-3.5" />{tr(lang, "prevRound")}
-                  </Button>}
-                  {/* Finalize decision — server-side transition from DECISION to REVIEW. Missing participants get an implicit "no decision". */}
-                  {session.roundPhase === "decision" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => run("finalize", () => api.forceLock())}
-                      disabled={working !== null}
-                      className="gap-1.5 font-mono uppercase tracking-wider border-amber-500/40 text-amber-700 dark:text-amber-400"
-                      title={BUTTON_LABELS.finalizeDecisionTitle}
-                    >
-                      {BUTTON_LABELS.finalizeDecision}
-                    </Button>
-                  )}
-                  {(() => {
-                    const nextAction = describeNextAction(session)
-                    const isEnd = nextAction.action === "end_session"
-                    const isBlocked = nextAction.action === "blocked"
-                    return (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          if (nextAction.action === "advance_phase") return run("phase", () => api.setPhase(PHASE_ORDER[Math.min(PHASE_ORDER.indexOf(currentPhase) + 1, PHASE_ORDER.length - 1)]))
-                          if (nextAction.action === "next_round" || nextAction.action === "end_session") return run("next", () => api.nextRound())
-                        }}
-                        disabled={working !== null || isBlocked}
-                        className="gap-1.5 font-mono uppercase tracking-wider"
-                        title={nextAction.blockedReason ?? nextAction.labelNL}
-                      >
-                        {isEnd ? <Square className="size-3.5" /> : null}
-                        {nextAction.labelNL}
-                        {!isEnd && !isBlocked ? <ChevronRight className="size-3.5" /> : null}
-                      </Button>
-                    )
-                  })()}
-                </>
-              )}
-              {!isEnded && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={endExercise}
-                  disabled={working !== null}
-                  className="gap-2 font-mono uppercase tracking-wider"
-                  title="Beëindig de oefening nu — deelnemers krijgen hun eindscherm, de sessie blijft bewaard"
-                >
-                  <Square className="size-3.5" />Beëindig oefening
-                </Button>
-              )}
-              {isEnded && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={destroySession}
-                  disabled={working !== null}
-                  className="gap-2 font-mono uppercase tracking-wider border-destructive/40 text-destructive"
-                >
-                  <Power className="size-3.5" />{tr(lang, "resetSession")}
-                </Button>
-              )}
-            </div>
-            {/* Round progress dots */}
-            {totalRounds > 0 && (
-              <div className="flex gap-1 mt-1">
-                {Array.from({ length: totalRounds }, (_, i) => (
-                  <div key={i} className={`h-1 flex-1 rounded-full transition-all ${
-                    i < currentIndex + (isActive ? 1 : 0) ? "bg-primary" :
-                    i === currentIndex && isActive ? "bg-primary/50" : "bg-border"
-                  }`} />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Phase controls — shown when session is active */}
-        {isActive && (
-          <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{tr(lang, "currentPhase")}</span>
-              {!isCoreEvent && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={retreatPhase}
-                  disabled={working !== null || currentPhase === "inject"}
-                  className="gap-1.5 font-mono uppercase tracking-wider text-[10px]"
-                >
-                  <ChevronLeft className="size-3" /> Vorige fase
-                </Button>
-              )}
-            </div>
-            {/* Phase progress indicator */}
-            <div className="flex items-center gap-2">
-              {PHASE_ORDER.map((p, i) => {
-                const phaseIdx = PHASE_ORDER.indexOf(currentPhase)
-                const isPast = i < phaseIdx
-                const isCurrent = i === phaseIdx
-                const isFuture = i > phaseIdx
-                return (
-                  <div key={p} className="flex flex-1 flex-col items-center gap-1">
-                    <div className={`h-1 w-full rounded-full transition-all ${
-                      isPast ? "bg-primary" : isCurrent ? "bg-primary/60" : "bg-border"
-                    }`} />
-                    <span className={`font-mono text-[8px] uppercase tracking-wider ${
-                      isCurrent ? "text-primary font-bold" : isFuture ? "text-muted-foreground/50" : "text-muted-foreground"
-                    }`}>
-                      {tr(lang, `phase_${p}` as Parameters<typeof tr>[1])}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-            {/* Decisions toggle — show in review or decision phase */}
-            {!isCoreEvent && (currentPhase === "decision" || currentPhase === "review") && currentRound && (
-              <button
-                onClick={() => setDecisionsOpen(v => !v)}
-                className="flex items-center justify-between rounded-lg border border-border bg-background px-4 py-2.5 hover:bg-card transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <Flag className="size-3.5 text-primary" />
-                  <span className="font-mono text-xs text-foreground">{tr(lang, "decisionsView")}</span>
-                  {(session.submittedDecisions ?? []).filter(d => d.roundIndex === currentIndex).length > 0 && (
-                    <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px font-mono text-[9px] text-primary">
-                      {(session.submittedDecisions ?? []).filter(d => d.roundIndex === currentIndex).length}
-                    </span>
-                  )}
-                  {(session.governanceFlags ?? []).filter(f => f.roundIndex === currentIndex).length > 0 && (
-                    <span className="rounded-full border border-destructive/40 bg-destructive/10 px-1.5 py-px font-mono text-[9px] text-destructive">
-                      {(session.governanceFlags ?? []).filter(f => f.roundIndex === currentIndex).length} flags
-                    </span>
-                  )}
-                </div>
-                <ChevronRight className={`size-4 text-muted-foreground transition-transform ${decisionsOpen ? "rotate-90" : ""}`} />
-              </button>
-            )}
-            {!isCoreEvent && decisionsOpen && currentRound && (
-              <div className="rounded-xl border border-border bg-card p-4">
-                <DecisionsView
-                  decisions={(session.submittedDecisions ?? []).filter(d => d.roundIndex === currentIndex)}
-                  flags={(session.governanceFlags ?? []).filter(f => f.roundIndex === currentIndex)}
-                  participants={session.participants}
-                  roundActions={currentRound.roleActions ?? []}
-                  lang={lang}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {error && (
-          <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive-foreground">{error}</div>
-        )}
-
-        {/* Facilitator notes — shown when current round has AI-generated guidance */}
-        {!isCoreEvent && isActive && currentRound?.facilitatorNotes && (() => {
-          const notes = currentRound.facilitatorNotes!
-          return (
-            <div
-              className="border border-tt-border bg-tt-surface p-5 flex flex-col gap-4"
-              style={{ borderLeft: "3px solid var(--tt-accent)" }}
-            >
-              <div className="flex items-center gap-2">
-                <Flag className="size-3.5 text-tt-accent" />
-                <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">Facilitator sturing — ronde {currentIndex + 1}</span>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="flex flex-col gap-1.5">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">Discussiedoel</span>
-                  <p className="font-mono text-xs text-tt-bright leading-relaxed">{notes.discussionGoal}</p>
-                </div>
-                {notes.keyQuestions?.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-tt-accent">Stuurvragen</span>
-                    <ul className="flex flex-col gap-1">
-                      {notes.keyQuestions.map((q, i) => (
-                        <li key={i} className="font-mono text-xs text-tt-dim flex gap-1.5">
-                          <span className="text-tt-accent shrink-0">?</span>{q}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {notes.redFlags?.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-tt-red">Let op</span>
-                    <ul className="flex flex-col gap-1">
-                      {notes.redFlags.map((f, i) => (
-                        <li key={i} className="font-mono text-xs text-tt-dim flex gap-1.5">
-                          <span className="text-tt-red shrink-0">⚠</span>{f}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-              {notes.hints?.length > 0 && (
-                <div className="flex flex-col gap-1.5 border-t border-[#2a3030] pt-3">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-tt-dim">Tips voor facilitator</span>
-                  <ul className="flex flex-wrap gap-2">
-                    {notes.hints.map((h, i) => (
-                      <li key={i} className="border border-tt-border bg-tt-bright/5 px-2.5 py-1 font-mono text-[10px] text-tt-dim">{h}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )
-        })()}
-
-        {/* DISCUSSION-phase static hint — BOB as suggested working method, no engine state. */}
-        {!isCoreEvent && isActive && session.roundPhase === "discussion" && <DiscussionHelper />}
-
-        {/* Phase 5 — noise-inject library. Only visible during DISCUSSION. Never scored. */}
-        {!isCoreEvent && isActive && session.roundPhase === "discussion" && <PremadeInjectPanel session={session} />}
-
-        {/* Toezichthouder-rapport — beschikbaar zodra sessie loopt */}
-        {!isCoreEvent && <ToezichthouderReportPanel />}
-
-        {/* Regulatory obligations — data-driven meldplicht state, real-time */}
-        {!isCoreEvent && <RegulatoryObligationsPanel session={session} />}
-
-        {/* Participant-filed meldingen — only renders if any have been filed. */}
-        {!isCoreEvent && <MeldingenPanel session={session} />}
-
-        {/* Main layout: inject controls + sidebar */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Inject controls */}
-          <section className="lg:col-span-2">
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="flex items-center justify-between border-b border-border px-5 py-3">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">{tr(lang, "injectControls")}</span>
-                  {currentRound && (
-                    <Badge variant="outline" className="border-primary/40 bg-primary/10 font-mono text-[10px] uppercase tracking-wider text-primary">
-                      R{currentIndex + 1} — {currentRound.title}
-                    </Badge>
-                  )}
-                </div>
-                {isActive && <Badge variant="outline" className="border-primary/30 bg-primary/10 font-mono text-[10px] text-primary uppercase tracking-wider">{tr(lang, "live")}</Badge>}
-              </div>
-              <div className="p-5">
-                <InjectControls session={session} disabled={working !== null} lang={lang} />
-              </div>
-            </div>
-          </section>
-
-          {/* Sidebar: participants + timeline */}
-          <aside className="flex flex-col gap-4">
-            {/* Live facilitator overview — dense single-glance panel, refreshes on every SSE tick */}
-            {isActive && <LiveOverviewPanel session={session} />}
-
-            {/* Participants */}
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="border-b border-border px-4 py-2.5 flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "participants")}</span>
-                <span className="font-mono text-xs text-foreground">{session.participants.length}</span>
-              </div>
-              <ul className="divide-y divide-border max-h-48 overflow-y-auto">
-                {session.participants.length === 0 ? (
-                  <li className="px-4 py-6 text-center font-mono text-xs text-muted-foreground uppercase tracking-wider">
-                    Waiting for participants…
-                  </li>
-                ) : session.participants.map((p) => (
-                  <li key={p.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <div className="size-6 rounded-full border border-border bg-background font-mono text-[9px] uppercase text-muted-foreground flex items-center justify-center shrink-0">
-                      {p.name.slice(0, 2)}
-                    </div>
-                    <span className="text-sm flex-1 min-w-0 truncate">{p.name}</span>
-                    {p.role && (
-                      <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px font-mono text-[8px] uppercase tracking-wider text-primary shrink-0">
-                        {ROLE_META[p.role].label}
-                      </span>
-                    )}
-                    <span className="size-1.5 rounded-full bg-primary shrink-0" />
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Graph path panel — only for graph-driven sessions */}
-            {!isCoreEvent && session.graph && <GraphPathPanel session={session} />}
-
-            {/* Event mode help — verschijnt in lobby en actieve sessie */}
-            {session.mode === "event" && isLobby && (
-              <EventModeHelp joinCode={session.joinCode} />
-            )}
-
-            {/* Groepsdruk-inject (Deel B §7.6) — actief tijdens discussion/decision */}
-            {session.graph && isActive && session.mode === "event" && (
-              <GroupProgress session={session} />
-            )}
-
-            {/* Reveal (Deel B §5.2) — verschijnt tijdens lock/review */}
-            {session.graph && isActive && (session.roundPhase === "review") && (
-              <RevealPanel visible={true} currentRound={currentIndex + 1} session={session} />
-            )}
-
-            {/* Phase 7 — facilitator-only round-review narrative. Renders during REVIEW. */}
-            {!isCoreEvent && isActive && session.roundPhase === "review" && (
-              <RoundReviewNarrativePanel session={session} roundIndex={currentIndex} />
-            )}
-
-            {/* Locked-at-start inject → recipient routing */}
-            {!isCoreEvent && (session.injectRoutePlan || session.status === "active") && (
-              <InjectRoutePlan
-                session={session}
-                teamRoles={buildTeamRoles()}
-                onReplot={async () => { await api.replotInjects() }}
-              />
-            )}
-
-            {/* Fact-check panel — live tag distribution + ground truth (facilitator-only) */}
-            {!isCoreEvent && <FactCheckPanel session={session} />}
-
-            {/* Terugblik per ronde — wat deelnemers invulden tussen de rondes */}
-            <ParticipantFeedbackPanel session={session} />
-
-            {/* Specials panel — shown when mode is not off */}
-            {!isCoreEvent && session.config.specialsMode && session.config.specialsMode !== "off" && (
-              <SpecialsPanel session={session} />
-            )}
-
-            {/* Scenario summary */}
-            {!isCoreEvent && <div className="rounded-xl border border-border bg-card px-4 py-4">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{tr(lang, "scenarioSummary")}</span>
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground line-clamp-4">{session.scenario.scenario_summary}</p>
-            </div>}
-
-            {/* Timeline — ruwe event-log, telt als "overige paneel" dat de keuze
-                verdringt in Partner Event (issue #60 live-observatie). */}
-            {!isCoreEvent && <details className="group rounded-xl border border-border bg-card">
-              <summary className="cursor-pointer px-4 py-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground select-none list-none flex items-center justify-between">
-                {tr(lang, "eventLog")}
-                <span className="text-[8px] opacity-50 group-open:hidden">▶ expand</span>
-                <span className="text-[8px] opacity-50 hidden group-open:inline">▼ collapse</span>
-              </summary>
-              <div className="px-4 pb-4 flex flex-col gap-2 max-h-64 overflow-y-auto">
-                {[...session.timeline].reverse().slice(0, 25).map((ev) => (
-                  <div key={ev.id} className="flex items-start gap-2 text-xs">
-                    <span className="font-mono text-[9px] text-muted-foreground shrink-0 mt-0.5">
-                      {new Date(ev.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                    <span className="text-muted-foreground leading-relaxed">
-                      {ev.type.replace(/_/g, " ")}
-                      {(ev.data as { name?: string }).name ? ` — ${(ev.data as { name?: string }).name}` : ""}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </details>}
-
-            {/* Danger zone */}
-            <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Session</span>
-              <button onClick={destroySession} className="font-mono text-[10px] uppercase tracking-wider text-destructive hover:underline">
-                {tr(lang, "destroySession")}
-              </button>
-            </div>
-          </aside>
-        </div>
-      </main>
-    </div>
-  )
-}
-
-function ToezichthouderReportPanel() {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-primary">Toezichthouder-rapport</span>
-        <button
-          type="button"
-          onClick={() => setOpen(v => !v)}
-          className="rounded border border-primary/40 px-2 py-0.5 text-[10px] font-mono uppercase text-primary hover:bg-primary/10"
-        >
-          {open ? "Verberg" : "Toon rapport"}
-        </button>
-      </div>
-      {open && <SupervisionReportView />}
-    </div>
+    <FacilitatorShell
+      session={session}
+      connected={connected}
+      step={activeStep}
+      lang={lang}
+      setLang={setLang}
+      actions={actions}
+      error={error}
+    >
+      {activeStep === "sessie" && <StepSessie session={session} lang={lang} />}
+      {activeStep === "ronde" && <StepRonde session={session} lang={lang} actions={actions} />}
+      {activeStep === "review" && <StepReview session={session} lang={lang} />}
+      {activeStep === "eindbespreking" && <StepEindbespreking session={session} lang={lang} actions={actions} />}
+      {activeStep === "gereedschap" && <StepGereedschap session={session} lang={lang} actions={actions} />}
+    </FacilitatorShell>
   )
 }

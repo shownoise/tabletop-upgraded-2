@@ -8,8 +8,9 @@
 // hier rechtstreeks importeren — ze kennen alleen `RoundReviewData`, geen
 // sessiestate en geen facilitator-rechten.
 
+import { ROLE_META } from "@/lib/types"
 import { DecisionReviewCard } from "@/components/shared/decision-review-card"
-import type { RoundReviewData, ScoreTotal } from "./review-items"
+import { POINTS_PER_ROUND, type RoundReviewData, type ScoreTotal } from "./review-items"
 
 export function RoundReviewSection({
   round,
@@ -40,7 +41,17 @@ export function RoundReviewSection({
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {round.items.map((item, i) => (
-            <DecisionReviewCard key={`${round.roundIndex}-${i}`} item={item} />
+            <div key={`${round.roundIndex}-${i}`} className="flex flex-col gap-1">
+              {/* De kaart zelf noemt de rol alleen bij een genomen besluit. Live
+                  leverde dat vier identieke "geen besluit"-kaarten op zonder dat
+                  te zien was van wie. Daarom hier de rol erboven. */}
+              {item.chosenLabel === null && item.role && (
+                <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {ROLE_META[item.role]?.label ?? item.role}
+                </p>
+              )}
+              <DecisionReviewCard item={item} />
+            </div>
           ))}
         </div>
       )}
@@ -75,9 +86,11 @@ function RoundPoints({ round }: { round: RoundReviewData }) {
       </span>
     )
   }
+  // Altijd met noemer: 100 punten per ronde is de schaal van de engine
+  // (POINTS_PER_ROUND). Een los getal was precies de klacht uit de live test.
   return (
     <span className="font-mono text-xs text-muted-foreground">
-      Ronde-uitkomst: <span className="text-foreground">{round.points}</span> punten
+      Ronde-uitkomst: <span className="text-foreground">{round.points}</span> van {POINTS_PER_ROUND} punten
     </span>
   )
 }
@@ -107,23 +120,32 @@ export function DebriefOverview({
 }
 
 // Een totaal zonder noemer is onbruikbaar in een nagesprek: "21 punten" zegt
-// niets zonder "van hoeveel". Zolang de engine die noemer niet levert, zeggen
-// we dat liever dan dat we er een verzinnen.
-function ScoreTotalLine({ total, rounds }: { total: ScoreTotal | null; rounds: RoundReviewData[] }) {
+// niets zonder "van hoeveel". De noemer komt uit `scoreDenominator`; levert die
+// niets op, dan zegt deze regel wat er wél gemeten is in plaats van een getal.
+export function ScoreTotalLine({ total, rounds }: { total: ScoreTotal | null; rounds: RoundReviewData[] }) {
   const measured = rounds.filter(r => r.hasSubmissions).length
   if (!total) {
     return (
       <p className="rounded-lg border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-        {measured} van {rounds.length} rondes zijn gemeten. Er staat hier bewust geen
-        puntentotaal: zonder vastgestelde noemer is een totaal niet uit te leggen.
-        De uitkomst per ronde en de zes dimensies per keuze staan hieronder.
+        {measured} van {rounds.length} gespeelde rondes zijn gemeten. Er staat hier geen
+        puntentotaal: zonder inzending is er niets te scoren en zou elk percentage
+        misleidend zijn. De uitkomst per ronde en de zes dimensies per keuze staan hieronder.
       </p>
     )
   }
   return (
-    <p className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-foreground">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-primary">Puntentotaal · </span>
-      {total.earned} van {total.possible} punten over {total.rounds} gemeten rondes.
-    </p>
+    <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+      <p className="font-mono text-[10px] uppercase tracking-wider text-primary">Puntentotaal</p>
+      <p className="text-sm text-foreground">
+        <span className="font-semibold">{total.earned} van {total.possible} punten</span>
+        {total.percentage !== null ? ` (${total.percentage}%)` : ""}
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Noemer: {total.rounds} scoorbare {total.rounds === 1 ? "ronde" : "rondes"} ×{" "}
+        {POINTS_PER_ROUND} punten. Daarvan {total.measured}{" "}
+        {total.measured === 1 ? "ronde" : "rondes"} met een werkelijke inzending; een
+        scoorbare ronde zonder inzending telt mee als nul.
+      </p>
+    </div>
   )
 }
