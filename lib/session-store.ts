@@ -4,6 +4,13 @@
  */
 
 import { randomBytes } from "crypto"
+// Direct op de twee bronmodules, niet via de barrel `./scoring` en niet lazy.
+// Beide zijn pure functies zonder import terug naar deze file, dus er is geen
+// cycle om te vermijden; de lazy CJS `require()` die hier stond kon in vitest
+// niet worden opgelost (geen alias- én geen .ts-resolutie) waardoor elke test
+// die startSession() aanriep klapte op "Cannot find module".
+import { resolveRoles } from "./scoring/role-resolution"
+import { toSpecRole } from "./graph/role-adapter"
 import { analyzeGraph } from "./graph/analyze"
 import { evaluateChasersOnRoundStart, stepFromNode, type EngineTrigger, type StepResult } from "./graph/engine"
 import { cumulativeScore, selectOutcomeByScore } from "./graph/outcome-selector"
@@ -808,6 +815,16 @@ export async function joinSession(input: { name: string; joinCode: string; role?
     }
   }
 
+  // Dezelfde regel als assignRole(): een rol die al geclaimd is mag niet dubbel.
+  // Niet uit netheid — distributeRoles() houdt per rol één primaire claim over,
+  // dus de tweede claimer zou helemaal uit `entries` vallen en daarmee voor de
+  // facilitator onzichtbaar worden. Dat is precies de invariant van #105 §6:
+  // een herberekening mag een geclaimde rol nooit wegnemen.
+  if (input.role) {
+    const holder = session.participants.find(p => p.role === input.role)
+    if (holder) return { ok: false, error: `Rol is al geclaimd door ${holder.name}. Kies een andere rol.` }
+  }
+
   const participant: Participant = { id: genId("p"), name, joinedAt: Date.now(), role: input.role }
   let updated = { ...session, participants: [...session.participants, participant] }
   // Rooster gewijzigd → verdeling opnieuw. Zonder dit bleef de verdeling van
@@ -876,11 +893,6 @@ function withRoleDistribution(session: SessionState, now: number): SessionState 
 // bij herstart wordt niet overschreven.
 function withRoleResolution(session: SessionState, now: number): SessionState {
   if (session.roleResolution) return session  // niet overschrijven
-  // Lazy import om circular deps te vermijden.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { resolveRoles } = require('@/lib/scoring') as typeof import('@/lib/scoring')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { toSpecRole } = require('@/lib/graph/role-adapter') as typeof import('@/lib/graph/role-adapter')
   const specPresent = session.participants
     .map(p => (p.role ? toSpecRole(p.role) : undefined))
     .filter((s): s is string => !!s)
