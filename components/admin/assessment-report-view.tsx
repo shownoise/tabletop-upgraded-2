@@ -2,9 +2,6 @@
 
 import { Printer, ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import {
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
-} from "recharts"
 import type { AssessmentReport, DecisionReviewRound, ScoringOutput } from "@/lib/scoring"
 import { DIMENSION_META, NOTHING_TO_SCORE_NL, OUTCOME_DIMENSIONS, denominatorFromReport, type OutcomeDimension } from "@/lib/scoring"
 import { DecisionReviewCard, DimensionImpactList } from "@/components/shared/decision-review-card"
@@ -17,7 +14,6 @@ const dimLabel = (d: OutcomeDimension): string => DIMENSION_META[d].label
 // De mini-spiders per ronde hebben geen ruimte voor "Verantwoording &
 // communicatie". Afgekort uit hetzelfde label in plaats van een tweede
 // handmatige lijst met afkortingen.
-const dimAxisLabel = (d: OutcomeDimension): string => DIMENSION_META[d].label.split(" & ")[0]
 
 export interface AssessmentReportViewProps {
   sessionMeta: {
@@ -95,24 +91,6 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
       ]
   ).filter(Boolean)
 
-  // Team spider chart data — cumulative team vector + ideal profile at value 2.
-  // Het ideaal loopt over de rondes die punten konden opleveren, zodat de
-  // referentielijn niet uitrekt door rondes die buiten de noemer vallen.
-  const idealPerDimension = 2 * scorableCount
-  const teamRadar = OUTCOME_DIMENSIONS.map(d => ({
-    axis: dimLabel(d),
-    team: Number(teamVector[d].toFixed(2)),
-    ideal: idealPerDimension,
-  }))
-
-  // Scale radial axis to fit both data + ideal. Minimaal 1, anders valt de as
-  // samen tot één punt in een sessie zonder scoorbare ronde.
-  const radarMax = Math.max(
-    idealPerDimension,
-    1,
-    ...OUTCOME_DIMENSIONS.map(d => Math.abs(teamVector[d])),
-  )
-  const radarMin = Math.min(0, ...OUTCOME_DIMENSIONS.map(d => teamVector[d]))
 
   return (
     <div className="min-h-screen bg-background print:bg-white">
@@ -125,8 +103,6 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
           .page-break { page-break-before: always; }
           .avoid-break { page-break-inside: avoid; }
           .report-wrapper { max-width: none; padding: 0; }
-          .print-chart { width: 400px !important; height: 400px !important; }
-          .print-mini-chart { width: 200px !important; height: 200px !important; }
         }
       `}</style>
 
@@ -199,50 +175,17 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
           </div>
         </section>
 
-        {/* 3. Team spider chart */}
+        {/* 3. Cumulatieve uitkomst over de zes dimensies.
+            Hier stond een radar-grafiek met afgekorte asnamen. Die is weg: issue
+            #105 §6 vraagt richting, uitleg en pas daarna het getal, en noemt een
+            spiderweb expliciet onbruikbaar in een plenair gesprek. De lijst
+            eronder droeg de informatie al, de grafiek alleen de vorm. */}
         <section className="avoid-break">
           <h2 className="font-mono text-xs uppercase tracking-widest text-primary mb-2">
             Cumulatieve uitkomst — 6 dimensies
           </h2>
           <div className="rounded-xl border border-border bg-card p-6">
-            <div className="print-chart mx-auto" style={{ width: "100%", maxWidth: 560, height: 420 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={teamRadar} outerRadius="72%">
-                  <PolarGrid stroke="var(--border)" />
-                  <PolarAngleAxis
-                    dataKey="axis"
-                    tick={{ fill: "var(--foreground)", fontSize: 11 }}
-                  />
-                  <PolarRadiusAxis
-                    angle={90}
-                    domain={[radarMin, radarMax]}
-                    tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
-                  />
-                  <Radar
-                    name="Ideaal"
-                    dataKey="ideal"
-                    stroke="var(--muted-foreground)"
-                    fill="var(--muted-foreground)"
-                    fillOpacity={0.05}
-                    strokeDasharray="4 4"
-                    strokeWidth={1.5}
-                  />
-                  <Radar
-                    name="Team"
-                    dataKey="team"
-                    stroke="var(--primary)"
-                    fill="var(--primary)"
-                    fillOpacity={0.28}
-                    strokeWidth={2.5}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-            {/* Richting + uitleg + getal per dimensie, uit dezelfde bron als de
-                deelnemer ziet. Geen eigen balkjes of afkortingen meer. */}
-            <div className="mt-4">
-              <DimensionImpactList vector={teamVector} />
-            </div>
+            <DimensionImpactList vector={teamVector} />
           </div>
         </section>
 
@@ -251,10 +194,6 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
           <h2 className="font-mono text-xs uppercase tracking-widest text-primary mb-2">Per ronde</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {report.spider.perDimensionAcrossRounds.map(({ round, vector }) => {
-              const data = OUTCOME_DIMENSIONS.map(d => ({
-                axis: dimAxisLabel(d),
-                value: Number(vector[d].toFixed(2)),
-              }))
               const outcome = report.outcomes.find(o => o.round === round)
               const submitted = outcome?.hasSubmissions
               // Een ronde buiten de noemer kon geen punten opleveren; dan is
@@ -273,22 +212,9 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
                       {counts ? `${submitted ? outcome?.points ?? 0 : 0} van 100 pt` : "telt niet mee"}
                     </span>
                   </div>
-                  <div className="print-mini-chart" style={{ width: "100%", height: 200 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart data={data} outerRadius="70%">
-                        <PolarGrid stroke="var(--border)" />
-                        <PolarAngleAxis dataKey="axis" tick={{ fill: "var(--foreground)", fontSize: 9 }} />
-                        <PolarRadiusAxis domain={[-1, 2]} tick={false} axisLine={false} />
-                        <Radar
-                          dataKey="value"
-                          stroke={submitted ? "var(--primary)" : "var(--muted-foreground)"}
-                          fill={submitted ? "var(--primary)" : "var(--muted-foreground)"}
-                          fillOpacity={submitted ? 0.28 : 0.1}
-                          strokeWidth={2}
-                        />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {/* Ook hier geen mini-radar meer: zes afgekorte assen in 200
+                      pixels waren niet te lezen, laat staan voor te lezen. */}
+                  <DimensionImpactList vector={vector} />
                   {!submitted && (
                     <p className="text-[10px] italic text-muted-foreground">
                       {counts
