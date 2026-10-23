@@ -38,7 +38,8 @@ import { computeAuthoredWorkload, distributeRoles, effectiveRolesForParticipant 
 import { plotInjectRoutes } from "./inject-routing"
 import { buildTeamRoles } from "./team-roster"
 import { computeRoundPhaseDurations, PHASE_ORDER, nextPhase } from "./engine/round-phases"
-import { currentDecisionNode, describeNextAction as _describeNextAction, missingDecisionRoles, missingEventDecisionAssignments } from "./session-next-action"
+import { currentDecisionNode, describeNextAction as _describeNextAction, missingDecisionRoles, unsubmittedDecisionAssignments } from "./session-next-action"
+import { authoredRolesForSession } from "./session-roles"
 
 // Migration: legacy `system_admin` role was merged into `it_manager`. Applied on
 // any scenario data flowing through the store so old graphs / templates keep working.
@@ -669,6 +670,10 @@ function applyEngineStep(session: SessionState, step: StepResult): SessionState 
         updated = maybeOpenRegulatoryObligationFromInject(updated, p.inject)
       }
       updated = mergeInjectRoutePlan(updated, round.injects.map(i => i.id))
+      // Elke ronde begint met de bezetting van dít moment: wie tijdens de
+      // vorige ronde joinde of van rol wisselde, telt nu mee. De nieuwe ronde
+      // kan ook nieuwe rollen hebben toegevoegd aan het scenario.
+      updated = withRoleDistribution(updated, now)
       updated = withRoundPhaseState(updated, roundIndex, now)
       updated = anchorIncidentOnRoundIfNeeded(updated, roundNumber, now)
       if (updated.graph) {
@@ -805,6 +810,9 @@ export async function joinSession(input: { name: string; joinCode: string; role?
 
   const participant: Participant = { id: genId("p"), name, joinedAt: Date.now(), role: input.role }
   let updated = { ...session, participants: [...session.participants, participant] }
+  // Rooster gewijzigd → verdeling opnieuw. Zonder dit bleef de verdeling van
+  // het moment van sessiestart staan en was deze deelnemer onzichtbaar.
+  updated = withRoleDistribution(updated, Date.now())
   updated = pushTimeline(updated, "participant_joined", { name: participant.name, participantId: participant.id })
 
   await dbSetSession(updated)
@@ -842,24 +850,23 @@ export async function startSession(): Promise<{ ok: boolean; error?: string }> {
   return result
 }
 
-// Compute the role distribution snapshot at session start. Deterministic —
-// same input → same output. Stored on SessionState.roleDistribution so downstream
-// code (UI, scoring) reads it instead of walking fallback chains ad hoc.
+// Herberekent de rolverdeling. Deterministisch en idempotent — zelfde rooster
+// levert byte-identiek dezelfde snapshot, op `computedAt` na.
+//
+// Moet bij élke roosterwijziging lopen: joinen, een rol claimen of wijzigen,
+// ready melden, en bij de start van elke ronde. #105 §1: dit liep alléén in
+// startSession, dus een sessie die met een lege lobby startte hield voor altijd
+// een lege verdeling — wie daarna joinde en CEO claimde, bestond niet voor de
+// facilitator, en elke rol stond als "ontbrekend" op het dashboard.
+//
+// Rollenbron is `authoredRolesForSession()`: die kent óók de rollen die alleen
+// als eigenaar van een keuze-optie voorkomen. De oude inline-set keek alleen
+// naar roleActions en inject-targetRoles, waardoor een rol die uitsluitend een
+// beslissing bezit nooit werd herverdeeld (#105 §4).
 function withRoleDistribution(session: SessionState, now: number): SessionState {
-  const authoredRolesSet = new Set<Role>()
-  for (const round of session.scenario.rounds) {
-    for (const a of round.roleActions ?? []) for (const r of a.allowedRoles) authoredRolesSet.add(r)
-    for (const inj of round.injects) for (const r of inj.targetRoles ?? []) authoredRolesSet.add(r)
-  }
-  // Also include the primary role of every joined participant so seats without
-  // authored content still appear in the distribution.
-  for (const p of session.participants) if (p.role) authoredRolesSet.add(p.role)
-
-  const authoredRoles = [...authoredRolesSet]
-  const workloads = computeAuthoredWorkload(session.scenario)
   const snapshot = distributeRoles({
-    authoredRoles,
-    workloads,
+    authoredRoles: authoredRolesForSession(session),
+    workloads: computeAuthoredWorkload(session.graph ?? session.scenario),
     presentParticipants: session.participants,
   })
   return { ...session, roleDistribution: { ...snapshot, computedAt: now } }
@@ -1215,6 +1222,7 @@ export async function goToNextRound(): Promise<{ ok: boolean; error?: string }> 
       roundStartedAt: now,
       roundPhase: "inject" as RoundPhase,
     }
+    updated = withRoleDistribution(updated, now)
     updated = withRoundPhaseState(updated, nextIdx, now)
     updated = anchorIncidentOnRoundIfNeeded(updated, nextIdx + 1, now)
     updated = pushTimeline(updated, "round_changed", { roundIndex: nextIdx })
@@ -1436,9 +1444,10 @@ export async function finalizeDecision(): Promise<{ ok: boolean; error?: string 
     const now = Date.now()
     const submissions = s.submittedDecisions ?? []
     const missing: SubmittedDecision[] = []
-    const assignments = s.mode === 'event'
-      ? missingEventDecisionAssignments(s)
-      : missingDecisionRoles(s).map(role => ({ groupId: undefined, role }))
+    // Inclusief de rollen die niemand dekte: die blokkeren de ronde niet, maar
+    // moeten wél een afgesloten "geen besluit" opleveren, anders mist de review
+    // de helft van het verhaal.
+    const assignments = unsubmittedDecisionAssignments(s)
     for (const assignment of assignments) {
       const implicit = dd.options.find(option => option.implicit && option.allowedRole === assignment.role)
         ?? dd.options.find(option => option.implicit && !option.allowedRole)
@@ -1452,7 +1461,13 @@ export async function finalizeDecision(): Promise<{ ok: boolean; error?: string 
         roundIndex: roundIdx,
         actionId: implicit.id,
         actionLabel: implicit.label,
-        reasoning: 'Geen besluit binnen de tijd — impliciete keuze bij afronding beslissing',
+        // De reden reist mee in `reasoning`. SubmittedDecision heeft daar geen
+        // eigen veld voor en lib/types.ts is leesvast; `participantName` viel af
+        // omdat die in EVENT-modus al de teamnaam draagt. De review kan hiermee
+        // onbezet onderscheiden van bezet-maar-niet-ingediend.
+        reasoning: assignment.reason === 'onbezet'
+          ? 'Geen besluit — niemand dekte deze rol (onbezet bij afronding beslissing)'
+          : 'Geen besluit binnen de tijd — impliciete keuze bij afronding beslissing',
         submittedAt: new Date(now).toISOString(),
         isWrongRole: false,
         isIrDeviation: false,
@@ -1509,7 +1524,9 @@ export async function assignRole(input: { participantId: string; role: Role }): 
     const participants = s.participants.map(p =>
       p.id === input.participantId ? { ...p, role: input.role } : p
     )
-    return { ...s, participants }
+    // De bezetting is veranderd: wie deze rol eerst overnam, hoeft dat niet
+    // meer, en de nieuwe claim blijft primair (invariant van distributeRoles).
+    return withRoleDistribution({ ...s, participants }, Date.now())
   })
   if (result.ok) emit("role_assigned", { participantId: input.participantId, role: input.role })
   return result
@@ -2286,7 +2303,9 @@ export async function markParticipantReady(participantId: string): Promise<{ ok:
     const participants = session.participants.map(p =>
       p.id === participantId ? { ...p, readyAt: Date.now() } : p
     )
-    return { ...session, participants }
+    // Ready is een roosterwijziging: tussen joinen en ready kan de deelnemer
+    // nog een rol hebben gekozen via een pad dat assignRole niet raakt.
+    return withRoleDistribution({ ...session, participants }, Date.now())
   })
   if (result.ok) emit('participant_ready', { participantId })
   return result

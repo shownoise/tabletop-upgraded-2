@@ -110,7 +110,12 @@ export function unsubmittedDecisionAssignments(session: SessionState): Unsubmitt
     .filter((role): role is Role => !!role))]
   if (owning.length === 0) return []
 
-  const covered = roleCoverageInUse(session) ? coveredRoles(session) : new Set(owning)
+  // Event-modus met een teamdevice: één tablet per team, niemand claimt een rol
+  // en dat device dient namens álle rollen in. Dekking is daar een eigenschap
+  // van het team, niet van een persoon — anders was er nooit iets verschuldigd.
+  // Zodra er in dat team wél iemand een rol claimt, geldt de echte dekking.
+  const teamConsole = session.mode === 'event' && !roleCoverageInUse(session)
+  const covered = teamConsole ? new Set(owning) : coveredRoles(session)
   const ownerOf = new Map(roleCoverage(session).map(c => [c.role, c.participantId]))
   const allOptionIds = new Set(dd.options.map(option => option.id))
   const implicitIds = new Set(dd.options.filter(option => option.implicit).map(option => option.id))
