@@ -17,6 +17,11 @@ export interface AssessmentReport {
   }
   outcomes: RoundOutcome[]
   totalPoints: number
+  // De eerlijke noemer — gespeelde rondes met een beslismoment. Gaat mee in het
+  // rapport zodat elke weergave dezelfde noemer gebruikt en niemand opnieuw
+  // `outcomes.length * 100` verzint.
+  scorableRounds: number[]
+  maxPoints: number
   // Deel B §6 "spiderweb per rol": filter outcomes op besluiten waarvan die rol
   // eigenaar was — beperkt tot beschikbaar in de input.
   spider: {
@@ -39,6 +44,8 @@ export function buildAssessmentReport(input: ExerciseInput): AssessmentReport {
     },
     outcomes: s.outcomes,
     totalPoints: s.totalPoints,
+    scorableRounds: s.scorableRounds,
+    maxPoints: s.maxPoints,
     spider: {
       team: teamSpider,
       perDimensionAcrossRounds: s.outcomes.map(o => ({ round: o.round, vector: o.perDimension })),

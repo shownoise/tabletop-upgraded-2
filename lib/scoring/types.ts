@@ -132,6 +132,13 @@ export interface ExerciseInput {
   roster: Roster
   events: ExerciseEvent[]
   mode: Mode
+  // Rondenummers die de sessie werkelijk heeft gespeeld. De scenario-spec kent
+  // álle rondes die een scenario kán opleveren; een lopende of afgebroken
+  // sessie heeft daar maar een deel van bereikt. Zonder dit veld scoort de
+  // engine ook rondes die nooit zijn gespeeld, en die vullen de noemer van het
+  // rapport met punten die niemand kon halen. Ontbreekt het veld, dan blijft
+  // het gedrag ongewijzigd: alle rondes uit de spec.
+  playedRounds?: number[]
 }
 
 // ── Output ─────────────────────────────────────────────────────────────
@@ -161,6 +168,10 @@ export interface ScoringOutput {
   }
   outcomes: RoundOutcome[]
   totalPoints: number
+  // Rondenummers die mee mogen in de noemer: gespeeld én met minstens één
+  // beslismoment. Zie denominator.ts voor waarom dat de enige eerlijke noemer is.
+  scorableRounds: number[]
+  maxPoints: number
   // Debrief-haakjes: welke required=false beslispunten zijn overgeslagen door team-drempel.
   droppedOptionalDecisions: string[]
 }

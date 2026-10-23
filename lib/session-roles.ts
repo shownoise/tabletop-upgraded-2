@@ -168,6 +168,28 @@ export function coveredRoles(
   return covered
 }
 
+// Is er aan deze tafel überhaupt een rolverdeling in gebruik?
+//
+// Event-modus kent het teamdevice: één tablet per team, niemand claimt een rol,
+// en dat ene device dient namens álle rollen in. Zou dekking daar filteren, dan
+// was er nooit iemand een beslissing verschuldigd en liep elke ronde meteen
+// door. Zodra er wél iemand een rol heeft geclaimd geldt de echte dekking.
+export function roleCoverageInUse(session: Pick<SessionState, 'participants'>): boolean {
+  return session.participants.some(p => !!p.role)
+}
+
+// De rollen uit `owningRoles` die een beslissing verschuldigd kúnnen zijn.
+// Een rol die niemand dekt kan nooit indienen en mag de ronde dus niet
+// tegenhouden (#105 §2) — die wordt bij het afsluiten impliciet afgehandeld.
+export function rolesOwingDecision(
+  session: Parameters<typeof roleCoverage>[0],
+  owningRoles: readonly Role[],
+): Role[] {
+  if (!roleCoverageInUse(session)) return [...owningRoles]
+  const covered = coveredRoles(session)
+  return owningRoles.filter(r => covered.has(r))
+}
+
 // ── Mandaat op een beslismoment ────────────────────────────────────────
 
 export interface OptionMandate {
