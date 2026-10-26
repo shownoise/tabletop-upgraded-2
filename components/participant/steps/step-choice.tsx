@@ -1,13 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle, Gavel, MessageSquare, Scale, UserX } from "lucide-react"
+import { CheckCircle, Gavel, Lightbulb, MessageSquare, Scale, UserX } from "lucide-react"
 import type { OutcomeDimension } from "@/lib/scoring/constants"
 import { DIMENSION_META, dimensionImpacts } from "@/lib/scoring/dimensions"
 import { roleCoverageInUse } from "@/lib/session-roles"
 import { ROLE_META, type ActiveDecisionPending, type Role, type SessionState } from "@/lib/types"
 import { api } from "@/lib/api-client"
 import { DecisionBrief } from "./decision-brief"
+import { DocumentsSheet, documentsForRoles } from "./documents-sheet"
 import { joinNL, type MandateView } from "./mandate"
 
 // Stap 5 — de keuze. Bovenaan de beslisvraag met deadline en mandaatrol, daarna
@@ -67,6 +68,14 @@ export function StepChoice({
   view: MandateView | null
   deadline?: string
 }) {
+  // Het eerste document van een rol die nu mandaat heeft. Eén tip, niet zes:
+  // een lijst met alle documenten staat al achter de knop in het stapmenu.
+  const tipDoc = (() => {
+    const mandated = view?.mandate.myRoles ?? []
+    if (mandated.length === 0) return null
+    return documentsForRoles(session, mandated)[0] ?? null
+  })()
+
   const [selected, setSelected] = useState<string | null>(null)
   const [reasoning, setReasoning] = useState("")
   const [busy, setBusy] = useState(false)
@@ -180,6 +189,30 @@ export function StepChoice({
           Je dient deze ronde voor {myRoleCount} rollen in — {mySubmissions.length} daarvan staat al
           ingediend. Elke keuze landt onder de rol die erbij staat.
         </p>
+      )}
+
+      {/* "Lees dit document eerst", afgeleid en niet geconfigureerd. De eigenaar
+          wilde zo'n tip maar expliciet zonder dat bouwen complexer wordt, dus
+          dit vraagt niets van de auteur: heeft de rol die nu mandaat heeft een
+          document, dan staat het hier met een knop die het opent. */}
+      {tipDoc && (
+        <DocumentsSheet
+          session={session}
+          roles={view?.mine?.all ?? []}
+          openDocumentId={tipDoc.id}
+          trigger={
+            <button
+              type="button"
+              className="flex w-full items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-2.5 text-left text-xs text-foreground transition-colors hover:bg-amber-500/10"
+            >
+              <Lightbulb className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+              <span>
+                Kijk eerst in <span className="font-medium">{tipDoc.title}</span> — daar staat wat
+                jouw rol wel en niet mag, en wat erin ontbreekt.
+              </span>
+            </button>
+          }
+        />
       )}
 
       <section className="flex flex-col gap-2">
@@ -305,7 +338,7 @@ export function StepChoice({
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
-          <button
+          <button data-tour="deelnemer-keuze"
             type="button"
             onClick={submit}
             disabled={!selected || busy}

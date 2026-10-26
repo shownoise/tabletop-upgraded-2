@@ -10,6 +10,7 @@ import { EventModeHelp } from "@/components/admin/event-mode-help"
 import { ParticipantsList } from "@/components/admin/participants-list"
 import type { SessionState } from "@/lib/types"
 import { tr, type Lang } from "@/lib/i18n"
+import { FacilitatorGuide } from "./facilitator-guide"
 import { RoleCoveragePanel } from "./role-coverage-panel"
 import { STEP_PATH } from "./steps"
 
@@ -50,6 +51,10 @@ export function StepSessie({
           </p>
         )}
       </section>
+
+      {/* Doel en handleiding stonden op een apart briefingscherm tussen het
+          aanmaken en het dashboard. Dat scherm is weg; de inhoud staat hier. */}
+      <FacilitatorGuide session={session} />
 
       {session.mode === "event" && isLobby && <EventModeHelp joinCode={session.joinCode} />}
 

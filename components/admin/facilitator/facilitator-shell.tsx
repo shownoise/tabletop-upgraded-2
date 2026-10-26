@@ -255,40 +255,59 @@ function NextActionButton({
   const next = describeNextAction(session)
   const isEnd = next.action === "end_session"
   const isBlocked = next.action === "blocked"
-  return (
-    <>
-      {session.roundPhase === "decision" && (
+
+  // Een uitgeschakelde primaire knop was een dood einde. Live gereproduceerd:
+  // in de beslissingsfase stond er "Nog wachten op 4 beslissingen", grijs, met
+  // de reden alleen in een tooltip, en de uitweg was een ándere knop die zich
+  // niet als uitweg aankondigde. Bij een solo- of onderbezet team is dat
+  // permanent de toestand, want die inzendingen komen nooit.
+  //
+  // Dus: zolang er inzendingen missen is de primaire actie "Beslissing
+  // afsluiten". Die zet onbeantwoorde rollen op een impliciete "geen besluit"
+  // met de reden erbij, waarna de knop gewoon "Volgende fase: Review" wordt.
+  // Twee klikken, maar elke klik is betekenisvol en terug kan via Vorige fase.
+  if (isBlocked) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        {next.blockedReason && (
+          <span className="max-w-xs text-right text-[11px] leading-snug text-amber-700 dark:text-amber-400">
+            {next.blockedReason}
+          </span>
+        )}
         <Button
           size="sm"
-          variant="outline"
           onClick={() => actions.run("finalize", () => api.forceLock())}
           disabled={actions.working !== null}
-          className="gap-1.5 border-amber-500/40 font-mono uppercase tracking-wider text-amber-700 dark:text-amber-400"
-          title="Sluit de keuzefase — wie niets heeft ingezonden krijgt 'geen besluit'"
+          className="gap-1.5 border-amber-500/40 font-mono uppercase tracking-wider"
+          title="Onbeantwoorde rollen krijgen 'geen besluit' met de reden erbij; daarna kun je naar de review"
         >
-          Beslissing vastzetten
+          Beslissing afsluiten
+          <ChevronRight className="size-3.5" />
         </Button>
-      )}
-      <Button
-        size="sm"
-        onClick={() => {
-          if (next.action === "advance_phase") {
-            const idx = Math.min(PHASE_ORDER.indexOf(currentPhase) + 1, PHASE_ORDER.length - 1)
-            return actions.run("phase", () => api.setPhase(PHASE_ORDER[idx]))
-          }
-          if (next.action === "next_round" || next.action === "end_session") {
-            return actions.run("next", () => api.nextRound())
-          }
-        }}
-        disabled={actions.working !== null || isBlocked}
-        className="gap-1.5 font-mono uppercase tracking-wider"
-        title={next.blockedReason ?? next.labelNL}
-      >
-        {isEnd ? <Square className="size-3.5" /> : null}
-        {next.labelNL}
-        {!isEnd && !isBlocked ? <ChevronRight className="size-3.5" /> : null}
-      </Button>
-    </>
+      </div>
+    )
+  }
+
+  return (
+    <Button
+      size="sm"
+      onClick={() => {
+        if (next.action === "advance_phase") {
+          const idx = Math.min(PHASE_ORDER.indexOf(currentPhase) + 1, PHASE_ORDER.length - 1)
+          return actions.run("phase", () => api.setPhase(PHASE_ORDER[idx]))
+        }
+        if (next.action === "next_round" || next.action === "end_session") {
+          return actions.run("next", () => api.nextRound())
+        }
+      }}
+      disabled={actions.working !== null}
+      className="gap-1.5 font-mono uppercase tracking-wider"
+      title={next.labelNL}
+    >
+      {isEnd ? <Square className="size-3.5" /> : null}
+      {next.labelNL}
+      {!isEnd ? <ChevronRight className="size-3.5" /> : null}
+    </Button>
   )
 }
 

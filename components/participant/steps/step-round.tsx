@@ -22,10 +22,17 @@ function Situation({ text }: { text: string }) {
 
   return (
     <section className="flex flex-col gap-2 rounded-lg border border-border bg-card px-4 py-3">
+      {/* De eigenaar wilde dat duidelijk is wat de algemene uitleg van een
+          ronde is tegenover de injects. Alleen "De situatie" zei dat niet; nu
+          staat het er: dit is het beeld dat iedereen heeft, de details komen
+          per rol in de berichten. */}
       <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-        De situatie
+        Algemeen beeld — dit weet iedereen
       </span>
       <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{lead}</p>
+      <p className="text-[11px] text-muted-foreground">
+        De concrete signalen van deze ronde komen hierna binnen als berichten.
+      </p>
       {rest && (
         <>
           {open && (

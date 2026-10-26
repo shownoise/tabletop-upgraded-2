@@ -46,7 +46,10 @@ export function DecisionBrief({
     .map(c => c.role)
 
   return (
-    <section className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+    <section
+      data-tour="deelnemer-beslisvraag"
+      className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3"
+    >
       <div className="flex flex-col gap-1">
         <span className="font-mono text-[10px] uppercase tracking-widest text-primary">
           Beslisvraag van deze ronde

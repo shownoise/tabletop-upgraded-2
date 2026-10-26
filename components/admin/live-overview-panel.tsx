@@ -1,21 +1,34 @@
 "use client"
 
+// Live-overzicht tijdens een ronde. Eén vraag staat voorop: waar wacht ik op?
+//
+// Waarom deze ordening: de facilitator keek naar zes blokken kleine
+// mono-kapitalen van gelijk gewicht (#105 §7). Nu is de voortgang van deze
+// ronde het enige grote element, staat secundaire status als chip met icoon en
+// kleur, en zit alles wat je alleen soms nodig hebt achter een uitklap.
+//
+// De zes dimensies komen uit DimensionImpactList — dezelfde component als de
+// scorebespreking van deelnemer en rapport. Geen balkjes met afkortingen meer:
+// issue #105 §6 verbiedt dat expliciet.
+
 import { useMemo } from "react"
-import { Activity } from "lucide-react"
+import { Activity, FileCheck2, Hourglass, LifeBuoy, ShieldAlert, type LucideIcon } from "lucide-react"
 import type { SessionState, TimelineEvent } from "@/lib/types"
 import { ROLE_META, ROUND_PHASE_LABELS_NL } from "@/lib/types"
 import { analyzeGraph } from "@/lib/graph/analyze"
 import { sessionToScoringInput } from "@/lib/scoring/graph-adapter"
 import { scoreExercise, OUTCOME_DIMENSIONS, type OutcomeDimension } from "@/lib/scoring"
+import { DimensionImpactList } from "@/components/shared/decision-review-card"
+import { rolesForParticipant } from "@/lib/session-roles"
+import { roundSubmissionProgress } from "./facilitator/round-submission-progress"
 
-// Dutch axis labels — used for the mini 6-axis bar chart.
-const DIM_LABEL: Record<OutcomeDimension, string> = {
-  CONT: "CONT",
-  FOR:  "FOR",
-  BC:   "BC",
-  JUR:  "JUR",
-  VER:  "VER",
-  KOS:  "KOS",
+type Tone = "ok" | "warn" | "bad" | "muted"
+
+const TONE_CLASS: Record<Tone, string> = {
+  ok: "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400",
+  warn: "border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-400",
+  bad: "border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-400",
+  muted: "border-border bg-muted/20 text-muted-foreground",
 }
 
 // Dense, single-glance facilitator overview. Refreshes on every SSE tick because
@@ -29,7 +42,10 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
   const currentIndex = session.currentRound
   const phase = session.roundPhase ?? "inject"
 
-  // Cumulative 6-axis outcome across all completed rounds. Computed inline.
+  // Cumulatieve uitkomst over de áfgeronde rondes. Een ronde telt mee als hij
+  // achter ons ligt, of als de scorebespreking van de huidige ronde loopt —
+  // dan staan de keuzes vast. Daarvóór stonden hier zes nullen die niets
+  // betekenden, en dat was precies de klacht.
   const cumulative = useMemo(() => {
     const input = sessionToScoringInput(session, { mode: "ASSESSMENT" })
     if (!input) {
@@ -39,8 +55,9 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
     const acc = emptyVector()
     let completed = 0
     let anyReal = false
+    const lastClosedRound = phase === "review" ? currentIndex + 1 : currentIndex
     for (const o of output.outcomes) {
-      if (o.round > currentIndex + 1) continue
+      if (o.round > lastClosedRound) continue
       if (o.hasSubmissions) {
         anyReal = true
         completed++
@@ -48,42 +65,49 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
       }
     }
     return { perDim: acc, completedRounds: completed, hasAny: anyReal }
-  }, [session, currentIndex])
+  }, [session, currentIndex, phase])
 
-  // Per-participant submission progress for the current round. Expected count
-  // is derived from pendingByParticipant when present (per-role decisions),
-  // else defaults to 1 (one decision per person per round).
+  // Voortgang van deze ronde — dezelfde afleiding als de metriek bovenaan de
+  // rondestap, zodat teller en noemer daar en hier gelijk zijn.
+  const progress = roundSubmissionProgress(session)
+  const progressPct = progress.expected && progress.expected > 0
+    ? Math.min(100, Math.round((progress.submitted / progress.expected) * 100))
+    : 0
+  const missingLabels = progress.missingRoles.map(r => ROLE_META[r]?.label ?? r)
+
   const submissions = session.submittedDecisions ?? []
   const currentRoundSubs = submissions.filter(d => d.roundIndex === currentIndex)
   const pending = session.activeDecision?.pendingByParticipant
+  const missingSet = new Set(progress.missingRoles)
 
   const rows = session.participants.map(p => {
-    // undefined when the store isn't tracking a per-participant expected total
-    // (outside DECISION phase, or scenarios without perRole decisions). We show
-    // just the submitted count in that case — a hardcoded fallback of 1 caused
-    // "7/1 ingediend" for participants who inherit multiple roles.
-    const expected = pending?.[p.id]?.total
+    const roles = rolesForParticipant(session, p.id)
     const submitted = currentRoundSubs.filter(d => d.participantId === p.id).length
-    const distEntry = session.roleDistribution?.entries.find(e => e.participantId === p.id)
-    const inheritedRoles = distEntry?.inheritedRoles ?? []
+    // De store houdt alleen tijdens de beslisfase een eigen totaal bij. Valt
+    // dat weg, dan is het verschuldigde aantal: wat deze deelnemer al indiende
+    // plus zijn eigen rollen die nog open staan. Een harde 1 gaf eerder
+    // "7/1 ingediend" bij iemand die zeven stoelen had overgenomen.
+    const stillOwed = (roles?.all ?? []).filter(r => missingSet.has(r)).length
+    const expected = pending?.[p.id]?.total ?? ((submitted + stillOwed) || null)
+    const inherited = roles?.inherited ?? []
     return {
       id: p.id,
       name: p.name,
-      primaryRole: p.role,
-      inheritedRoles,
+      primaryLabel: roles?.primary ? ROLE_META[roles.primary]?.label ?? roles.primary : null,
+      inheritedCount: inherited.length,
+      inheritedLabels: inherited.map(r => ROLE_META[r]?.label ?? r),
       submitted,
       expected,
     }
   })
 
-  // Regulatory status — pick the most recent obligation (initial has priority
-  // while still open, else closing).
-  const regStatus = describeRegulatoryStatus(session)
-
-  // Retainer activation status.
+  const regulatory = describeRegulatoryStatus(session)
   const retainer = session.retainerActivation
-    ? `Retainer: geactiveerd in ronde ${retainer_round(session)}`
-    : "Retainer: niet geactiveerd"
+    ? {
+        tone: "ok" as Tone,
+        text: `Retainer: geactiveerd in ronde ${session.retainerActivation.activatedAtRound}`,
+      }
+    : { tone: "muted" as Tone, text: "Retainer: niet geactiveerd" }
 
   // Latest 3 timeline events.
   const latest = [...(session.timeline ?? [])]
@@ -92,28 +116,56 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
     .slice(0, 3)
 
   return (
-    <section className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex flex-col gap-3">
-      {/* 1. Header */}
-      <div className="flex items-center justify-between">
+    <section className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
+      {/* 1. Waar staan we — ronde, fase, live. */}
+      <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Activity className="size-3.5 text-primary" />
+          <Activity className="size-3.5 text-primary" aria-hidden />
           <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
             Ronde {currentIndex + 1} van {totalRounds} — fase: {ROUND_PHASE_LABELS_NL[phase].toLowerCase()}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-primary">
-          <span className="size-1.5 rounded-full bg-primary pulse-ring" />
+        <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-primary">
+          <span className="pulse-ring size-1.5 rounded-full bg-primary" />
           live
         </div>
       </div>
 
-      {/* 2. Submission progress per participant */}
+      {/* 2. Het enige grote cijfer op deze kaart: voortgang van deze ronde. */}
+      <div className="flex flex-col gap-2 rounded-lg border border-border bg-card px-3 py-2.5">
+        <p className="leading-none">
+          <span className="font-mono text-2xl font-bold tabular-nums text-foreground">
+            {progress.expected != null ? `${progress.submitted} van ${progress.expected}` : `${progress.submitted}`}
+          </span>{" "}
+          <span className="text-sm text-muted-foreground">ingediend</span>
+        </p>
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${progressPct}%` }} />
+        </div>
+        {missingLabels.length > 0 ? (
+          <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-700 dark:text-amber-400">
+            <Hourglass className="mt-px size-3 shrink-0" aria-hidden />
+            <span>
+              Nog wachten op{" "}
+              {missingLabels.length > 3
+                ? `${missingLabels.slice(0, 3).join(", ")} en ${missingLabels.length - 3} andere`
+                : missingLabels.join(", ")}
+            </span>
+          </p>
+        ) : (
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            Geen rol houdt deze ronde nog tegen.
+          </p>
+        )}
+      </div>
+
+      {/* 3. Per deelnemer: eigen rol voluit, overgenomen rollen samengevat. */}
       <div className="flex flex-col gap-1">
         <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-          Inzendingen deze ronde
+          Per deelnemer
         </span>
         {rows.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground italic">Geen deelnemers</p>
+          <p className="text-[11px] italic text-muted-foreground">Geen deelnemers</p>
         ) : (
           <ul className="flex flex-col gap-1">
             {rows.map(r => {
@@ -126,17 +178,27 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
                 state === "full" ? "bg-emerald-500"
                 : state === "partial" ? "bg-amber-500"
                 : "bg-rose-500"
-              const rolesText = r.primaryRole
-                ? [ROLE_META[r.primaryRole].label, ...r.inheritedRoles.map(rl => ROLE_META[rl].label)].join(" + ")
-                : "—"
               return (
                 <li key={r.id} className="flex items-center gap-2 text-[11px]">
-                  <span className={`size-2 rounded-full shrink-0 ${dotClass}`} />
-                  <span className="text-foreground truncate">{r.name}</span>
-                  <span className="text-muted-foreground truncate">· {rolesText}</span>
-                  <span className="ml-auto font-mono text-muted-foreground shrink-0">
+                  <span
+                    className={`size-2 shrink-0 rounded-full ${dotClass}`}
+                    aria-hidden
+                  />
+                  <span className="truncate text-foreground">{r.name}</span>
+                  <span className="shrink-0 text-muted-foreground">
+                    · {r.primaryLabel ?? "geen eigen rol"}
+                  </span>
+                  {r.inheritedCount > 0 && (
+                    <span
+                      className="shrink-0 rounded-full border border-dashed border-border px-1.5 font-mono text-[9px] text-muted-foreground"
+                      title={`Overgenomen rollen: ${r.inheritedLabels.join(", ")}`}
+                    >
+                      +{r.inheritedCount} overgenomen
+                    </span>
+                  )}
+                  <span className="ml-auto shrink-0 font-mono text-muted-foreground">
                     {r.expected != null
-                      ? `${r.submitted}/${r.expected} ingediend`
+                      ? `${r.submitted} van ${r.expected} ingediend`
                       : `${r.submitted} ingediend`}
                   </span>
                 </li>
@@ -146,110 +208,101 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
         )}
       </div>
 
-      {/* 3. Cumulative outcome preview — 6-axis mini bar chart */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-baseline justify-between">
-          <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-            Cumulatieve uitkomst (na {cumulative.completedRounds} rondes)
+      {/* 4. Secundaire status — icoon en kleur in plaats van nog een kopregel. */}
+      <div className="grid grid-cols-1 gap-2 border-t border-primary/20 pt-3 sm:grid-cols-2">
+        <StatusChip
+          icon={regulatory.tone === "ok" ? FileCheck2 : ShieldAlert}
+          label="Meldplicht"
+          value={regulatory.text}
+          tone={regulatory.tone}
+        />
+        <StatusChip icon={LifeBuoy} label="IR-retainer" value={retainer.text} tone={retainer.tone} />
+      </div>
+
+      {/* 5. De zes dimensies — pas als er een ronde met inzending is afgerond. */}
+      {cumulative.hasAny ? (
+        <details className="group rounded-lg border border-border bg-card">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Cumulatieve uitkomst na {cumulative.completedRounds}{" "}
+              {cumulative.completedRounds === 1 ? "afgeronde ronde" : "afgeronde rondes"}
+            </span>
+            <span className="text-[8px] text-muted-foreground opacity-60 group-open:hidden">▶</span>
+            <span className="hidden text-[8px] text-muted-foreground opacity-60 group-open:inline">▼</span>
+          </summary>
+          <div className="px-3 pb-3">
+            <DimensionImpactList vector={cumulative.perDim} />
+          </div>
+        </details>
+      ) : (
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          Nog geen afgeronde ronde met een inzending — de gevolgen per dimensie verschijnen daarna.
+        </p>
+      )}
+
+      {/* 6. Laatste gebeurtenissen — alleen nodig als je terugkijkt. */}
+      <details className="group rounded-lg border border-border bg-card">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Laatste gebeurtenissen ({latest.length})
           </span>
+          <span className="text-[8px] text-muted-foreground opacity-60 group-open:hidden">▶</span>
+          <span className="hidden text-[8px] text-muted-foreground opacity-60 group-open:inline">▼</span>
+        </summary>
+        <div className="px-3 pb-3">
+          {latest.length === 0 ? (
+            <p className="text-[11px] italic text-muted-foreground">Geen gebeurtenissen</p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {latest.map(ev => (
+                <li key={ev.id} className="flex items-start gap-2 text-[11px]">
+                  <span className="mt-0.5 shrink-0 font-mono text-[9px] text-muted-foreground">
+                    {new Date(ev.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <span className="leading-snug text-foreground">{summariseEvent(ev)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <MiniBarChart values={cumulative.perDim} muted={!cumulative.hasAny} />
-      </div>
-
-      {/* 4. Regulatory status */}
-      <div className="flex flex-col gap-0.5 border-t border-primary/20 pt-2">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Meldplicht</span>
-        <p className="text-[11px] text-foreground">{regStatus}</p>
-      </div>
-
-      {/* 5. IR-retainer status */}
-      <div className="flex flex-col gap-0.5">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">IR-retainer</span>
-        <p className="text-[11px] text-foreground">{retainer}</p>
-      </div>
-
-      {/* 6. Latest 3 timeline events */}
-      <div className="flex flex-col gap-1 border-t border-primary/20 pt-2">
-        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Laatste gebeurtenissen</span>
-        {latest.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground italic">Geen gebeurtenissen</p>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {latest.map(ev => (
-              <li key={ev.id} className="flex items-start gap-2 text-[11px]">
-                <span className="font-mono text-[9px] text-muted-foreground shrink-0 mt-0.5">
-                  {new Date(ev.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-                <span className="text-foreground leading-snug">{summariseEvent(ev)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      </details>
     </section>
   )
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────
 
+function StatusChip({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: LucideIcon
+  label: string
+  value: string
+  tone: Tone
+}) {
+  return (
+    <div className={`flex min-w-0 items-start gap-2 rounded-md border px-2.5 py-1.5 ${TONE_CLASS[tone]}`}>
+      <Icon className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+      <span className="min-w-0">
+        <span className="block font-mono text-[9px] uppercase tracking-wider opacity-70">{label}</span>
+        <span className="block text-[11px] leading-snug">{value}</span>
+      </span>
+    </div>
+  )
+}
+
 function emptyVector(): Record<OutcomeDimension, number> {
   return { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 }
 }
 
-function MiniBarChart({
-  values,
-  muted,
-}: {
-  values: Record<OutcomeDimension, number>
-  muted: boolean
-}) {
-  // Cumulative can exceed ±1 (it's a sum across rounds). Auto-scale so the
-  // longest bar fills the row while keeping the zero-line stable.
-  const magnitudes = OUTCOME_DIMENSIONS.map(d => Math.abs(values[d]))
-  const max = Math.max(1, ...magnitudes)
-  return (
-    <ul className="grid grid-cols-6 gap-1">
-      {OUTCOME_DIMENSIONS.map(dim => {
-        const v = values[dim]
-        const pct = Math.round((Math.abs(v) / max) * 100)
-        const positive = v >= 0
-        const barColor = muted
-          ? "bg-muted-foreground/30"
-          : positive
-            ? "bg-primary"
-            : "bg-rose-500"
-        return (
-          <li key={dim} className="flex flex-col items-center gap-1">
-            <div className="relative h-10 w-full flex flex-col justify-center">
-              {/* Zero baseline */}
-              <div className="absolute inset-x-0 top-1/2 h-px bg-border" />
-              {/* Bar */}
-              <div
-                className={`absolute inset-x-1 rounded-sm ${barColor}`}
-                style={{
-                  height: `${pct / 2}%`,
-                  top: positive ? `${50 - pct / 2}%` : "50%",
-                }}
-              />
-            </div>
-            <span className="font-mono text-[8px] uppercase tracking-wider text-muted-foreground">
-              {DIM_LABEL[dim]}
-            </span>
-            <span className={`font-mono text-[9px] tabular-nums ${muted ? "text-muted-foreground/60" : "text-foreground"}`}>
-              {v >= 0 ? "+" : ""}{v.toFixed(1)}
-            </span>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-function describeRegulatoryStatus(session: SessionState): string {
+function describeRegulatoryStatus(session: SessionState): { tone: Tone; text: string } {
   const regime = session.regulatoryRegime
   const obligations = session.regulatoryObligations ?? []
   if (!regime || obligations.length === 0) {
-    return "Geen open verplichting"
+    return { tone: "muted", text: "Geen open verplichting" }
   }
   // Prefer open > filed > expired for the summary line.
   const open = obligations.find(o => o.status === "open")
@@ -260,24 +313,28 @@ function describeRegulatoryStatus(session: SessionState): string {
     const nowHour = (Date.now() - anchor) / (60 * 60 * 1000)
     const hoursLeft = Math.max(0, deadlineHour - nowHour)
     const label = (milestone?.label ?? open.milestoneId).toLowerCase()
-    return `Open · ${label} · ${(milestone?.deadlineHours ?? 0)}u deadline (nog ${hoursLeft.toFixed(1)}u)`
+    return {
+      // Minder dan een kwart van de termijn over: dan is dit het blok waar de
+      // facilitator naar moet kijken.
+      tone: hoursLeft <= (milestone?.deadlineHours ?? 0) / 4 ? "bad" : "warn",
+      text: `Open · ${label} · ${(milestone?.deadlineHours ?? 0)}u deadline (nog ${hoursLeft.toFixed(1)}u)`,
+    }
   }
   const filed = obligations.find(o => o.status === "filed")
   if (filed) {
     const milestone = regime.milestones.find(m => m.id === filed.milestoneId)
     const deadlineHour = filed.openedAtHour + (milestone?.deadlineHours ?? 0)
     const onTime = filed.filedAtHour !== undefined && filed.filedAtHour <= deadlineHour
-    return `Ingediend in R${filed.filedAtRound ?? "?"} (${onTime ? "op tijd" : "te laat"})`
+    return {
+      tone: onTime ? "ok" : "warn",
+      text: `Ingediend in R${filed.filedAtRound ?? "?"} (${onTime ? "op tijd" : "te laat"})`,
+    }
   }
   const expired = obligations.find(o => o.status === "expired")
   if (expired) {
-    return `Vervallen — niet ingediend`
+    return { tone: "bad", text: "Vervallen — niet ingediend" }
   }
-  return "Geen open verplichting"
-}
-
-function retainer_round(session: SessionState): string {
-  return String(session.retainerActivation?.activatedAtRound ?? "?")
+  return { tone: "muted", text: "Geen open verplichting" }
 }
 
 const TRACKED_TYPES = new Set<string>([

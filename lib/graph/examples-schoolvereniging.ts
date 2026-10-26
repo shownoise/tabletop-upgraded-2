@@ -101,7 +101,8 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           type: "alert", channel: "siem", urgency: "high",
           title: "WestNet MSP-dashboard — Ongebruikelijke schrijfactiviteit FS-01 (AVG/NIS2-relevant)",
           content:
-            "MSP-dashboard notificatie (nog geen ticket). Bron: WestNet monitoring op fileserver FS-01. Vensterperiode: 08:38–08:45. Signaal: 4200 bestandsmodificaties in 7 minuten, waaronder uitbreiding .PLAY op ~1800 objecten in de shares /leerlingdossiers en /financien. Severity door WestNet automatisch op 'low' gezet omdat het patroon lijkt op geplande archivering. Doorzetten naar ticket vereist manuele actie van dienstdoende engineer. De MSP-SLA dekt geen ransomware-scope buiten kantooruren; opschaling naar piket kost tijd en geld. Bij bevestiging van datalek treden AVG art. 33 (AP, 72u) en NIS2 art. 23 (NCSC/CSIRT, 24u) in werking.",
+            "MSP-dashboard notificatie (nog geen ticket). Bron: WestNet monitoring op fileserver FS-01. Vensterperiode: 08:38–08:45. Signaal: 4200 bestandsmodificaties in 7 minuten, waaronder uitbreiding .PLAY op ~1800 objecten in de shares /leerlingdossiers en /financien. Severity door WestNet automatisch op 'low' gezet omdat het patroon lijkt op geplande archivering. Doorzetten naar ticket vereist manuele actie van dienstdoende engineer. De MSP-SLA dekt geen ransomware-scope buiten kantooruren; opschaling naar piket kost tijd en geld. Bij bevestiging van datalek treden AVG art. 33 (AP, 72u) en NIS2 art. 23 (NCSC/CSIRT, 24u) in werking.\n\n" +
+            "WestNet vraagt om terugkoppeling vóór 10:00, en het zijn precies twee vragen: classificeren jullie dit als ruis of als incident, en wie bij jullie geeft die opdracht nu de ICT-coordinator niet paraat is? Zolang dat antwoord uitblijft staat de notificatie op 'low' en komt er geen engineer op. (De classificatieladder P1 t/m P4 staat in 'IR Respons Quick Reference'; welke klok op welk moment begint te lopen staat in 'GDPR Artikel 33 & NIS2 Meldplicht Checklist'.)",
           senderName: "WestNet ICT — Monitoring",
           source: "MSP dashboard",
           timestamp: "08:42",
@@ -263,7 +264,8 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
             "2. Initial access-vermoeden: onbeheerd RDP-endpoint van een oud-medewerker (vertrokken juli), account niet gedeactiveerd.\n" +
             "3. Exfiltratie: uitgaande verbinding zaterdagnacht 03:12–05:41, ~4.1 GB richting hoster in Duitsland (bekende Play-infrastructuur).\n" +
             "4. Persistence: wij zien nog geen tweede kanaal maar sluiten het niet uit — full sweep vereist voordat we schoon melden.\n\n" +
-            "Wij adviseren: (a) alle domain-accounts een wachtwoord-reset, (b) FS-01/02 offline houden, (c) Eye Security IR-retainer activeren voor forensische lead. De MSP-SLA dekt geen incidentresponse op dit niveau — wij kunnen ondersteunen maar niet leiden.",
+            "Wij adviseren: (a) alle domain-accounts een wachtwoord-reset, (b) FS-01/02 offline houden, (c) Eye Security IR-retainer activeren voor forensische lead. De MSP-SLA dekt geen incidentresponse op dit niveau — wij kunnen ondersteunen maar niet leiden.\n\n" +
+            "Wat wij vandaag van jullie nodig hebben is één knoop. Krijgen wij eerst de ruimte om het forensische beeld compleet te maken — full sweep, logbewaring, scope-bepaling — of gaat de communicatie naar docenten, ouders en pers daarvóór? Met de mensen die er nu zijn kan niet alles naast elkaar. Laat ons vóór 15:00 weten welke van die twee bij jullie voorrang krijgt, en wie dat heeft besloten; wij richten onze dag daarop in.",
           senderName: "Kevin Bosch — WestNet ICT",
           source: "WestNet ICT B.V.",
           timestamp: "13:35",
@@ -278,11 +280,14 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           title: "Reminder: Magister-contract kent 48u breach-notification. De verzekeringspolis eist parallel activatie.",
           content:
             "Interne notitie van bestuurssecretaris aan bestuur. Onderwerp: Magister-contract art. 14.3 + Univé-clausule.\n\n" +
-            "Artikel 14.3 van ons Magister-contract (versie 2022) verplicht ons om Iddink Group (moederbedrijf Magister) binnen 48 uur na ontdekking van een datalek te informeren dat mogelijk hun platform of hun data raakt. Wij hebben dit nog nooit ingeroepen. Detectietijd volgens ons: vandaag 08:42, dus 48u-klok verstrijkt woensdag 08:42. Aandachtspunt: als de exfil-data leerlinggegevens uit Magister bevat, is dit contractueel én richting hen relevant. Aanvullend: de verzekeringspolis heeft uitsluitingsclausules — als wij pas na 24u melden bij Univé, kan een deel van de dekking vervallen; die polis is nooit precies gelezen.",
+            "Artikel 14.3 van ons Magister-contract (versie 2022) verplicht ons om Iddink Group (moederbedrijf Magister) binnen 48 uur na ontdekking van een datalek te informeren dat mogelijk hun platform of hun data raakt. Wij hebben dit nog nooit ingeroepen. Detectietijd volgens ons: vandaag 08:42, dus 48u-klok verstrijkt woensdag 08:42. Aandachtspunt: als de exfil-data leerlinggegevens uit Magister bevat, is dit contractueel én richting hen relevant. Aanvullend: de verzekeringspolis heeft uitsluitingsclausules — als wij pas na 24u melden bij Univé, kan een deel van de dekking vervallen; die polis is nooit precies gelezen.\n\n" +
+            "Mijn vraag aan bestuur en controller is daarom concreet: zetten wij het bericht aan Iddink en de melding aan Univé vandaag in gang, of pas als het technische beeld rond is en de forensiek iets te vertellen heeft? Die keuze gaat over dezelfde uren. De meldtermijn en de uitsluitingen van onze eigen dekking staan in 'Cyber Verzekeringspolis — Samenvatting' — ik wil die vanmiddag naast dit contract leggen, niet volgende week.",
           senderName: "Marijke Vlietstra — bestuurssecretaris",
           timestamp: "13:52",
           classification: "feit",
           targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d2-r2-forensiek-comms",
+          facilitatorNote: "Feit — draagt de twee contractuele klokken (Iddink 48u, Univé 24u) en is daarmee de setup voor de juridische en financiële opties van deze ronde.",
         },
         {
           id: "r2-teacher-panic",
@@ -419,7 +424,8 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           type: "media", channel: "phone", urgency: "high",
           title: "RTV Oost belt — journalist wil bevestiging",
           content:
-            "Van: telefonistes bestuurskantoor. Sanne Bruijns (RTV Oost regionale redactie) heeft twee keer gebeld tussen 10:05 en 10:22. Boodschap: 'Wij hebben van drie oudergezinnen begrepen dat er sinds maandag iets speelt bij Onderwijsvereniging Noord-Oost — Magister werkt niet, roosters onduidelijk, er gaat een gerucht rond over ransomware. Wij willen vandaag om 14:00 op locatie iemand van het bestuur spreken. Als jullie niet reageren gaan wij toch uitzenden met wat wij van ouders hebben. Deadline voor commentaar: 13:30.'",
+            "Van: telefonistes bestuurskantoor. Sanne Bruijns (RTV Oost regionale redactie) heeft twee keer gebeld tussen 10:05 en 10:22. Boodschap: 'Wij hebben van drie oudergezinnen begrepen dat er sinds maandag iets speelt bij Onderwijsvereniging Noord-Oost — Magister werkt niet, roosters onduidelijk, er gaat een gerucht rond over ransomware. Wij willen vandaag om 14:00 op locatie iemand van het bestuur spreken. Als jullie niet reageren gaan wij toch uitzenden met wat wij van ouders hebben. Deadline voor commentaar: 13:30.'\n\n" +
+            "Wij moeten haar vóór 13:30 een naam doorgeven en wij hebben die naam niet. Dus: wie spreekt haar te woord — de bestuurder zelf of de woordvoerder — en krijgt zij een mondelinge reactie of uitsluitend een schriftelijke verklaring? Het inzetbare holding-statement en de lijst met uitspraken die wij níet doen staan in 'Crisiscommunicatie Draaiboek'.",
           senderName: "Frontoffice bestuurskantoor",
           source: "RTV Oost — regionale redactie",
           timestamp: "10:24",
@@ -449,7 +455,8 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
             "2. Type persoonsgegevens (art. 9 bijzondere gegevens? bsn?).\n" +
             "3. Mitigerende maatregelen genomen tot dusver.\n" +
             "4. Communicatiestrategie richting betrokkenen (art. 34 AVG).\n\n" +
-            "Verzuim tot volledige melding kan leiden tot handhavingstraject onder AVG.",
+            "Verzuim tot volledige melding kan leiden tot handhavingstraject onder AVG.\n\n" +
+            "[Doorgestuurd door de bestuurssecretaris, met één vraag erbij: wie van ons beantwoordt welk van deze vier punten, en gaat de completering vandaag de deur uit of pas donderdag kort vóór 08:42? De velden die de AP hier opvraagt staan één op één in 'GDPR Artikel 33 & NIS2 Meldplicht Checklist', inclusief de interne stappen die eerst gezet moeten zijn.]",
           senderName: "Autoriteit Persoonsgegevens",
           timestamp: "10:41",
           classification: "feit",
@@ -478,6 +485,26 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           requiresCapability: RETAINER_ACTIVATED_FLAG,
           targetTeam: "crisis_management",
           facilitatorNote: "Feit — alleen zichtbaar als het team in R2 de retainer heeft geactiveerd. Cross-round capability-check.",
+        },
+        {
+          // Zonder deze inject beslissen bedrijfsvoering en personeelszaken in R3
+          // over rooster, toetsweek en docentenlijn zonder dat iemand hen in deze
+          // ronde iets heeft verteld — hun opties stonden er wel, de aanleiding niet.
+          id: "r3-locatiedirecteuren",
+          type: "internal", channel: "email", urgency: "high",
+          title: "Locatiedirecteuren — hoe lang houdt papier het, en wat zeggen docenten bij de poort?",
+          content:
+            "Van: de vijf locatiedirecteuren, namens de teamleiders. Aan: bestuur, bedrijfsvoering en personeelszaken.\n\n" +
+            "Twee dingen die wij vóór het eind van de middag van jullie nodig hebben.\n\n" +
+            "1. Roosters en presentie op papier houden het naar onze inschatting tot vrijdag. Daarna lopen we vast: de toetsweek van week 46 begint maandag en toetsen afnemen zonder betrouwbare cijferregistratie durven wij niet verantwoorden. Trekken wij de noodlijn door tot vrijdag, of gokken we erop dat we halverwege de week terug kunnen naar Magister? Half-half is voor ons de slechtste variant — dan voert elke locatie iets anders uit.\n" +
+            "2. Docenten worden bij het uitgaan aangesproken door ouders en verzinnen op dit moment zelf een antwoord. Zij staan daarmee ongewild de vereniging te woord bij de poort. Zij vragen om één regel die zij mogen gebruiken, en om een plek waar zij de vragen kwijt kunnen die zij niet mogen beantwoorden.\n\n" +
+            "Wij horen graag welke lijn het wordt; uitvoeren doen wij. De cascade richting teamleiders en de gedragsregels voor medewerkers staan in 'Medewerkers Crisisprotocol'; de herstelprioriteit per primair proces in 'Business Continuity — Noodprocedure Overzicht'.",
+          senderName: "Locatiedirecteuren OV Noord-Oost",
+          timestamp: "10:50",
+          classification: "aanname",
+          targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d3-r3-comms-meldingen",
+          facilitatorNote: "Aanname — 'tot vrijdag' is een inschatting van de directeuren, geen meting. Dit is het enige R3-signaal dat de bedrijfsvoerings- en personeelsopties van deze ronde opzet; let op teams die hier niet op terugkomen.",
         },
       ],
       meldingMoment: {
@@ -611,7 +638,8 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           content:
             "Van: Kevin Bosch (WestNet) + Rob de Vries (extern via WhatsApp-call).\n\n" +
             "Restore-poging eerste backup-set (Wasabi cold, incrementeel sept–okt) gefaald. Manifest wijst naar object-hash mismatch op negen kernbestanden waaronder de Magister-koppelingsdatabase. Waarschijnlijke oorzaak: silent corruption sinds mid-september bij een failed rotation die niet gealarmeerd is. Bij herstelfase blijkt de back-up-restoretest jaren geleden voor het laatst volledig gedraaid — een documented weakness in ons IR-plan. Tweede backup-set (Veeam maandelijkse full, oktober) draait nu terug op een schone VM. ETA volledige restore-test: 15:30 vandaag. Als deze ook faalt zitten wij op backup uit september — 6 weken werk kwijt, incl. cijfers Q1.\n\n" +
-            "Belangrijk: dit maakt de losgeldkeuze zwaarder. Betalen levert theoretische decryptor, maar volledige integriteit ná decryptie is niet gegarandeerd — Play staat bekend om onvolledige tools.",
+            "Belangrijk: dit maakt de losgeldkeuze zwaarder. Betalen levert theoretische decryptor, maar volledige integriteit ná decryptie is niet gegarandeerd — Play staat bekend om onvolledige tools.\n\n" +
+            "Wat wij vóór vanavond van het bestuur nodig hebben is de lijn waarop jullie hier gaan kiezen: wachten jullie de uitkomst van 15:30 af voordat er over betalen wordt gesproken, of loopt dat gesprek nu al parallel? Wij kunnen één van de twee netjes doen, niet beide. En zeg ons er vooral bij op welke grond jullie kiezen — wij leveren dan de cijfers die daarbij horen in plaats van een technisch verhaal dat niemand kan wegen.",
           senderName: "Kevin Bosch — WestNet ICT",
           timestamp: "09:12",
           classification: "feit",
@@ -630,7 +658,8 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
             "(b) bevestiging dat er geen alternatief herstelpad haalbaar is binnen 5 werkdagen,\n" +
             "(c) verklaring dat u geen contact heeft gehad met de aanvaller zonder onze onderhandelaar,\n" +
             "(d) juridische bevestiging dat betaling niet in strijd is met sanctielijsten (OFAC/EU).\n\n" +
-            "Zonder deze vier documenten kunnen wij een betaling niet dekken — u kunt uiteraard buiten polis om betalen maar dan valt de rest van uw claim mogelijk ook.",
+            "Zonder deze vier documenten kunnen wij een betaling niet dekken — u kunt uiteraard buiten polis om betalen maar dan valt de rest van uw claim mogelijk ook.\n\n" +
+            "Wij vragen u daarom vandaag schriftelijk door te geven welke kant het wordt: binnen de polis met deze vier documenten, of op eigen titel buiten ons om? En op welke grond maakt u die afweging — onze schadebehandeling legt dat vast en weegt het later mee. De dekkingsgrenzen en de uitsluitingen die hier spelen staan in uw eigen 'Cyber Verzekeringspolis — Samenvatting'; leest u vooral de passage over onderhandelen zonder onze toestemming.",
           senderName: "Diana Rademakers — Univé Zakelijk",
           timestamp: "09:34",
           classification: "feit",
@@ -647,6 +676,26 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           timestamp: "10:02",
           classification: "feit",
           targetTeam: "crisis_management",
+        },
+        {
+          // R4 had drie injects die alledrie bij techniek, verzekeraar of juridisch
+          // landden, terwijl de bestuurder de eigenaar is van het losgeldbesluit.
+          // Die rol had dus geen eigen aanleiding. De onderhandelaar vraagt hier
+          // niet om een voorkeur maar om een criterium — dat is de beslisvraag.
+          id: "r4-onderhandelaar-status",
+          type: "executive", channel: "phone", urgency: "critical",
+          title: "Onderhandelaar: 'geef mij het criterium, niet een voorkeur'",
+          content:
+            "Telefonische notitie van de bestuurssecretaris, 09:48. Gesproken met de onderhandelaar die via de polis aan ons is toegewezen.\n\n" +
+            "Stand van zaken: het contact loopt, de tegenpartij heeft het bedrag dat nu op tafel ligt bevestigd en houdt het aan morgen 09:00 en niet langer. Daarna gaat volgens hen de publicatie door.\n\n" +
+            "Zijn woorden, zo letterlijk als ik ze kon opschrijven: 'Wat wordt het — rekken, een laatste bod, of het gesprek afbreken? Dat is geen technische keuze en ook geen financiële, dat is een bestuursbesluit, en ik heb het vóór vanmiddag 16:00 nodig. En geef mij er de grond bij: onderwijscontinuïteit, de positie richting ouders en toezichthouder, de kosten, of de kans dat betalen niets oplevert. Geef mij het criterium, dan voer ik het uit. Geef mij alleen een voorkeur, dan improviseer ik aan tafel en dat wilt u niet.'\n\n" +
+            "De drempelbedragen waarboven dit hoe dan ook een bestuursbesluit is, en wie er verplicht mede-ondertekent, staan in 'Board Escalatieprotocol — Cyberincident'.",
+          senderName: "Marijke Vlietstra — bestuurssecretaris",
+          timestamp: "09:48",
+          classification: "feit",
+          targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d4-r4-losgeld",
+          facilitatorNote: "Feit — de drie opties van de onderhandelaar (rekken, laatste bod, afbreken) zijn één op één de keuze van deze ronde. Hij vraagt expliciet om het criterium; teams die alleen een voorkeur geven, horen dat in de nabespreking terug.",
         },
       ],
       roleActions: [
@@ -762,7 +811,8 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           type: "executive", channel: "phone", urgency: "high",
           title: "LoonBureau Oost belt — mogelijk secundair incident",
           content:
-            "Van: telefonistes bestuurskantoor. Peter van Ravenzwaaij, hoofd security LoonBureau Oost, heeft om 08:47 gebeld. Hij vraagt om terugbelverzoek voor de CFO. Kernboodschap: 'wij zien in ons SIEM sinds dinsdag inlogpogingen vanuit dezelfde infrastructuur die volgens jullie forensische partner (Eye Security) bij het incident betrokken is. Wij vermoeden dat via een gedeeld service-account voor batch-verwerking ook onze omgeving getoetst is. Wij moeten dit vandaag afstemmen — is dit een gezamenlijk incident voor de meldplicht?'",
+            "Van: telefonistes bestuurskantoor. Peter van Ravenzwaaij, hoofd security LoonBureau Oost, heeft om 08:47 gebeld. Hij vraagt om terugbelverzoek voor de CFO. Kernboodschap: 'wij zien in ons SIEM sinds dinsdag inlogpogingen vanuit dezelfde infrastructuur die volgens jullie forensische partner (Eye Security) bij het incident betrokken is. Wij vermoeden dat via een gedeeld service-account voor batch-verwerking ook onze omgeving getoetst is. Wij moeten dit vandaag afstemmen — is dit een gezamenlijk incident voor de meldplicht?'\n\n" +
+            "Wij moeten hem vóór 12:00 een naam geven en daar zit de vraag: wie spreekt deze ketenpartij aan, en op welk niveau — bestuurder naar bestuurder, of laten wij dit tussen de security-mensen afstemmen? Hij vroeg er zelf naar, want hij moet het bij zijn eigen bestuur verantwoorden.",
           senderName: "Peter van Ravenzwaaij — LoonBureau Oost",
           source: "LoonBureau Oost B.V.",
           timestamp: "08:52",
@@ -795,6 +845,25 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           classification: "feit",
           targetTeam: "crisis_management",
           facilitatorNote: "Feit — PMR-verzoek dwingt HR-rol tot concrete compensatie. Test hoe snel goodwill wordt geactiveerd.",
+        },
+        {
+          // De beslisvraag van R5 vraagt letterlijk hoe lang de noodprocessen
+          // worden volgehouden, maar geen enkele inject bracht bedrijfsvoering
+          // iets om dat op te baseren. Dit is zijn eigen signaal.
+          id: "r5-noodproces-kraakt",
+          type: "internal", channel: "email", urgency: "high",
+          title: "Bedrijfsvoering — het noodproces kraakt, ik heb een einddatum nodig",
+          content:
+            "Van: hoofd bedrijfsvoering, na de ronde langs de vijf locaties van vanmorgen.\n\n" +
+            "Vier dagen papier levert dit beeld op. Presentie wordt op twee locaties niet meer dezelfde dag verwerkt, de absentieberichten richting ouders lopen een halve dag achter, en de leerlingenadministratie houdt twee stapels bij die niet meer op elkaar passen. De mensen doen het, maar ze doen het op wil en niet op proces — en wil is eindig.\n\n" +
+            "Mijn inschatting: tot en met vrijdag redden wij dit. Daarna raken we dingen kwijt die we later niet meer kunnen reconstrueren. De nieuwe Magister-tenant komt er volgens ICT aan, en zodra die er is gaat iemand vragen of we niet gewoon terug kunnen.\n\n" +
+            "Wat ik van jullie nodig heb is een einddatum, geen intentie: tot wanneer rijden wij het noodproces, gaan we in één keer over of in stappen, en wie mag die knop omzetten? In 'Business Continuity — Noodprocedure Overzicht' lees ik dat omschakelen naar handmatige procedures mijn eigen bevoegdheid is en terugschakelen niet — dat wil ik bevestigd hebben voordat ik het op vijf locaties laat uitvoeren.",
+          senderName: "Hoofd bedrijfsvoering",
+          timestamp: "09:05",
+          classification: "aanname",
+          targetTeam: "crisis_management",
+          setsUpDecisionNodeId: "d5-r5-ketenverbreding",
+          facilitatorNote: "Aanname — 'tot en met vrijdag' is een inschatting uit de locatieronde, geen meting. Zet de tweede helft van de beslisvraag op: hoe lang houden jullie de noodprocessen vol, en wie mag terugschakelen?",
         },
       ],
       roleActions: [
@@ -905,7 +974,8 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           title: "AP — Schriftelijke follow-up + aankondiging art. 32-inspectie (AVG-handhaving)",
           content:
             "Autoriteit Persoonsgegevens.\n\n" +
-            "Onder verwijzing naar uw meldingen (initieel, aangevuld) en de door ons ontvangen klacht, verzoeken wij binnen 30 werkdagen een schriftelijke follow-up onder AVG art. 33. Op basis van de omvang (>4000 betrokkenen, art. 9-gegevens) en de ontvangen klacht bereidt de AP een vervolg-inspectie voor onder art. 32 (technische en organisatorische maatregelen). Wij zullen uiterlijk in het eerste kwartaal 2025 contact opnemen voor bezoekafspraken en documentenverzoek. Wij wijzen u nu al op de mogelijkheid van een bestuurlijke boete indien wij ernstige tekortkomingen vaststellen.",
+            "Onder verwijzing naar uw meldingen (initieel, aangevuld) en de door ons ontvangen klacht, verzoeken wij binnen 30 werkdagen een schriftelijke follow-up onder AVG art. 33. Op basis van de omvang (>4000 betrokkenen, art. 9-gegevens) en de ontvangen klacht bereidt de AP een vervolg-inspectie voor onder art. 32 (technische en organisatorische maatregelen). Wij zullen uiterlijk in het eerste kwartaal 2025 contact opnemen voor bezoekafspraken en documentenverzoek. Wij wijzen u nu al op de mogelijkheid van een bestuurlijke boete indien wij ernstige tekortkomingen vaststellen.\n\n" +
+            "[Interne notitie bij deze brief: de AP toetst straks op maatregelen, niet op goede bedoelingen. De vraag die daarmee vandaag op tafel ligt is dus niet óf wij iets verbeteren. Welke verandering leggen wij vast, wie wordt daarvan eigenaar, en op welke datum staat die? Precies dat is wat een inspecteur in het eerste kwartaal opvraagt. De meldroute en de interne escalatie waarop wij worden getoetst staan in 'GDPR Artikel 33 & NIS2 Meldplicht Checklist'; de incidentclassificatie en de containment-criteria die zij ernaast zullen leggen in 'IR Respons Quick Reference'.]",
           senderName: "Autoriteit Persoonsgegevens — afdeling handhaving",
           timestamp: "09:15",
           classification: "feit",
@@ -919,7 +989,8 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           title: "RvT vraagt post-mortem + governance-agenda",
           content:
             "Van: voorzitter Raad van Toezicht.\n\n" +
-            "Beste bestuur, voor de RvT-vergadering woensdag 13 november graag: (1) schriftelijk incident-post-mortem met tijdlijn, kosten en oorzaken, (2) voorstel voor governance-verandering met concrete investeringsbedragen en eigenaars, (3) helderheid over de rol en het contract met WestNet ICT — is dit de juiste MSP of moeten we opnieuw kijken, (4) risico-analyse: welke andere systemen vergelijkbaar kwetsbaar. Ik verwacht dat wij als RvT ook een verklaring naar oudervereniging en OR moeten voorbereiden — help ons daarin.",
+            "Beste bestuur, voor de RvT-vergadering woensdag 13 november graag: (1) schriftelijk incident-post-mortem met tijdlijn, kosten en oorzaken, (2) voorstel voor governance-verandering met concrete investeringsbedragen en eigenaars, (3) helderheid over de rol en het contract met WestNet ICT — is dit de juiste MSP of moeten we opnieuw kijken, (4) risico-analyse: welke andere systemen vergelijkbaar kwetsbaar. Ik verwacht dat wij als RvT ook een verklaring naar oudervereniging en OR moeten voorbereiden — help ons daarin.\n\n" +
+            "Eén ding vooraf, zodat we woensdag geen tijd verliezen: per punt wil ik drie dingen zien staan — wie het doet, op welke datum het klaar is, en wat het kost. Een lijst zonder die drie kolommen neem ik niet in behandeling; dan schuift het door naar maart en dan gebeurt het niet. Wat je níet van mij hoort is wélke verandering jullie kiezen, dat is bestuur en niet toezicht. Dus de enige vraag die ik woensdag stel: wat leggen jullie vast, wie wordt daarvan eigenaar en welke datum staat eronder?",
           senderName: "Voorzitter RvT — mr. J. de Boer",
           timestamp: "09:33",
           classification: "feit",
@@ -938,6 +1009,26 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           timestamp: "10:12",
           classification: "feit",
           targetTeam: "crisis_management",
+        },
+        {
+          // De ICT-rol bezit in R6 vier opties over het MSP-contract, maar kreeg
+          // dat onderwerp alleen als subpunt in de brief van de RvT. De
+          // stilzwijgende verlenging geeft die keuze een eigen harde datum.
+          id: "r6-westnet-verlenging",
+          type: "executive", channel: "email", urgency: "high",
+          title: "WestNet ICT — verlenging per 1 januari, opzegtermijn verstrijkt 1 december",
+          content:
+            "Van: Harold Kamphuis (accountmanager WestNet ICT B.V.). Aan: bestuur en ICT.\n\n" +
+            "Beste mensen, los van het incident: onze overeenkomst loopt af op 31 december en verlengt zich stilzwijgend met 24 maanden als er vóór 1 december geen schriftelijk bericht van jullie kant ligt. Ik leg dat liever netjes bij jullie neer dan het te laten gebeuren.\n\n" +
+            "Wij hebben de afgelopen week ondersteund buiten de afspraken om. Dat deden we graag, maar het is geen basis om op door te gaan: eerstelijns respons in werkuren is wat er is afgesproken, incidentrespons op dit niveau is dat niet, en onze monitoring heeft de notificatie van maandagochtend zelf op lage prioriteit gezet. Dat laatste zit in onze triage en niet in jullie omgeving — ik benoem het liever zelf dan dat het in een post-mortem opduikt.\n\n" +
+            "Willen jullie iets anders — scope inclusief ransomware, 24/7 doorschakeling, een andere severity-triage, een vaste tweede man naast jullie eigen ICT-coordinator — dan moeten we daar in november over praten en niet in januari. Dus de vraag terug: stilzwijgend door, opnieuw onderhandelen, of opzeggen? En als het heronderhandelen wordt: wie is daarvan bij jullie eigenaar, en voor welke datum hoor ik dat? Ik moet iemand kunnen bellen die erover gaat.",
+          senderName: "Harold Kamphuis — WestNet ICT",
+          source: "WestNet ICT B.V.",
+          timestamp: "09:58",
+          classification: "feit",
+          targetTeam: "technical_it",
+          setsUpDecisionNodeId: "d6-r6-verankering",
+          facilitatorNote: "Feit — de stilzwijgende verlenging zet een harde datum (1 december) onder de ICT-keuze van deze ronde. Let op teams die 'heronderhandelen' zeggen zonder die datum te noemen; dan verlengt het contract zich gewoon.",
         },
       ],
       roleActions: [
