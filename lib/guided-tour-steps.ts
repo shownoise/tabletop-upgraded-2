@@ -110,8 +110,8 @@ export const FACILITATOR_TOUR: Tour = {
       target: '[data-tour="facilitator-stap-ronde"]',
       title: 'Stap 2 — actieve ronde',
       body:
-        'De ronde die loopt. Je zet injects door, opent het overleg en geeft de keuze vrij. ' +
-        'Dit is het scherm waar je tijdens het spelen staat.',
+        'Hier schuif je de ronde door de fasen: bericht, overleg, keuze, review. Je ziet hoeveel ' +
+        'keuzes binnen zijn en op wie je nog wacht. Eigen injects pushen doe je op Gereedschap.',
       prefer: 'onder',
     },
     {
@@ -126,7 +126,8 @@ export const FACILITATOR_TOUR: Tour = {
       target: '[data-tour="facilitator-stap-eindbespreking"]',
       title: 'Stap 4 — eindbespreking',
       body:
-        'De terugblik op de hele oefening, en het rapport dat de deelnemers meekrijgen.',
+        'Alle gespeelde rondes op een rij, met de keuzes, de dimensies en gespreksvragen. ' +
+        'Van hieruit open je het facilitatorrapport; de deelnemers zien hun eigen terugblik.',
       prefer: 'onder',
     },
     {

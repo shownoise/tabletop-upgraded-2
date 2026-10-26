@@ -6,13 +6,15 @@
 
 import Link from "next/link"
 import {
-  ArrowLeft, ChevronLeft, ChevronRight, Copy, CheckCircle, FileText,
+  ArrowLeft, ChevronLeft, ChevronRight, Copy, CheckCircle, FileText, HelpCircle,
   Monitor, Play, Square, Wifi, WifiOff, Wrench,
 } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { LangToggle } from "@/components/lang-toggle"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { GuidedTour } from "@/components/shared/guided-tour"
+import { TOURS } from "@/lib/guided-tour-steps"
 import { describeNextAction } from "@/lib/session-next-action"
 import { api } from "@/lib/api-client"
 import { tr, ESCALATION_KEYS, type Lang } from "@/lib/i18n"
@@ -56,6 +58,7 @@ export function FacilitatorShell({
   children: React.ReactNode
 }) {
   const [copied, setCopied] = useState(false)
+  const [tourOpen, setTourOpen] = useState(false)
   const status = session.status
   const isActive = status === "active"
   const isLobby = status === "lobby"
@@ -114,6 +117,18 @@ export function FacilitatorShell({
             </div>
             <LangToggle lang={lang} setLang={setLang} />
             <ThemeToggle />
+            {/* Rondleiding over het dashboard: dimt en vervaagt alles behalve
+                één stap, met een pijl en een toelichting. Dezelfde component
+                als bij de deelnemer. */}
+            <button
+              type="button"
+              onClick={() => setTourOpen(true)}
+              title="Hoe werkt dit dashboard?"
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <HelpCircle className="size-3.5" />
+              Uitleg
+            </button>
             <Link
               href="/admin/present"
               className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
@@ -133,6 +148,7 @@ export function FacilitatorShell({
               <Link
                 key={s}
                 href={STEP_PATH[s]}
+                data-tour={`facilitator-stap-${s}`}
                 aria-current={active ? "step" : undefined}
                 className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition-colors ${
                   active
@@ -165,6 +181,7 @@ export function FacilitatorShell({
           </a>
           <Link
             href={STEP_PATH.gereedschap}
+            data-tour="facilitator-stap-gereedschap"
             aria-current={step === "gereedschap" ? "step" : undefined}
             className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition-colors ${
               step === "gereedschap"
@@ -237,6 +254,8 @@ export function FacilitatorShell({
         )}
         {children}
       </main>
+
+      <GuidedTour tour={TOURS.facilitator} open={tourOpen} onClose={() => setTourOpen(false)} />
     </div>
   )
 }
