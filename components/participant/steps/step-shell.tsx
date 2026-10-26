@@ -46,10 +46,21 @@ export function StepProgress({
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-primary">
-        {stepLabel(step)} · {STEP_META[step].title}
-      </span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-primary">
+          {stepLabel(step)} · {STEP_META[step].title}
+        </span>
+        {/* De eigenaar vond de stappen "heel erg geforceerd" en wilde terug
+            kunnen. Dat kon al — elk bolletje van een geopende stap is een
+            knop — maar niets vertelde dat. Deze regel doet dat wel. */}
+        {currentIdx > 0 && (
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Klik een stap om terug te kijken
+          </span>
+        )}
+      </div>
       <ol
+        data-tour="deelnemer-voortgang"
         className="flex items-center gap-1 sm:gap-1.5"
         aria-label={`Voortgang: stap ${stepNumber(step)} van ${TOTAL_STEPS}`}
       >
@@ -101,6 +112,7 @@ export function StepShell({
   onGo,
   primary,
   note,
+  menu,
   children,
 }: {
   step: StepId
@@ -109,6 +121,9 @@ export function StepShell({
   primary?: StepPrimary
   // Eén regel onderaan: waarom er nu niets te doen is, of wat er hierna komt.
   note?: string
+  // Vaste menu-items naast de stappen: documenten en de uitleg. Die horen niet
+  // bij één stap — je wilt ze juist kunnen openen op het moment dat je kiest.
+  menu?: ReactNode
   children: ReactNode
 }) {
   const meta = STEP_META[step]
@@ -122,7 +137,7 @@ export function StepShell({
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
       <StepProgress step={step} highest={highest} onGo={onGo} />
 
-      <header className="flex items-start gap-3">
+      <header data-tour="deelnemer-stapkop" className="flex items-start gap-3">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10">
           <HeaderIcon className="size-5 text-primary" aria-hidden />
         </span>
@@ -130,6 +145,7 @@ export function StepShell({
           <h1 className="text-xl font-semibold tracking-tight text-foreground">{meta.title}</h1>
           <p className="text-sm text-muted-foreground">{meta.lead}</p>
         </span>
+        {menu ? <span className="flex shrink-0 items-center gap-1.5">{menu}</span> : null}
       </header>
 
       <div className="flex flex-col gap-4">{children}</div>

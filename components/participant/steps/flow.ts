@@ -60,7 +60,7 @@ export const STEP_META: Record<StepId, StepMeta> = {
   injects: {
     id: 'injects',
     title: 'Berichten',
-    lead: 'Alleen de berichten die jouw rol bereiken.',
+    lead: 'Wat er deze ronde binnenkomt. Sommige berichten zijn voor jouw rol.',
     icon: 'bericht',
   },
   overleg: {

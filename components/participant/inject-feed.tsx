@@ -673,7 +673,7 @@ export function InjectFeed({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div data-tour="deelnemer-berichten" className="flex flex-col gap-4">
       <div className="flex items-center justify-between px-1" ref={topRef}>
         <span className="font-mono text-[10px] uppercase tracking-widest text-tt-dim">
           {tr(lang, "incomingIntel")}

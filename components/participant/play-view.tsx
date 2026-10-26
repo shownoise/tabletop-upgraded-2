@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Component, useCallback, useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
-import { ArrowLeft, ShieldAlert } from "lucide-react"
+import { ArrowLeft, FileText, HelpCircle, ShieldAlert } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
 import type { Inject, LiveEvent, Role, SubmittedDecision } from "@/lib/types"
 import { analyzeGraph } from "@/lib/graph/analyze"
@@ -23,6 +23,9 @@ import { Empty } from "@/components/ui/empty"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { playNotificationSound } from "@/lib/sounds"
+import { GuidedTour } from "@/components/shared/guided-tour"
+import { TOURS } from "@/lib/guided-tour-steps"
+import { DocumentsSheet } from "./steps/documents-sheet"
 import { activeRoleView } from "./steps/active-role"
 import {
   clampStep,
@@ -95,6 +98,9 @@ export function PlayView() {
   // ── Onboarding ───────────────────────────────────────────────────────
   // Eén keer per sessie, ook voor wie later binnenkomt.
   const [showOnboarding, setShowOnboarding] = useState(false)
+  // De geannoteerde rondleiding over het echte scherm. Zie de knop in het
+  // stapmenu; de onboarding verwijst er ook naar.
+  const [tourOpen, setTourOpen] = useState(false)
   const onboardingKey = session?.id ? `ctt:onboarding:${session.id}` : null
   useEffect(() => {
     if (!onboardingKey) return
@@ -432,10 +438,45 @@ export function PlayView() {
       )}
 
       <main className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">
-        <StepShell step={step} highest={highest} onGo={setDesired} primary={primary} note={note}>
+        <StepShell
+          step={step}
+          highest={highest}
+          onGo={setDesired}
+          primary={primary}
+          note={note}
+          menu={
+            <>
+              <DocumentsSheet
+                session={session}
+                roles={roles.all}
+                trigger={
+                  <button
+                    type="button"
+                    title="Jouw documenten — overal te openen"
+                    className="flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                  >
+                    <FileText className="size-4" aria-hidden />
+                    <span className="sr-only">Jouw documenten</span>
+                  </button>
+                }
+              />
+              <button
+                type="button"
+                onClick={() => setTourOpen(true)}
+                title="Hoe werkt dit scherm?"
+                className="flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+              >
+                <HelpCircle className="size-4" aria-hidden />
+                <span className="sr-only">Hoe werkt dit scherm?</span>
+              </button>
+            </>
+          }
+        >
           {content}
         </StepShell>
       </main>
+
+      <GuidedTour tour={TOURS.deelnemer} open={tourOpen} onClose={() => setTourOpen(false)} />
 
       <UrgentInjectModal inject={urgent} onClose={() => setUrgent(null)} lang={lang} />
     </div>

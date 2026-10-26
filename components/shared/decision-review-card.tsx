@@ -85,7 +85,10 @@ export function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
   const roleLabel = item.role ? ROLE_META[item.role]?.label ?? item.role : undefined
 
   return (
-    <article className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+    <article
+      data-tour="deelnemer-review"
+      className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4"
+    >
       <header className="flex flex-col gap-1">
         <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Beslisvraag</p>
         <h3 className="text-sm font-medium leading-snug text-foreground">{item.question}</h3>

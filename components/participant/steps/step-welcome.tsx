@@ -4,6 +4,7 @@ import { useState } from "react"
 import { CheckCircle, ChevronDown, ChevronRight, FileText, Gavel, Loader2, ShieldCheck, Users } from "lucide-react"
 import { ROLE_META, ROLE_ORDER, type Role, type SessionState } from "@/lib/types"
 import { roleCoverage } from "@/lib/session-roles"
+import { DocumentsSheet, documentsForRoles } from "./documents-sheet"
 import { api } from "@/lib/api-client"
 import { OpeningBriefing } from "../opening-briefing"
 import type { ActiveRoleView } from "./active-role"
@@ -219,29 +220,30 @@ function Table({ session, mine }: { session: SessionState; mine: Role[] }) {
 // De documenten van je eigen rol. Stonden in een zijkolom die op elke fase mee
 // scrolde; ze horen bij wie je bent, dus staan ze op deze stap.
 function MyDocuments({ session, roles }: { session: SessionState; roles: Role[] }) {
-  const docs = (session.documents ?? []).filter(d => d.targetRole && roles.includes(d.targetRole))
+  // Eén implementatie: de lijst zit in DocumentsSheet, die ook vanuit het
+  // stapmenu en vanaf het keuzescherm opent. Hier stond een tweede, eigen
+  // uitklaplijst met dezelfde inhoud.
+  const docs = documentsForRoles(session, roles)
   if (docs.length === 0) return null
-
   return (
-    <section className="flex flex-col gap-2 rounded-lg border border-border bg-card px-4 py-3">
-      <span className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-        <FileText className="size-3.5" aria-hidden /> Jouw documenten
-      </span>
-      <ul className="flex flex-col divide-y divide-border">
-        {docs.map(doc => (
-          <li key={doc.id} className="py-1.5">
-            <details>
-              <summary className="cursor-pointer select-none text-xs font-medium text-foreground">
-                {doc.title}
-              </summary>
-              <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-muted-foreground">
-                {doc.content}
-              </pre>
-            </details>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <DocumentsSheet
+      session={session}
+      roles={roles}
+      trigger={
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:border-primary/40"
+        >
+          <FileText className="size-4 shrink-0 text-primary" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-foreground">Jouw documenten</span>
+            <span className="block text-xs text-muted-foreground">
+              {docs.length} {docs.length === 1 ? "document" : "documenten"} — polis, protocol, draaiboek. Ook te openen tijdens de keuze.
+            </span>
+          </span>
+        </button>
+      }
+    />
   )
 }
 
