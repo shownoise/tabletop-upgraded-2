@@ -6,6 +6,11 @@
 // tijdens de ronde verklaart het waarom een keuze niet binnenkomt. Een onbezette
 // rol blokkeert de ronde niet, maar levert wel een "geen besluit"-kaart in de
 // review — dat moet de facilitator vooraf kunnen zien.
+//
+// `collapsible` is de variant voor de actieve ronde: daar is de rolbezetting
+// achtergrondinformatie en mocht ze niet als zevende blok van gelijk gewicht
+// meedoen (#105 §7). De telling staat in de samenvattingsregel, de volledige
+// lijst zit erachter. Is er een onbezette rol, dan staat de uitklap open.
 
 import { roleCoverage, type RoleCoverage } from "@/lib/session-roles"
 import type { SessionState } from "@/lib/types"
@@ -18,10 +23,10 @@ const STATUS_CLASS: Record<RoleCoverage["status"], string> = {
 
 export function RoleCoveragePanel({
   session,
-  compact = false,
+  collapsible = false,
 }: {
   session: SessionState
-  compact?: boolean
+  collapsible?: boolean
 }) {
   const coverage = roleCoverage(session)
   if (coverage.length === 0) return null
@@ -30,42 +35,61 @@ export function RoleCoveragePanel({
     overgenomen: coverage.filter(c => c.status === "overgenomen").length,
     onbezet: coverage.filter(c => c.status === "onbezet").length,
   }
+  const tally = `${counts.bezet} bezet · ${counts.overgenomen} overgenomen · ${counts.onbezet} onbezet`
 
-  return (
-    <section className="rounded-xl border border-border bg-card p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          Rolbezetting
-        </span>
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {counts.bezet} bezet · {counts.overgenomen} overgenomen · {counts.onbezet} onbezet
-        </span>
-      </div>
-
+  const body = (
+    <>
       {counts.onbezet > 0 && (
-        <p className="mt-2 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+        <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-400">
           {counts.onbezet} {counts.onbezet === 1 ? "rol is" : "rollen zijn"} door niemand gedekt.
           Die {counts.onbezet === 1 ? "keuze" : "keuzes"} houdt de ronde niet tegen, maar komt in de
           review terug als &quot;geen besluit binnen de tijd&quot;.
         </p>
       )}
+      <ul className="flex flex-wrap gap-1.5">
+        {coverage.map(c => (
+          <li
+            key={c.role}
+            className={`rounded-md border px-2 py-1 font-mono text-[10px] ${STATUS_CLASS[c.status]}`}
+            title={c.participantName ? `${c.label} — ${c.participantName} (${c.status})` : `${c.label} — ${c.status}`}
+          >
+            {c.label}
+            {c.participantName ? <span className="opacity-70"> · {c.participantName}</span> : null}
+            {c.status === "overgenomen" ? <span className="opacity-70"> · overgenomen</span> : null}
+            {c.status === "onbezet" ? <span className="opacity-70"> · onbezet</span> : null}
+          </li>
+        ))}
+      </ul>
+    </>
+  )
 
-      {!compact && (
-        <ul className="mt-3 flex flex-wrap gap-1.5">
-          {coverage.map(c => (
-            <li
-              key={c.role}
-              className={`rounded-md border px-2 py-1 font-mono text-[10px] ${STATUS_CLASS[c.status]}`}
-              title={c.participantName ? `${c.label} — ${c.participantName} (${c.status})` : `${c.label} — ${c.status}`}
-            >
-              {c.label}
-              {c.participantName ? <span className="opacity-70"> · {c.participantName}</span> : null}
-              {c.status === "overgenomen" ? <span className="opacity-70"> · overgenomen</span> : null}
-              {c.status === "onbezet" ? <span className="opacity-70"> · onbezet</span> : null}
-            </li>
-          ))}
-        </ul>
-      )}
+  if (collapsible) {
+    return (
+      <details className="group rounded-xl border border-border bg-card" open={counts.onbezet > 0}>
+        <summary className="flex cursor-pointer list-none flex-wrap items-baseline justify-between gap-2 px-4 py-3">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Rolbezetting
+          </span>
+          <span className="flex items-baseline gap-2">
+            <span className="font-mono text-[10px] text-muted-foreground">{tally}</span>
+            <span className="text-[8px] text-muted-foreground opacity-60 group-open:hidden">▶</span>
+            <span className="hidden text-[8px] text-muted-foreground opacity-60 group-open:inline">▼</span>
+          </span>
+        </summary>
+        <div className="flex flex-col gap-2 px-4 pb-4">{body}</div>
+      </details>
+    )
+  }
+
+  return (
+    <section className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          Rolbezetting
+        </span>
+        <span className="font-mono text-[10px] text-muted-foreground">{tally}</span>
+      </div>
+      {body}
     </section>
   )
 }

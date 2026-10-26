@@ -17,6 +17,7 @@ import { tr, type Lang } from "@/lib/i18n"
 import type { RoundPhase, SessionState } from "@/lib/types"
 import { PhaseRetreatButton, PHASE_ORDER, type FacilitatorActions } from "./facilitator-shell"
 import { RoleCoveragePanel } from "./role-coverage-panel"
+import { roundSubmissionProgress } from "./round-submission-progress"
 import { buildRoundReviews } from "./review-items"
 import { MetricBlock, RoundTimer, SessionClock } from "./timers"
 import { STEP_PATH } from "./steps"
@@ -46,7 +47,9 @@ export function StepRonde({
     [session, currentIndex],
   )
 
-  const submittedThisRound = (session.submittedDecisions ?? []).filter(d => d.roundIndex === currentIndex).length
+  // Teller én noemer uit dezelfde afleiding als het live-overzicht. "0 ingediend"
+  // zonder noemer zei niet of je op één of op acht inzendingen wachtte (#105 §7).
+  const progress = roundSubmissionProgress(session)
   const flagsThisRound = (session.governanceFlags ?? []).filter(f => f.roundIndex === currentIndex).length
 
   if (!isActive) {
@@ -94,9 +97,17 @@ export function StepRonde({
                 timerMinutes={currentRound?.timerMinutes ?? 10}
               />
             </MetricBlock>
-            <MetricBlock label="Ingezonden deze ronde">
+            <MetricBlock
+              label="Ingezonden deze ronde"
+              hint={progress.missingRoles.length > 0
+                ? `nog wachten op ${progress.missingRoles.length} ${progress.missingRoles.length === 1 ? "rol" : "rollen"}`
+                : undefined}
+            >
               <span className="font-mono text-3xl font-bold tabular-nums text-foreground">
-                {submittedThisRound}
+                {progress.submitted}
+                {progress.expected != null && (
+                  <span className="text-base font-normal text-muted-foreground"> van {progress.expected}</span>
+                )}
               </span>
             </MetricBlock>
           </div>
@@ -194,7 +205,7 @@ export function StepRonde({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-4 lg:col-span-2">
           <LiveOverviewPanel session={session} />
-          <RoleCoveragePanel session={session} compact />
+          <RoleCoveragePanel session={session} collapsible />
 
           {/* BOB-hint: statisch, alleen tijdens discussie. */}
           {!isCoreEvent && phase === "discussion" && (
