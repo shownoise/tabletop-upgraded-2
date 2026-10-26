@@ -8,27 +8,11 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "./toast"
 import type { WizardPromptOverride } from "@/lib/admin/wizard-prompt"
+import { FRAMEWORK_RULES } from "@/lib/wizard/framework"
 
 // De actuele prompt-defaults zijn te lang om als codesnippet in de UI te tonen —
 // verwijs naar de bron.
 const DEFAULT_PROMPT_LOCATION = "lib/wizard/pipeline.ts::buildSystemPrompt"
-
-// De 12 huidige framework-regels (bron: lib/wizard/framework.ts::RULES).
-// Read-only weergave — regels toevoegen/verwijderen vereist code.
-const FRAMEWORK_RULES: Array<{ id: string; description: string }> = [
-  { id: "rule1_setup_inject",           description: "Elke decision heeft een setup-inject in dezelfde of vorige ronde." },
-  { id: "rule2_options_per_role",       description: "Per decision: exact `optionsPerRolePerRound` opties per rol." },
-  { id: "rule3_no_dominant",            description: "Geen enkele optie domineert een andere op alle 6 outcome-assen." },
-  { id: "rule4_noise_not_only_path",    description: "Elke decision heeft minstens één setup-inject met een classification (feit of aanname)." },
-  { id: "rule5_cross_round_lesson",     description: "Ronde N≥2 verwijst zichtbaar naar keuze/les uit N-1." },
-  { id: "rule6_dimension_mapped",       description: "Elke optie beweegt minstens één as van CONT/FOR/BC/JUR/VER/KOS." },
-  { id: "rule7_classification_ratio",   description: "Aandeel classification=feit ≈ factsNoiseRatio (±0.15)." },
-  { id: "rule8_special_conditions",     description: "Elke geselecteerde special condition verschijnt in het vereiste aantal rondes." },
-  { id: "rule9_regulatory_window",      description: "Minstens één inject met triggersRegulatoryNotification=true en verwijzing naar toezichthouder." },
-  { id: "rule10_facilitator_guidance",  description: "Elke ronde heeft facilitatorNotes.discussionGoal; feiten/namen matchen de ronde-inhoud." },
-  { id: "rule11_hidden_weakness",       description: "Minstens één rol heeft roleBriefings.<role>.playbookGaps non-empty." },
-  { id: "rule12_language_consistency",  description: "Geen typische Engelse UI-woorden in NL-vrije-teksten." },
-]
 
 async function fetchOverride(): Promise<WizardPromptOverride | null> {
   const res = await fetch("/api/admin/wizard-prompt")
@@ -128,7 +112,7 @@ export function WizardPromptTab() {
         </div>
 
         <div>
-          <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Extra regels (toegevoegd aan de 12 kern-regels)</label>
+          <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Extra regels (toegevoegd aan de {FRAMEWORK_RULES.length} kern-regels)</label>
           <Textarea
             rows={6}
             value={override?.ruleAdditions ?? ""}
@@ -169,7 +153,7 @@ export function WizardPromptTab() {
       </div>
 
       <div className="rounded-lg border border-border bg-card p-5">
-        <h4 className="font-medium text-sm mb-3">Framework-regels (12) — read-only</h4>
+        <h4 className="font-medium text-sm mb-3">Framework-regels ({FRAMEWORK_RULES.length}) — read-only</h4>
         <p className="text-xs text-muted-foreground mb-3">
           Deze regels worden door de code getoetst na generatie. Rules toevoegen/verwijderen vereist een code-wijziging in <code className="font-mono text-xs">lib/wizard/framework.ts</code>.
         </p>

@@ -697,21 +697,30 @@ export interface FrameworkResult {
   failures: RuleFailure[]
 }
 
-const RULES: Array<{ id: string; fn: (g: ScenarioGraph, c: WizardConfig) => RuleResult }> = [
-  { id: 'rule0_decision_per_round',     fn: (g, c)  => ruleDecisionPerRound(g, c) },
-  { id: 'rule1_setup_inject',           fn: (g)     => ruleEveryDecisionHasSetupInject(g) },
-  { id: 'rule2_options_per_role',       fn: (g, c)  => ruleOptionsPerRoleMatchConfig(g, c) },
-  { id: 'rule3_no_dominant',            fn: (g)     => ruleNoDominantOption(g) },
-  { id: 'rule4_noise_not_only_path',    fn: (g)     => ruleNoiseNeverCarriesOnlyPath(g) },
-  { id: 'rule5_cross_round_lesson',     fn: (g)     => ruleRoundReferencesPrevRoundConsequence(g) },
-  { id: 'rule6_dimension_mapped',       fn: (g)     => ruleEveryDecisionMapsToDimension(g) },
-  { id: 'rule7_classification_ratio',   fn: (g, c)  => ruleClassificationRatio(g, c) },
-  { id: 'rule8_special_conditions',     fn: (g, c)  => ruleSpecialConditionsAppear(g, c) },
-  { id: 'rule9_regulatory_window',      fn: (g, c)  => ruleRegulatoryWindowPlaced(g, c) },
-  { id: 'rule10_facilitator_guidance',  fn: (g)     => ruleFacilitatorGuidanceExists(g) },
-  { id: 'rule11_hidden_weakness',       fn: (g)     => ruleHiddenWeaknessAuthored(g) },
-  { id: 'rule12_language_consistency',  fn: (g)     => ruleLanguageConsistency(g) },
-  { id: 'rule13_situation_no_spoiler',  fn: (g)     => ruleSituationDoesNotRevealInjects(g) },
+// `description` staat hier en niet in de UI: het settings-tabblad toont deze
+// lijst read-only, en een nieuwe regel moet automatisch meekomen in plaats van
+// op twee plekken bijgewerkt te hoeven worden.
+export interface FrameworkRule {
+  id: string
+  description: string
+  fn: (g: ScenarioGraph, c: WizardConfig) => RuleResult
+}
+
+const RULES: readonly FrameworkRule[] = [
+  { id: 'rule0_decision_per_round',     description: 'Elke ronde heeft minstens één decision.',                                                      fn: (g, c)  => ruleDecisionPerRound(g, c) },
+  { id: 'rule1_setup_inject',           description: 'Elke decision heeft een setup-inject in dezelfde of vorige ronde.',                            fn: (g)     => ruleEveryDecisionHasSetupInject(g) },
+  { id: 'rule2_options_per_role',       description: 'Per decision: exact `optionsPerRolePerRound` opties per rol.',                                  fn: (g, c)  => ruleOptionsPerRoleMatchConfig(g, c) },
+  { id: 'rule3_no_dominant',            description: 'Geen enkele optie domineert een andere op alle 6 outcome-assen.',                               fn: (g)     => ruleNoDominantOption(g) },
+  { id: 'rule4_noise_not_only_path',    description: 'Elke decision heeft minstens één setup-inject met een classification (feit of aanname).',       fn: (g)     => ruleNoiseNeverCarriesOnlyPath(g) },
+  { id: 'rule5_cross_round_lesson',     description: 'Ronde N≥2 verwijst zichtbaar naar keuze/les uit N-1.',                                          fn: (g)     => ruleRoundReferencesPrevRoundConsequence(g) },
+  { id: 'rule6_dimension_mapped',       description: 'Elke optie beweegt minstens één as van CONT/FOR/BC/JUR/VER/KOS.',                               fn: (g)     => ruleEveryDecisionMapsToDimension(g) },
+  { id: 'rule7_classification_ratio',   description: 'Aandeel classification=feit ≈ factsNoiseRatio (±0.15).',                                        fn: (g, c)  => ruleClassificationRatio(g, c) },
+  { id: 'rule8_special_conditions',     description: 'Elke geselecteerde special condition verschijnt in het vereiste aantal rondes.',                fn: (g, c)  => ruleSpecialConditionsAppear(g, c) },
+  { id: 'rule9_regulatory_window',      description: 'Minstens één inject met triggersRegulatoryNotification=true en verwijzing naar toezichthouder.', fn: (g, c)  => ruleRegulatoryWindowPlaced(g, c) },
+  { id: 'rule10_facilitator_guidance',  description: 'Elke ronde heeft facilitatorNotes.discussionGoal; feiten/namen matchen de ronde-inhoud.',        fn: (g)     => ruleFacilitatorGuidanceExists(g) },
+  { id: 'rule11_hidden_weakness',       description: 'Minstens één rol heeft roleBriefings.<role>.playbookGaps non-empty.',                            fn: (g)     => ruleHiddenWeaknessAuthored(g) },
+  { id: 'rule12_language_consistency',  description: 'Geen typische Engelse UI-woorden in NL-vrije-teksten.',                                          fn: (g)     => ruleLanguageConsistency(g) },
+  { id: 'rule13_situation_no_spoiler',  description: 'De situatieschets van een ronde verklapt de injects van die ronde niet.',                        fn: (g)     => ruleSituationDoesNotRevealInjects(g) },
 ]
 
 export function validateFramework(graph: ScenarioGraph, config: WizardConfig): FrameworkResult {
@@ -724,3 +733,8 @@ export function validateFramework(graph: ScenarioGraph, config: WizardConfig): F
 }
 
 export const FRAMEWORK_RULE_IDS: readonly string[] = RULES.map(r => r.id)
+
+// Read-only weergave voor het settings-tabblad. Zonder `fn`, zodat de UI alleen
+// de beschrijving ziet en niet de regelimplementatie aanroept.
+export const FRAMEWORK_RULES: readonly { id: string; description: string }[] =
+  RULES.map(({ id, description }) => ({ id, description }))

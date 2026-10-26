@@ -1,8 +1,25 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { ArrowLeft, ArrowRight, Lock } from "lucide-react"
-import { STEP_META, STEP_ORDER, TOTAL_STEPS, stepLabel, stepNumber, type StepId } from "./flow"
+import {
+  ArrowLeft, ArrowRight, Check, Flag, Gavel, Inbox, Lock,
+  Scale, ShieldCheck, Users, Waypoints,
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
+import { STEP_META, STEP_ORDER, TOTAL_STEPS, stepLabel, stepNumber, type StepIcon, type StepId } from "./flow"
+
+// Eén icoon per stap, zodat de voortgang te zien is zonder te lezen. Issue #105
+// §2 vraagt iconen en duidelijke status; de vorige voortgangsbalk was zeven
+// streepjes van anderhalve pixel met alleen sr-only labels erin.
+const STEP_ICON: Record<StepIcon, LucideIcon> = {
+  rol: ShieldCheck,
+  situatie: Waypoints,
+  bericht: Inbox,
+  overleg: Users,
+  keuze: Gavel,
+  weegschaal: Scale,
+  vlag: Flag,
+}
 
 // Het frame om elke stap heen: voortgang, één korte titel, één primaire actie.
 // Waarom één frame en geen vrije opmaak per stap: issue #105 §2 ging mis omdat
@@ -28,37 +45,48 @@ export function StepProgress({
   const currentIdx = STEP_ORDER.indexOf(step)
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-primary">
-          {stepLabel(step)}
-        </span>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {STEP_META[step].title}
-        </span>
-      </div>
-      <ol className="flex items-center gap-1" aria-label={`Voortgang: stap ${stepNumber(step)} van ${TOTAL_STEPS}`}>
+    <div className="flex flex-col gap-2">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-primary">
+        {stepLabel(step)} · {STEP_META[step].title}
+      </span>
+      <ol
+        className="flex items-center gap-1 sm:gap-1.5"
+        aria-label={`Voortgang: stap ${stepNumber(step)} van ${TOTAL_STEPS}`}
+      >
         {STEP_ORDER.map((id, i) => {
           const open = i <= highestIdx
           const active = i === currentIdx
+          const done = open && i < currentIdx
+          const Icon = done ? Check : STEP_ICON[STEP_META[id].icon]
           return (
-            <li key={id} className="flex-1">
+            <li key={id} className="flex min-w-0 flex-1 items-center gap-1 sm:gap-1.5">
               <button
                 type="button"
                 disabled={!open}
                 onClick={() => open && onGo(id)}
                 title={open ? `${stepLabel(id)} — ${STEP_META[id].title}` : `${STEP_META[id].title} — nog niet geopend`}
                 aria-current={active ? "step" : undefined}
-                className={`h-1.5 w-full rounded-full transition-colors ${
+                className={`flex size-8 shrink-0 items-center justify-center rounded-full border transition-colors ${
                   active
-                    ? "bg-primary"
-                    : open
-                      ? "bg-primary/35 hover:bg-primary/60 cursor-pointer"
-                      : "bg-border cursor-not-allowed"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : done
+                      ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+                      : open
+                        ? "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-primary"
+                        : "border-dashed border-border bg-transparent text-muted-foreground/40 cursor-not-allowed"
                 }`}
               >
+                {open ? <Icon className="size-4" aria-hidden /> : <Lock className="size-3" aria-hidden />}
                 <span className="sr-only">{STEP_META[id].title}</span>
               </button>
+              {/* Verbindingslijn tussen de stappen, zodat het als één route
+                  leest en niet als zeven losse knoppen. */}
+              {i < STEP_ORDER.length - 1 && (
+                <span
+                  aria-hidden
+                  className={`h-px min-w-1 flex-1 ${i < currentIdx ? "bg-primary/40" : "bg-border"}`}
+                />
+              )}
             </li>
           )
         })}
@@ -84,6 +112,7 @@ export function StepShell({
   children: ReactNode
 }) {
   const meta = STEP_META[step]
+  const HeaderIcon = STEP_ICON[meta.icon]
   const idx = STEP_ORDER.indexOf(step)
   const prev = idx > 0 ? STEP_ORDER[idx - 1] : null
   const highestIdx = STEP_ORDER.indexOf(highest)
@@ -93,9 +122,14 @@ export function StepShell({
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
       <StepProgress step={step} highest={highest} onGo={onGo} />
 
-      <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">{meta.title}</h1>
-        <p className="text-sm text-muted-foreground">{meta.lead}</p>
+      <header className="flex items-start gap-3">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10">
+          <HeaderIcon className="size-5 text-primary" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">{meta.title}</h1>
+          <p className="text-sm text-muted-foreground">{meta.lead}</p>
+        </span>
       </header>
 
       <div className="flex flex-col gap-4">{children}</div>

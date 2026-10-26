@@ -28,7 +28,7 @@ import type { ScenarioGraph } from "./graph/types"
 import { RETAINER_ACTIVATED_FLAG } from "./graph/types"
 import type {
   ExerciseConfig, FactCheckEntry, FactCheckTag,
-  FiledMelding, GovernanceFlag, Inject, InjectAnnotation, InjectRoutePlan, InjectType,
+  GovernanceFlag, Inject, InjectAnnotation, InjectRoutePlan, InjectType,
   LearningObjective, LiveEvent, LiveEventName,
   Participant, ParticipantFeedback, PublicState, RegulatoryObligationState, RegulatoryRegime,
   RetainerActivation, Role, RoleAction,
@@ -2330,87 +2330,11 @@ export async function markParticipantReady(participantId: string): Promise<{ ok:
   return result
 }
 
-// ─── Participant-initiated melding (Phase D) ──────────────────
-// A participant chooses to file a report/escalation at an open melding-moment.
-// The engine spawns the authored follow-up inject for that report type.
-
-export async function fileMelding(input: {
-  participantId: string
-  momentId: string
-  typeId: string
-  freeText?: string
-}): Promise<{ ok: boolean; error?: string; melding?: FiledMelding }> {
-  const session = await readSession()
-  if (!session) return { ok: false, error: "No active session." }
-
-  const participant = session.participants.find(p => p.id === input.participantId)
-  if (!participant || !participant.role) return { ok: false, error: "Deelnemer heeft geen rol." }
-
-  // Locate the melding-moment on the current round.
-  const roundNode = session.graph?.nodes.find(
-    n => n.type === 'round' && (n.data as { title: string }).title === session.scenario.rounds[session.currentRound]?.title,
-  )
-  const roundData = roundNode?.data as { meldingMoments?: import("./types").MeldingMoment[] } | undefined
-  const moment = roundData?.meldingMoments?.find(m => m.id === input.momentId)
-  if (!moment) return { ok: false, error: "Melding-moment niet gevonden." }
-  if (moment.allowedRoles.length > 0 && !moment.allowedRoles.includes(participant.role)) {
-    return { ok: false, error: "Deze rol mag deze melding niet indienen." }
-  }
-  const type = moment.types.find(t => t.id === input.typeId)
-  if (!type) return { ok: false, error: "Melding-type niet gevonden." }
-
-  const melding: FiledMelding = {
-    id: genId('mld'),
-    momentId: moment.id,
-    participantId: participant.id,
-    participantName: participant.name,
-    role: participant.role,
-    typeId: type.id,
-    freeText: input.freeText,
-    filedAt: Date.now(),
-    roundIndex: session.currentRound,
-  }
-
-  // Spawn follow-up inject if authored.
-  let spawnedInjectId: string | undefined
-  const followInjectNode = type.triggersInjectId
-    ? session.graph?.nodes.find(n => n.id === type.triggersInjectId && n.type === 'inject')
-    : undefined
-  if (followInjectNode) {
-    const inj: Inject = {
-      id: genId('inj-mld'),
-      type: 'intel',
-      title: (followInjectNode.data as { title?: string }).title ?? `Reactie op melding: ${type.label}`,
-      content: (followInjectNode.data as { content?: string }).content ?? '',
-      urgency: 'medium',
-      source: 'Systeem',
-      senderName: (followInjectNode.data as { senderName?: string }).senderName ?? 'Reactie',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    }
-    spawnedInjectId = inj.id
-    melding.spawnedInjectId = spawnedInjectId
-    const pushed = { inject: inj, roundIndex: session.currentRound, pushedAt: Date.now() }
-    let updated: SessionState = {
-      ...session,
-      meldingen: [...(session.meldingen ?? []), melding],
-      pushedInjects: [...session.pushedInjects, pushed],
-    }
-    updated = pushTimeline(updated, 'melding_filed', { melding, spawnedInjectId })
-    updated = pushTimeline(updated, 'inject_pushed', { roundIndex: session.currentRound, inject: inj })
-    await dbSetSession(updated)
-    broadcastState(updated)
-    emit('melding_filed', { melding })
-    emit('push_inject', { inject: inj, roundIndex: session.currentRound })
-    return { ok: true, melding }
-  }
-
-  let updated: SessionState = { ...session, meldingen: [...(session.meldingen ?? []), melding] }
-  updated = pushTimeline(updated, 'melding_filed', { melding })
-  await dbSetSession(updated)
-  broadcastState(updated)
-  emit('melding_filed', { melding })
-  return { ok: true, melding }
-}
+// Het tweede meldmechanisme (`MeldingMoment` op een ronde, Phase D) had hier een
+// `fileMelding()` die `session.meldingen` vulde. Sinds 2026-10-20 meldt de
+// deelnemer alleen nog via `fileRegulatoryObligation()`, en er was geen UI en geen
+// publieke route meer die `fileMelding()` kon bereiken. Het type `MeldingMoment`
+// en de validatie blijven staan: opgeslagen scenario's bevatten die momenten nog.
 
 // ─── Scenario graphs ──────────────────────────────────────────
 

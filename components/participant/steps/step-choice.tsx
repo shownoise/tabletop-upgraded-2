@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle, Gavel, MessageSquare, UserX } from "lucide-react"
+import { CheckCircle, Gavel, MessageSquare, Scale, UserX } from "lucide-react"
 import type { OutcomeDimension } from "@/lib/scoring/constants"
 import { DIMENSION_META, dimensionImpacts } from "@/lib/scoring/dimensions"
 import { roleCoverageInUse } from "@/lib/session-roles"
@@ -186,6 +186,18 @@ export function StepChoice({
         <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
           De opties
         </span>
+        {/* Deze regel stond onder elke optie afzonderlijk en verscheen daardoor
+            zestien keer op één scherm — het grootste deel van de tekst daar.
+            Issue #105 verbiedt herhaalde tekst, dus hij staat nu één keer. */}
+        {options.length > 0 && !options.some(o => o.outcomeVector) && (
+          <p className="flex items-start gap-2 text-[11px] text-muted-foreground">
+            <Scale className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>
+              Elke optie werkt door op de zes dimensies. Wat precies, hoor je bij de nabespreking —
+              je kiest nu op wat je weet.
+            </span>
+          </p>
+        )}
         {options.length === 0 && (
           <p className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
             Er staan voor deze ronde geen opties open.
@@ -216,25 +228,26 @@ export function StepChoice({
                 >
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium text-foreground">{opt.optionLabel}</span>
+                    {/* De rolchip kleurt amber als je die rol hebt overgenomen.
+                        Een tweede badge met de tekst "overgenomen rol" stond
+                        dertien keer op hetzelfde scherm; de kleur plus de
+                        tooltip zegt het even goed en leest rustiger. */}
                     {opt.allowedRole && (
-                      <span className="rounded-full border border-border px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                      <span
+                        title={mandate?.viaInheritance
+                          ? `${roleLabel(opt.allowedRole)} — rol die jij hebt overgenomen`
+                          : roleLabel(opt.allowedRole)}
+                        className={`rounded-full border px-1.5 py-px font-mono text-[9px] uppercase tracking-wider ${
+                          mandate?.viaInheritance
+                            ? "border-amber-500/40 text-amber-700 dark:text-amber-400"
+                            : "border-border text-muted-foreground"
+                        }`}
+                      >
                         {roleLabel(opt.allowedRole)}
                       </span>
                     )}
-                    {mandate?.viaInheritance && (
-                      <span className="rounded-full border border-amber-500/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                        overgenomen rol
-                      </span>
-                    )}
                   </span>
-                  {opt.outcomeVector ? (
-                    <DimensionDirections vector={opt.outcomeVector} />
-                  ) : (
-                    <span className="text-[11px] text-muted-foreground">
-                      Wat deze keuze doet op de zes dimensies hoort bij de nabespreking — je kiest nu
-                      op wat je weet.
-                    </span>
-                  )}
+                  {opt.outcomeVector ? <DimensionDirections vector={opt.outcomeVector} /> : null}
                   {!canSubmit && !done && (
                     <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                       <Gavel className="size-3 shrink-0" aria-hidden />

@@ -28,12 +28,20 @@ export const STEP_ORDER: readonly StepId[] = [
 
 export const TOTAL_STEPS = STEP_ORDER.length
 
+// Welk icoon bij welke stap. De namen zijn bewust abstract: de component kiest
+// het lucide-icoon, dit bestand blijft vrij van React.
+export type StepIcon = 'rol' | 'situatie' | 'bericht' | 'overleg' | 'keuze' | 'weegschaal' | 'vlag'
+
 export interface StepMeta {
   id: StepId
   // Korte titel, bovenaan het scherm. Geen zin, geen uitleg.
   title: string
   // Eén regel die zegt wat je hier doet.
   lead: string
+  // Issue #105 §2 vraagt iconen en duidelijke status in plaats van tekst. De
+  // voortgang was zeven balkjes van anderhalve pixel met alleen sr-only labels:
+  // op het scherm viel die volledig weg.
+  icon: StepIcon
 }
 
 export const STEP_META: Record<StepId, StepMeta> = {
@@ -41,36 +49,43 @@ export const STEP_META: Record<StepId, StepMeta> = {
     id: 'welkom',
     title: 'Jouw rol',
     lead: 'Wie je bent in deze oefening en wat je mag besluiten.',
+    icon: 'rol',
   },
   ronde: {
     id: 'ronde',
     title: 'Deze ronde',
     lead: 'De situatie in het kort en de vraag waarover je straks beslist.',
+    icon: 'situatie',
   },
   injects: {
     id: 'injects',
     title: 'Berichten',
     lead: 'Alleen de berichten die jouw rol bereiken.',
+    icon: 'bericht',
   },
   overleg: {
     id: 'overleg',
     title: 'Overleg',
     lead: 'Bespreek met het team wat je gaat doen.',
+    icon: 'overleg',
   },
   keuze: {
     id: 'keuze',
     title: 'Keuze',
     lead: 'De gemandateerde rol dient de keuze in.',
+    icon: 'keuze',
   },
   review: {
     id: 'review',
     title: 'Review',
     lead: 'Wat jullie keuze deed op de zes dimensies.',
+    icon: 'weegschaal',
   },
   afronding: {
     id: 'afronding',
     title: 'Afronding',
     lead: 'Terugblik op de hele oefening.',
+    icon: 'vlag',
   },
 }
 

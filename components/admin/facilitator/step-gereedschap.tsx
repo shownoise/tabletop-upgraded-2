@@ -13,7 +13,6 @@ import { FactCheckPanel } from "@/components/admin/fact-check-panel"
 import { GraphPathPanel } from "@/components/admin/graph-path-panel"
 import { InjectControls } from "@/components/admin/inject-controls"
 import { InjectRoutePlan } from "@/components/admin/inject-route-plan"
-import { MeldingenPanel } from "@/components/admin/meldingen-panel"
 import { PremadeInjectPanel } from "@/components/admin/premade-inject-panel"
 import { RegulatoryObligationsPanel } from "@/components/admin/regulatory-obligations-panel"
 import { RevealPanel } from "@/components/admin/reveal-panel"
@@ -86,7 +85,6 @@ export function StepGereedschap({
         <ToolSection title="Meldplicht en toezicht">
           <div className="flex flex-col gap-4">
             <RegulatoryObligationsPanel session={session} />
-            <MeldingenPanel session={session} />
             <SupervisionReportView />
           </div>
         </ToolSection>
