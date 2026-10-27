@@ -24,7 +24,7 @@ import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { playNotificationSound } from "@/lib/sounds"
 import { GuidedTour } from "@/components/shared/guided-tour"
-import { TOURS } from "@/lib/guided-tour-steps"
+import { TOURS, type Tour } from "@/lib/guided-tour-steps"
 import { DocumentsSheet } from "./steps/documents-sheet"
 import { activeRoleView } from "./steps/active-role"
 import {
@@ -100,16 +100,38 @@ export function PlayView() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   // De geannoteerde rondleiding over het echte scherm. Zie de knop in het
   // stapmenu; de onboarding verwijst er ook naar.
-  const [tourOpen, setTourOpen] = useState(false)
+  // Eén rondleiding tegelijk, en welke het is staat in de state. Twee aparte
+  // open-vlaggen met twee GuidedTour-instanties was een bron van fouten voor
+  // niets: er kan er maar één zichtbaar zijn.
+  const [tour, setTour] = useState<Tour | null>(null)
+  const [wantsStartTour, setWantsStartTour] = useState(false)
   const onboardingKey = session?.id ? `ctt:onboarding:${session.id}` : null
   useEffect(() => {
     if (!onboardingKey) return
     try { setShowOnboarding(!localStorage.getItem(onboardingKey)) } catch { setShowOnboarding(true) }
   }, [onboardingKey])
-  const dismissOnboarding = useCallback(() => {
+  // Na de kaarten gaat de rondleiding over het echte scherm open. De kaarten
+  // zeggen wát je gaat doen, de rondleiding wijst aan wáár dat staat — de
+  // eigenaar vroeg die twee te combineren in plaats van twee losse uitleggen.
+  // Overslaan slaat beide over.
+  const dismissOnboarding = useCallback((startTour: boolean) => {
     setShowOnboarding(false)
     if (onboardingKey) { try { localStorage.setItem(onboardingKey, "1") } catch { /* noop */ } }
+    if (startTour) setWantsStartTour(true)
   }, [onboardingKey])
+
+  // De rondleiding pas openen nadat de onboarding echt uit de DOM is. Hem
+  // meteen in dezelfde klik zetten werkte niet betrouwbaar: de overlay meet de
+  // positie van zijn doel bij het monteren, en dat viel samen met het commit
+  // waarin het introscherm verdween. Een tick wachten haalt die twee los.
+  useEffect(() => {
+    if (!wantsStartTour || showOnboarding) return
+    const id = window.setTimeout(() => {
+      setTour(TOURS.deelnemerStart)
+      setWantsStartTour(false)
+    }, 0)
+    return () => window.clearTimeout(id)
+  }, [wantsStartTour, showOnboarding])
 
   // ── Rol en mandaat, uit de serverstate ───────────────────────────────
   const roles = useMemo(
@@ -453,21 +475,27 @@ export function PlayView() {
                   <button
                     type="button"
                     title="Jouw documenten — overal te openen"
-                    className="flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                    className="flex items-center gap-2.5 rounded-md border border-border bg-card px-2.5 py-2 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary lg:w-full"
                   >
-                    <FileText className="size-4" aria-hidden />
-                    <span className="sr-only">Jouw documenten</span>
+                    <FileText className="size-4 shrink-0" aria-hidden />
+                    <span className="hidden font-mono text-[11px] uppercase tracking-wider lg:inline">
+                      Documenten
+                    </span>
+                    <span className="sr-only lg:hidden">Jouw documenten</span>
                   </button>
                 }
               />
               <button
                 type="button"
-                onClick={() => setTourOpen(true)}
+                onClick={() => setTour(TOURS.deelnemer)}
                 title="Hoe werkt dit scherm?"
-                className="flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                className="flex items-center gap-2.5 rounded-md border border-border bg-card px-2.5 py-2 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary lg:w-full"
               >
-                <HelpCircle className="size-4" aria-hidden />
-                <span className="sr-only">Hoe werkt dit scherm?</span>
+                <HelpCircle className="size-4 shrink-0" aria-hidden />
+                <span className="hidden font-mono text-[11px] uppercase tracking-wider lg:inline">
+                  Uitleg
+                </span>
+                <span className="sr-only lg:hidden">Hoe werkt dit scherm?</span>
               </button>
             </>
           }
@@ -476,7 +504,7 @@ export function PlayView() {
         </StepShell>
       </main>
 
-      <GuidedTour tour={TOURS.deelnemer} open={tourOpen} onClose={() => setTourOpen(false)} />
+      <GuidedTour tour={tour ?? TOURS.deelnemer} open={tour !== null} onClose={() => setTour(null)} />
 
       <UrgentInjectModal inject={urgent} onClose={() => setUrgent(null)} lang={lang} />
     </div>

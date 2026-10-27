@@ -41,10 +41,13 @@ export function describeNextAction(session: SessionState): NextActionDescriptor 
       ? { action: 'end_session', labelNL: 'Sessie afronden' }
       : { action: 'next_round', labelNL: `Start ronde ${session.currentRound + 2}` }
   }
+  // De knop zegt wat er voor de deelnemers verandert, niet hoe de fase heet.
+  // "Volgende fase: Beslissing" liet de facilitator zoeken naar een manier om
+  // de keuzes open te zetten, terwijl dit die manier is.
   const nextLabels: Record<RoundPhase, string> = {
-    inject: 'Volgende fase: Discussie',
-    discussion: 'Volgende fase: Beslissing',
-    decision: 'Volgende fase: Review',
+    inject: 'Overleg vrijgeven',
+    discussion: 'Keuze openzetten',
+    decision: 'Naar de scorebespreking',
     review: 'Start volgende ronde',
   }
   return { action: 'advance_phase', labelNL: nextLabels[currentPhase] }

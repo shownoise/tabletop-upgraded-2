@@ -115,7 +115,7 @@ function RolePicker({
 function MandateCard({ role, isInherited }: { role: Role; isInherited: boolean }) {
   const meta = ROLE_META[role]
   return (
-    <section className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-card px-4 py-3">
+    <section data-tour="deelnemer-rol" className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-card px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <ShieldCheck className="size-4 shrink-0 text-primary" aria-hidden />
         <span className="text-sm font-semibold text-foreground">{meta.label}</span>

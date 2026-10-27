@@ -203,7 +203,7 @@ export const ONBOARDING_CARDS: readonly OnboardingCard[] = [
   {
     icon: 'bericht',
     title: 'Lees je berichten',
-    body: 'Berichten komen per rol binnen. Je ziet alleen wat jouw rol bereikt.',
+    body: 'Elke ronde komen er berichten binnen. Sommige zijn voor jouw rol bedoeld.',
   },
   {
     icon: 'overleg',
