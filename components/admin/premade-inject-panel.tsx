@@ -10,6 +10,7 @@ import { api } from "@/lib/api-client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CheckCircle2 } from "lucide-react"
+import { IrreversibleNote, useConfirmOnce } from "@/components/admin/facilitator/irreversible"
 
 // Phase 5 — facilitator runtime "noise button" panel. Fires ad-hoc injects from
 // the scenario's authored library during DISCUSSION. Context only — never scored.
@@ -18,6 +19,10 @@ export function PremadeInjectPanel({ session }: { session: SessionState }) {
   const [selectedClass, setSelectedClass] = useState<InjectClassification | 'all'>('all')
   const [selectedRoles, setSelectedRoles] = useState<Role[]>([])
   const [firedAt, setFiredAt] = useState<Record<string, number>>({})
+  // Deze lijst bestaat uit korte, op elkaar lijkende labels en één klik bezorgt
+  // de inject meteen bij de deelnemers. Er is geen unpush in de store, dus een
+  // misklik is definitief: daarom bewapent de eerste klik en vuurt de tweede.
+  const confirm = useConfirmOnce()
 
   const filtered = useMemo(() => {
     return library.filter(entry => {
@@ -97,6 +102,11 @@ export function PremadeInjectPanel({ session }: { session: SessionState }) {
         </span>
       </div>
 
+      <IrreversibleNote>
+        Een ruis-inject verschijnt direct bij de deelnemers en kan niet worden
+        teruggehaald. Klik twee keer om te bevestigen.
+      </IrreversibleNote>
+
       {/* Classification filter chips */}
       <div className="flex flex-wrap gap-1">
         {(['all', 'feit', 'aanname'] as const).map(c => (
@@ -151,6 +161,7 @@ export function PremadeInjectPanel({ session }: { session: SessionState }) {
         )}
         {filtered.map(entry => {
           const cooling = isCoolingDown(entry.id)
+          const armed = confirm.isPending(entry.id)
           const targetLabel = entry.targetRoles && entry.targetRoles.length > 0
             ? entry.targetRoles.map(r => ROLE_META[r]?.label ?? r).join(', ')
             : null
@@ -160,18 +171,26 @@ export function PremadeInjectPanel({ session }: { session: SessionState }) {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => fire(entry)}
+                onClick={() => confirm.request(entry.id, () => { void fire(entry) })}
                 disabled={cooling}
-                className="w-full justify-start gap-2 text-left h-auto py-1.5"
-                title={entry.facilitatorNote || entry.title}
+                className={`w-full justify-start gap-2 text-left h-auto py-1.5 ${
+                  armed ? "border-amber-500/60 bg-amber-500/10" : ""
+                }`}
+                title={
+                  armed
+                    ? "Nog één klik — deze inject gaat direct naar de deelnemers en kan niet terug."
+                    : entry.facilitatorNote || entry.title
+                }
               >
                 {cooling ? (
                   <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
                 ) : (
-                  <span className="size-1.5 rounded-full bg-primary shrink-0" />
+                  <span className={`size-1.5 rounded-full shrink-0 ${armed ? "bg-amber-500" : "bg-primary"}`} />
                 )}
                 <span className="flex-1 min-w-0 truncate text-xs">
-                  {entry.label || entry.title || '(geen label)'}
+                  {armed
+                    ? "Nog één klik — gaat direct naar de deelnemers, niet terug te halen"
+                    : entry.label || entry.title || '(geen label)'}
                 </span>
                 {entry.classification && (
                   <Badge

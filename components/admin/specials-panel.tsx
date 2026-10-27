@@ -4,6 +4,7 @@ import { useState } from "react"
 import { MessageSquare, FileText, Newspaper, CheckCircle, Loader2, AlertTriangle, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api-client"
+import { IrreversibleNote, useConfirmOnce } from "@/components/admin/facilitator/irreversible"
 import type { SessionState, SpecialEvent, SpecialType } from "@/lib/types"
 
 const SPECIAL_META: Record<SpecialType, { label: string; desc: string; icon: React.ReactNode; preferredRoles: string }> = {
@@ -78,6 +79,10 @@ function SpecialCard({ special }: { special: SpecialEvent }) {
 export function SpecialsPanel({ session }: { session: SessionState }) {
   const [working, setWorking] = useState<SpecialType | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Een special is niet te annuleren: er is geen cancel-route en de store heeft
+  // alleen `completeSpecial()`, en die rondt af mét score in plaats van terug te
+  // draaien. Daarom bewapent de eerste klik en start de tweede.
+  const confirm = useConfirmOnce()
 
   const mode = session.config.specialsMode
   if (!mode || mode === "off") return null
@@ -133,21 +138,30 @@ export function SpecialsPanel({ session }: { session: SessionState }) {
       {/* Trigger buttons */}
       <div className="flex flex-col gap-2">
         <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Trigger a special event</span>
+        <IrreversibleNote>
+          Een special start direct bij de toegewezen deelnemer en is daarna niet te
+          annuleren of terug te draaien. Klik twee keer om te bevestigen.
+        </IrreversibleNote>
         {(Object.entries(SPECIAL_META) as [SpecialType, typeof SPECIAL_META[SpecialType]][]).map(([type, meta]) => {
           const alreadyActive = activeSpecials.some(s => s.type === type)
+          const armed = confirm.isPending(type)
           return (
             <button
               key={type}
-              onClick={() => trigger(type)}
+              onClick={() => confirm.request(type, () => { void trigger(type) })}
               disabled={working !== null || alreadyActive}
               className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-left transition-all ${
                 alreadyActive
                   ? "border-border bg-card/30 opacity-50 cursor-not-allowed"
-                  : "border-border bg-card hover:border-primary/40 hover:bg-primary/5"
+                  : armed
+                    ? "border-amber-500/60 bg-amber-500/10"
+                    : "border-border bg-card hover:border-primary/40 hover:bg-primary/5"
               }`}
             >
               {working === type ? (
                 <Loader2 className="size-4 shrink-0 text-primary animate-spin mt-0.5" />
+              ) : armed ? (
+                <AlertTriangle className="size-4 shrink-0 text-amber-600 mt-0.5" />
               ) : (
                 <span className="text-muted-foreground shrink-0 mt-0.5">{meta.icon}</span>
               )}
@@ -158,7 +172,11 @@ export function SpecialsPanel({ session }: { session: SessionState }) {
                     <span className="font-mono text-[9px] uppercase tracking-wider text-primary">Active</span>
                   )}
                 </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">{meta.desc}</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {armed
+                    ? "Nog één klik — deze special start direct en kan niet worden teruggedraaid."
+                    : meta.desc}
+                </p>
                 <p className="font-mono text-[10px] text-muted-foreground/70 mt-0.5">→ {meta.preferredRoles}</p>
               </div>
             </button>

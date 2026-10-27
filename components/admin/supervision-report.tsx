@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Download, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,8 +11,30 @@ import { SUPERVISION_AREAS } from "@/lib/engine/supervision"
 import type { SupervisionReportEdits } from "@/lib/types"
 
 interface Props {
+  /** Het rapport wordt buiten dit component geladen, zodat de samenvattingsregel
+   *  in de ingeklapte kop dezelfde cijfers gebruikt zonder een tweede fetch. */
+  report: SupervisionReport
+  onReload?: () => void
+  reloading?: boolean
   organizationName?: string
   facilitatorName?: string
+}
+
+/**
+ * De stand van het rapport in cijfers. Apart van de weergave, omdat de
+ * ingeklapte kop op de gereedschapsstap dezelfde telling moet kunnen tonen.
+ */
+export function summarizeSupervisionReport(report: SupervisionReport): {
+  areasWithEvidence: number
+  totalAreas: number
+  hasEvidence: boolean
+} {
+  const areasWithEvidence = report.areas.filter(a => a.evidence.length > 0).length
+  return {
+    areasWithEvidence,
+    totalAreas: report.areas.length,
+    hasEvidence: areasWithEvidence > 0 || report.timeline.length > 0,
+  }
 }
 
 const SCORE_LABELS: Record<0 | 1 | 2 | 3, string> = {
@@ -45,58 +67,45 @@ const SCORE_COLORS: Record<0 | 1 | 2 | 3, string> = {
   3: "bg-emerald-600 text-white",
 }
 
-export function SupervisionReportView({ organizationName, facilitatorName }: Props) {
-  const [report, setReport] = useState<SupervisionReport | null>(null)
+export function SupervisionReportView({
+  report,
+  onReload,
+  reloading,
+  organizationName,
+  facilitatorName,
+}: Props) {
   const [edits, setEdits] = useState<SupervisionReportEdits>({})
-  const [busy, setBusy] = useState(false)
   const [filter, setFilter] = useState<string>("")
-
-  async function load() {
-    setBusy(true)
-    try {
-      const res = await api.getSupervisionReport()
-      setReport(res.report)
-    } catch { setReport(null) }
-    finally { setBusy(false) }
-  }
-
-  useEffect(() => { void load() }, [])
 
   async function saveEdits(next: SupervisionReportEdits) {
     setEdits(next)
     try { await api.updateSupervisionReport(next) } catch {}
   }
 
-  const timeline = useMemo(() => {
-    if (!report) return []
-    return report.timeline.filter(e => filter === "" || e.supervisionArea === filter)
-  }, [report, filter])
+  const timeline = useMemo(
+    () => report.timeline.filter(e => filter === "" || e.supervisionArea === filter),
+    [report, filter],
+  )
 
-  if (!report) {
-    return (
-      <div className="p-4 text-sm text-muted-foreground">
-        {busy ? "Rapport laden…" : "Geen rapport beschikbaar."}
-      </div>
-    )
-  }
+  const { areasWithEvidence, totalAreas, hasEvidence } = summarizeSupervisionReport(report)
 
   function downloadJson() {
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `toezichthouder-rapport-${report!.sessionId}.json`
+    a.download = `toezichthouder-rapport-${report.sessionId}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
 
   function downloadMarkdown() {
-    const md = renderMarkdown(report!, edits, organizationName, facilitatorName)
+    const md = renderMarkdown(report, edits, organizationName, facilitatorName)
     const blob = new Blob([md], { type: "text/markdown" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `toezichthouder-rapport-${report!.sessionId}.md`
+    a.download = `toezichthouder-rapport-${report.sessionId}.md`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -114,9 +123,11 @@ export function SupervisionReportView({ organizationName, facilitatorName }: Pro
         <div className="flex flex-col items-end gap-1">
           <div className="font-mono text-xs">Gemiddelde: <span className="font-bold">{report.overallScore.toFixed(1)}</span> / 3</div>
           <div className="flex gap-1">
-            <Button size="sm" variant="outline" onClick={load} className="h-7 gap-1">
-              <RefreshCw className="size-3" /> Herlaad
-            </Button>
+            {onReload && (
+              <Button size="sm" variant="outline" onClick={onReload} disabled={reloading} className="h-7 gap-1">
+                <RefreshCw className={`size-3 ${reloading ? "animate-spin" : ""}`} /> Herlaad
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={downloadJson} className="h-7 gap-1">
               <Download className="size-3" /> JSON
             </Button>
@@ -127,8 +138,23 @@ export function SupervisionReportView({ organizationName, facilitatorName }: Pro
         </div>
       </header>
 
+      {/* Zonder bewijs scoren alle veertien testgebieden 0, en dan vult
+          `seedLessonsFromResults`/`seedTraceabilityFromResults` ook nog veertien
+          lessen en veertien ketens met dezelfde boodschap. Veertien rijen
+          "Niet aanwezig" vertellen minder dan één regel die zegt wat dit vult. */}
+      {!hasEvidence ? (
+        <p className="rounded border border-border bg-background/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+          Nog niets vastgelegd — alle {totalAreas} testgebieden staan op 0. Dit rapport
+          vult zich tijdens de oefening: zodra deelnemers een besluit inleveren, een
+          inject als feit of aanname taggen of een melding indienen, verschijnt hier
+          per testgebied wat er is aangetoond. Export nu levert een leeg rapport.
+        </p>
+      ) : (
+      <>
       <section>
-        <h3 className="mb-2 font-mono text-xs uppercase text-muted-foreground">Testgebieden (14)</h3>
+        <h3 className="mb-2 font-mono text-xs uppercase text-muted-foreground">
+          Testgebieden — {areasWithEvidence} van {totalAreas} met bewijs
+        </h3>
         <ul className="flex flex-col divide-y divide-border rounded border border-border">
           {report.areas.map(a => {
             const meta = SUPERVISION_AREAS.find(m => m.id === a.area)
@@ -263,6 +289,8 @@ export function SupervisionReportView({ organizationName, facilitatorName }: Pro
           ))}
         </ul>
       </section>
+      </>
+      )}
     </div>
   )
 }

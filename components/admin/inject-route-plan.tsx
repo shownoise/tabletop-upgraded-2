@@ -138,7 +138,7 @@ export function InjectRoutePlan({ session, teamRoles, onReplot }: Props) {
         )}
       </div>
 
-      <div className="border-t border-border px-4 py-3">
+      <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
         <Button
           size="sm"
           variant="outline"
@@ -149,6 +149,14 @@ export function InjectRoutePlan({ session, teamRoles, onReplot }: Props) {
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
           Herverdelen op basis van huidige lobby
         </Button>
+        {/* Eerlijk over wat deze knop doet: `replotInjectRoutes()` overschrijft het
+            plan met een nieuwe versie en de oude verdeling is daarna weg. Hij raakt
+            `pushedInjects` niet, dus bezorgde injects blijven staan — dat verschil
+            is precies wat de facilitator vóór de klik wil weten. */}
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Overschrijft de huidige verdeling{plan ? ` (versie ${version})` : ""}; de oude
+          verdeling is daarna niet terug te halen. Al bezorgde injects blijven staan.
+        </p>
       </div>
     </div>
   )

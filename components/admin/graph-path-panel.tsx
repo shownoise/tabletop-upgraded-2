@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { IrreversibleNote, useConfirmOnce } from "@/components/admin/facilitator/irreversible"
 import type { DecisionNodeData } from "@/lib/graph/types"
 import type { SessionState } from "@/lib/types"
 
@@ -75,6 +76,9 @@ function describeNode(type: string | undefined, data: unknown): string {
 
 function FacilitatorDecisionPicker({ nodeId, data }: { nodeId: string; data: DecisionNodeData }) {
   const [busy, setBusy] = useState(false)
+  // `facilitatorPickGraphOption()` zet de engine door en schrijft de keuze in
+  // `branchLog`; er is geen route die dat terugdraait. Eerste klik bewapent.
+  const confirm = useConfirmOnce()
 
   async function pick(optionId: string) {
     if (busy) return
@@ -96,18 +100,27 @@ function FacilitatorDecisionPicker({ nodeId, data }: { nodeId: string; data: Dec
         Facilitator decision required
       </span>
       <p className="text-xs">{data.prompt}</p>
+      <IrreversibleNote>
+        Deze keuze bepaalt het vervolg van het scenario en kan niet worden
+        teruggedraaid. Klik twee keer om te bevestigen.
+      </IrreversibleNote>
       <div className="flex flex-wrap gap-2">
-        {data.options.map(opt => (
-          <Button
-            key={opt.id}
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() => pick(opt.id)}
-          >
-            {opt.label}
-          </Button>
-        ))}
+        {data.options.map(opt => {
+          const armed = confirm.isPending(opt.id)
+          return (
+            <Button
+              key={opt.id}
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              className={armed ? "border-amber-500/60 bg-amber-500/10" : ""}
+              title={armed ? "Nog één klik — deze keuze is definitief." : undefined}
+              onClick={() => confirm.request(opt.id, () => { void pick(opt.id) })}
+            >
+              {armed ? `${opt.label} — nog één klik, definitief` : opt.label}
+            </Button>
+          )
+        })}
       </div>
     </div>
   )
