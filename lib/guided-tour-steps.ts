@@ -47,9 +47,9 @@ export const DEELNEMER_TOUR: Tour = {
       target: '[data-tour="deelnemer-voortgang"]',
       title: 'Zeven stappen',
       body:
-        'Bovenaan zie je waar je bent. Een stap met een slotje heeft de begeleider nog niet ' +
+        'Hier zie je waar je bent. Een stap met een slotje heeft de begeleider nog niet ' +
         'geopend; een stap die je al gehad hebt kun je altijd teruglezen.',
-      prefer: 'onder',
+      prefer: 'rechts',
     },
     {
       target: '[data-tour="deelnemer-stapkop"]',
@@ -90,6 +90,52 @@ export const DEELNEMER_TOUR: Tour = {
         'Na de ronde zie je de gevolgen op de zes dimensies. Het is geen cijfer dat je moet ' +
         'halen, het is de basis voor de nabespreking.',
       prefer: 'boven',
+    },
+  ],
+}
+
+// De rondleiding die je bij de eerste keer krijgt, direct na de kaarten. Die
+// kaarten zeggen wát je gaat doen; deze wijst aan wáár dat staat. De eigenaar
+// vroeg die twee te combineren: "dit moet samen met screen van het scherm hoe
+// dat dan samenhangt met de verschillende menutjes en hoe je er doorheen moet
+// navigeren". Alle vier de doelen bestaan op stap 1, dus er wordt niets
+// overgeslagen bij de eerste keer.
+export const DEELNEMER_START_TOUR: Tour = {
+  id: 'deelnemer-start',
+  name: 'Zo vind je alles terug',
+  steps: [
+    {
+      target: '[data-tour="deelnemer-voortgang"]',
+      title: 'Dit is je menu',
+      body:
+        'De zeven stappen van de oefening. De stap waar je nu bent licht op, een stap met een ' +
+        'slotje heeft de begeleider nog niet geopend. Alles wat je al gehad hebt kun je ' +
+        'aanklikken om terug te kijken — je raakt niets kwijt.',
+      prefer: 'rechts',
+    },
+    {
+      target: '[data-tour="deelnemer-stapkop"]',
+      title: 'Waar je nu bent',
+      body:
+        'De naam van de stap en in één regel wat je hier doet. Onderaan het scherm staat de ' +
+        'knop naar de volgende stap, en de knop terug.',
+      prefer: 'onder',
+    },
+    {
+      target: '[data-tour="deelnemer-rol"]',
+      title: 'Jouw rol en mandaat',
+      body:
+        'Wat jouw rol wél mag besluiten, en wat uitdrukkelijk niet. Die grens is de helft van ' +
+        'de oefening: een besluit doorschuiven naar de juiste rol is een goede zet.',
+      prefer: 'boven',
+    },
+    {
+      target: '[data-tour="deelnemer-menu"]',
+      title: 'Documenten en uitleg',
+      body:
+        'Je documenten staan hier, en je kunt ze op elk moment openen — ook terwijl je een ' +
+        'keuze maakt. Deze uitleg kun je hier altijd opnieuw starten.',
+      prefer: 'rechts',
     },
   ],
 }
@@ -144,9 +190,10 @@ export const FACILITATOR_TOUR: Tour = {
 export const TOURS: Record<string, Tour> = {
   deelnemer: DEELNEMER_TOUR,
   facilitator: FACILITATOR_TOUR,
+  deelnemerStart: DEELNEMER_START_TOUR,
 }
 
-export const ALL_TOURS: readonly Tour[] = [DEELNEMER_TOUR, FACILITATOR_TOUR]
+export const ALL_TOURS: readonly Tour[] = [DEELNEMER_TOUR, DEELNEMER_START_TOUR, FACILITATOR_TOUR]
 
 // ── Stappen die bestaan ───────────────────────────────────────────────
 

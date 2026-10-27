@@ -23,16 +23,22 @@ export default function PreparePage() {
   // op de lobby-stap (components/admin/facilitator/facilitator-guide.tsx), de
   // join-code staat in de commandobalk. Deze pagina is daarmee alleen nog de
   // setup-form voor een nieuwe sessie.
+  // Alleen doorsturen voor een sessie die nog leeft. Een afgeronde sessie
+  // stuurde je hiervoor óók naar het dashboard, dus wie een nieuwe oefening
+  // wilde starten belandde op de dode afronding van de vorige en moest die
+  // eerst verwijderen. De store houdt er maar één, dus een nieuwe vervangt de
+  // oude — maar dat mag je zelf doen, vanaf het formulier.
+  const blocking = session?.status === "lobby" || session?.status === "active"
+
   useEffect(() => {
-    if (session) router.replace(targetView)
-  }, [session, router, targetView])
+    if (blocking) router.replace(targetView)
+  }, [blocking, router, targetView])
 
 
-  if (!session) {
-    // Geen actieve sessie → toon de setup-form zodat de facilitator er één
-    // kan aanmaken. Na SetupForm's POST /api/session/create leidt die zelf
-    // opnieuw naar /admin/prepare, waar de stream de nieuwe sessie oppikt
-    // en de brief hieronder verschijnt.
+  if (!blocking) {
+    // Geen lopende sessie, of de vorige is afgerond: toon de setup-form. Na
+    // SetupForm's POST /api/session/create stuurt de effect hierboven door naar
+    // het dashboard, want dan leeft er weer een sessie.
     return (
       <div className="min-h-screen bg-background">
         <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
@@ -46,7 +52,24 @@ export default function PreparePage() {
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-4xl px-5 py-8 md:px-8">
+        <main className="mx-auto flex max-w-4xl flex-col gap-4 px-5 py-8 md:px-8">
+          {/* Er staat nog een afgeronde sessie in de opslag. Die wordt vervangen
+              zodra je hier start, en de opslag houdt er maar één. Dus zeggen we
+              het, met de weg naar het rapport ernaast. */}
+          {session?.status === "ended" && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-xs text-foreground">
+              <span className="flex-1">
+                De vorige oefening is afgerond. Als je hier een nieuwe start, vervangt die de oude —
+                haal het rapport eerst op als je het nog nodig hebt.
+              </span>
+              <Link
+                href="/admin/report/current"
+                className="shrink-0 rounded-md border border-border bg-card px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+              >
+                Rapport vorige sessie
+              </Link>
+            </div>
+          )}
           <div className="rounded-lg border border-border bg-card p-6 md:p-8">
             <Suspense fallback={<div className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Laden…</div>}>
               <SetupForm />

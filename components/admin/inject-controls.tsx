@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { IrreversibleNote } from "@/components/admin/facilitator/irreversible"
 import type { Inject, InjectType, Role, SessionState, Urgency } from "@/lib/types"
 import { ROLE_META } from "@/lib/types"
 import { api } from "@/lib/api-client"
@@ -116,6 +117,14 @@ export function InjectControls({ session, disabled, lang = "en" }: { session: Se
               </span>
               <SurpriseInjectDialog disabled={disabled || isLobby || isEnded} />
             </div>
+
+            {/* Geen tweede klik op "Push nu": dit is de hoofdhandeling tijdens een
+                ronde en een bevestiging per inject zou die flow juist vertragen.
+                Wel eerlijk zijn vóór de klik — er is geen unpush in de store. */}
+            <IrreversibleNote>
+              Bezorgen is definitief: een gepushte inject staat direct bij de
+              deelnemers en kan niet worden teruggehaald.
+            </IrreversibleNote>
 
             <ul className="flex flex-col gap-3">
               {round.injects.map((inject) => {
@@ -314,10 +323,12 @@ function SurpriseInjectDialog({ disabled }: { disabled?: boolean }) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="size-5 text-destructive" /> Trigger surprise inject
+            <AlertTriangle className="size-5 text-destructive" /> Surprise-inject sturen
           </DialogTitle>
           <DialogDescription>
-            Pushed instantly to every participant. Use sparingly — these break the planned narrative.
+            Deze inject verschijnt direct bij alle deelnemers en kan niet worden
+            teruggehaald — er is geen manier om hem weer te verbergen. Spaarzaam
+            gebruiken: een surprise doorbreekt het geplande verhaal.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
@@ -348,10 +359,10 @@ function SurpriseInjectDialog({ disabled }: { disabled?: boolean }) {
           {error && <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-2 text-sm text-destructive-foreground">{error}</div>}
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setOpen(false)}>Annuleren</Button>
           <Button onClick={submit} disabled={submitting || !title.trim() || !content.trim()} className="gap-2 font-mono uppercase tracking-wider">
             {submitting ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
-            Trigger inject
+            Definitief sturen
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -120,10 +120,17 @@ function TourOverlay({ tour, onClose }: { tour: Tour; onClose: () => void }): JS
       inline: "nearest",
       behavior: "auto",
     })
-    // In een frame erna meten, niet nu: na het scrollen is de positie pas bij
-    // de volgende paint definitief.
+    // Twee pogingen: het frame erna, en een timer als vangnet. Alleen de rAF
+    // was te krap — werd de rondleiding geopend in hetzelfde commit waarin een
+    // ander overlay verdween, dan kwam dat frame niet aan en bleef `ready`
+    // false. De overlay hing dan onzichtbaar te wachten op het eerste scroll-
+    // of resize-event; live reproduceerbaar na het introscherm.
     const raf = requestAnimationFrame(measure)
-    return () => cancelAnimationFrame(raf)
+    const timer = window.setTimeout(measure, 50)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.clearTimeout(timer)
+    }
   }, [step, measure])
 
   useEffect(() => {

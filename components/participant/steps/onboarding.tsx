@@ -16,7 +16,7 @@ const ICONS: Record<OnboardingIcon, LucideIcon> = {
   dimensies: Scale,
 }
 
-export function Onboarding({ onDone }: { onDone: () => void }) {
+export function Onboarding({ onDone }: { onDone: (startTour: boolean) => void }) {
   const [i, setI] = useState(0)
   const card = ONBOARDING_CARDS[i]
   const Icon = ICONS[card.icon]
@@ -61,23 +61,23 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </ol>
           <button
             type="button"
-            onClick={() => (last ? onDone() : setI(i + 1))}
+            onClick={() => (last ? onDone(true) : setI(i + 1))}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 font-mono text-xs uppercase tracking-wider text-primary-foreground hover:opacity-90"
           >
-            {last ? "Beginnen" : "Verder"}
+            {last ? "Laat het op het scherm zien" : "Verder"}
             <ArrowRight className="size-3.5" />
           </button>
         </div>
 
-        {!last && (
-          <button
-            type="button"
-            onClick={onDone}
-            className="self-center font-mono text-[10px] uppercase tracking-wider text-muted-foreground underline hover:no-underline"
-          >
-            Overslaan
-          </button>
-        )}
+        {/* Ook op de laatste kaart een weg eruit: wie de rondleiding niet wil,
+            moet niet gedwongen worden hem te doorlopen. */}
+        <button
+          type="button"
+          onClick={() => onDone(false)}
+          className="self-center font-mono text-[10px] uppercase tracking-wider text-muted-foreground underline hover:no-underline"
+        >
+          {last ? "Nee, ik begin gewoon" : "Overslaan"}
+        </button>
       </div>
     </div>
   )

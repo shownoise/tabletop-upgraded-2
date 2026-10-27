@@ -83,7 +83,7 @@ export function FacilitatorShell({
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-3 md:px-8">
           <div className="flex items-center gap-3">
-            <Link href="/" className="flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:text-foreground">
+            <Link href="/admin/clients" title="Terug naar klanten" className="flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:text-foreground">
               <ArrowLeft className="size-4" />
             </Link>
             <div className="flex flex-col">

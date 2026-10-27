@@ -16,6 +16,7 @@ import {
   placeBalloon,
   resolveSteps,
   type TourRect,
+  DEELNEMER_START_TOUR,
 } from '@/lib/guided-tour-steps'
 
 // Een ballon van ~300px breed. Op 375px past die nooit naast een element.
@@ -24,10 +25,26 @@ const MOBILE = { width: 375, height: 812 }
 const DESKTOP = { width: 1440, height: 900 }
 
 describe('de rondleidingen', () => {
-  it('levert een deelnemer- en een facilitatorrondleiding', () => {
-    expect(Object.keys(TOURS).sort()).toEqual(['deelnemer', 'facilitator'])
+  it('levert drie rondleidingen: deelnemer, eerste keer, en facilitator', () => {
+    expect(Object.keys(TOURS).sort()).toEqual(['deelnemer', 'deelnemerStart', 'facilitator'])
     expect(DEELNEMER_TOUR.id).toBe('deelnemer')
+    expect(DEELNEMER_START_TOUR.id).toBe('deelnemer-start')
     expect(FACILITATOR_TOUR.id).toBe('facilitator')
+    // Elke rondleiding in het register zit ook in ALL_TOURS, anders slaan de
+    // invarianten hieronder er stilletjes één over.
+    expect(ALL_TOURS.length).toBe(Object.keys(TOURS).length)
+  })
+
+  it('wijst de eerste-keer-rondleiding alleen op dingen die op stap 1 staan', () => {
+    // Anders wordt een stap overgeslagen juist bij de eerste keer, wanneer de
+    // deelnemer de uitleg het hardst nodig heeft.
+    const opStapEen = new Set([
+      'deelnemer-voortgang', 'deelnemer-stapkop', 'deelnemer-rol', 'deelnemer-menu',
+    ])
+    for (const step of DEELNEMER_START_TOUR.steps) {
+      const naam = step.target.replace(/^\[data-tour="|"\]$/g, '')
+      expect(opStapEen.has(naam)).toBe(true)
+    }
   })
 
   it('heeft per rondleiding vier tot zes stappen', () => {
