@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { ArrowLeft, Users, FolderKanban, Play, Settings, ChevronRight } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AdminNav } from "@/components/auth/admin-nav"
 import { ToastProvider } from "./toast"
 
 const NAV_ITEMS = [
@@ -65,6 +66,10 @@ export function AdminShell({
                 <Settings className="size-3.5" />
                 <span>Beheer</span>
               </Link>
+              {/* Gebruikers en uitloggen stonden in een component die nergens
+                  gemonteerd was, dus /admin/users was alleen via de URL te
+                  bereiken en uitloggen helemaal niet. */}
+              <AdminNav />
               <ThemeToggle />
             </div>
           </div>

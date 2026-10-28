@@ -7,7 +7,7 @@
 import Link from "next/link"
 import {
   ArrowLeft, ChevronLeft, ChevronRight, Copy, CheckCircle, FileText, HelpCircle,
-  Monitor, Play, Square, Wifi, WifiOff, Wrench,
+  Monitor, Play, Settings, Square, Wifi, WifiOff, Wrench,
 } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -136,6 +136,18 @@ export function FacilitatorShell({
             >
               <Monitor className="size-3.5" />
               Groot scherm
+            </Link>
+            {/* Vanaf hier was Beheer niet te bereiken: deze header heeft zijn
+                eigen navigatie, en de terugpijl gaat naar de klanten. Je zat
+                dus tijdens een sessie vast zonder weg naar instellingen,
+                gebruikers of opslag. */}
+            <Link
+              href="/admin/settings"
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              title="Instellingen, gebruikers en opslag"
+            >
+              <Settings className="size-3.5" />
+              Beheer
             </Link>
           </div>
         </div>
