@@ -3,13 +3,10 @@ import { compare, hash } from "bcryptjs"
 import { requireFacilitator } from "@/lib/auth-guard"
 import { dbGetUsers, dbSaveUser } from "@/lib/db"
 import { rateLimit } from "@/lib/rate-limit"
+import { wachtwoordFout } from "@/lib/wachtwoord"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
-
-// Minimum dat we afdwingen. Geen tekenklasse-eisen: die leveren in de praktijk
-// 'Welkom01!' op. Lengte is wat telt.
-const MIN_LENGTE = 10
 
 /**
  * Wachtwoord wijzigen. Dit bestond niet — er was alleen gebruiker-aanmaken,
@@ -34,12 +31,8 @@ export async function POST(req: Request) {
   }
 
   const nieuw = body.newPassword ?? ""
-  if (nieuw.length < MIN_LENGTE) {
-    return NextResponse.json(
-      { error: `Kies een wachtwoord van minstens ${MIN_LENGTE} tekens.` },
-      { status: 400 },
-    )
-  }
+  const lengteFout = wachtwoordFout(nieuw)
+  if (lengteFout) return NextResponse.json({ error: lengteFout }, { status: 400 })
 
   const gebruikers = await dbGetUsers()
   const ik = gebruikers.find(u => u.id === ikId)
