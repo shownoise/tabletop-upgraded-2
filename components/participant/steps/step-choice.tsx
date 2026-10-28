@@ -99,6 +99,12 @@ export function StepChoice({
   // claimt geldt het echte mandaat weer.
   const teamDevice = session.mode === "event" && !roleCoverageInUse(session)
 
+  // In event-modus weigert de server een inzending zonder team ("Kies eerst
+  // een geldig team"). Dat zag je pas ná de klik, en dan leek het of de keuze
+  // niet registreerde. Nu staat het er vóór de klik.
+  const mij = session.participants.find(p => p.id === participantId)
+  const teamOntbreekt = session.mode === "event" && !!participantId && !mij?.groupId
+
   const mandateById = new Map(view.mandate.options.map(o => [o.optionId, o]))
   const byId = new Map(
     options.map(o => {
@@ -215,6 +221,16 @@ export function StepChoice({
         />
       )}
 
+      {teamOntbreekt && (
+        <p className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-xs text-foreground">
+          <UserX className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+          <span>
+            Kies eerst een team. Zonder team neemt de server je keuze niet aan — het teamvenster
+            staat over dit scherm zodra je het opent.
+          </span>
+        </p>
+      )}
+
       <section className="flex flex-col gap-2">
         <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
           De opties
@@ -236,7 +252,7 @@ export function StepChoice({
             Er staan voor deze ronde geen opties open.
           </p>
         )}
-        <ul className="flex flex-col gap-2">
+        <ul role="radiogroup" aria-label="Keuzes voor dit beslismoment" className="flex flex-col gap-2">
           {options.map(opt => {
             const mandate = byId.get(opt.optionId)
             const canSubmit = !!mandate?.canSubmit && !submittedOptionIds.has(opt.optionId)
@@ -244,11 +260,18 @@ export function StepChoice({
             const done = submittedOptionIds.has(opt.optionId)
             return (
               <li key={opt.optionId}>
+                {/* Eén keuze uit een lijst, dus radio-gedrag en geen toggle.
+                    Hier stond `isSelected ? null : opt.optionId`: wie een al
+                    gekozen optie nog eens aanklikte — bijvoorbeeld omdat de
+                    eerste klik niet leek aan te komen — zette zijn keuze weer
+                    uit, en dan stond Keuze indienen weer op grijs. Dat las als
+                    "ik moet twee keer klikken voordat het registreert". */}
                 <button
                   type="button"
-                  onClick={() => canSubmit && setSelected(isSelected ? null : opt.optionId)}
+                  role="radio"
+                  onClick={() => canSubmit && setSelected(opt.optionId)}
                   disabled={!canSubmit}
-                  aria-pressed={isSelected}
+                  aria-checked={isSelected}
                   className={`flex w-full flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
                     isSelected
                       ? "border-primary bg-primary/10"

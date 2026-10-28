@@ -10,6 +10,7 @@ import {
   highestOpenStep,
   landingStep,
   onboardingWordCount,
+  onboardingDetail,
   phaseKey,
   shortLead,
   stepLabel,
@@ -72,9 +73,32 @@ describe('rondeheader', () => {
 })
 
 describe('onboarding', () => {
-  it('is vijf kaarten en blijft onder de 150 woorden', () => {
-    expect(ONBOARDING_CARDS).toHaveLength(5)
+  it('is zes kaarten en blijft onder de 150 woorden', () => {
+    // Zes sinds de documentenkaart erbij kwam. De grens van 150 blijft: het
+    // introscherm was 964 woorden, en dat mag niet terugkruipen.
+    expect(ONBOARDING_CARDS).toHaveLength(6)
     expect(onboardingWordCount()).toBeLessThan(150)
+  })
+
+  it('vult de kaarten aan met je eigen rol en documenten', () => {
+    // De rolafhankelijke tekst komt uit ROLE_META en uit de documenten van de
+    // sessie, niet uit een tweede set teksten.
+    const ctx = {
+      roleLabel: 'CISO',
+      mandateSummary: 'Coördineert de incidentrespons.',
+      notMine: 'definitieve betaling losgeld',
+      documentTitles: ['IR Respons Quick Reference', 'Meldplicht Checklist'],
+    }
+    const rol = onboardingDetail('rol', ctx)!
+    expect(rol).toContain('CISO')
+    expect(rol).toContain('Niet van jou')
+    const doc = onboardingDetail('document', ctx)!
+    expect(doc).toContain('2 documenten')
+    expect(doc).toContain('IR Respons Quick Reference')
+    // Zonder documenten is dat zelf een bevinding, geen lege regel.
+    expect(onboardingDetail('document', { roleLabel: 'CISO' })).toContain('geen documenten')
+    // Zonder rol geen verzonnen tekst.
+    expect(onboardingDetail('rol', {})).toBeNull()
   })
 
   it('noemt geen raamwerk', () => {

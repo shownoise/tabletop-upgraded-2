@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Loader2, Sparkles } from "lucide-react"
+import { FileText, Loader2, Sparkles } from "lucide-react"
 import type { ScenarioGraph } from "@/lib/graph/types"
 import {
   defaultWizardConfig,
@@ -45,16 +45,32 @@ const COMPANY_SIZES: Array<{ id: CompanySize; label: string }> = [
   { id: 'enterprise', label: 'Enterprise (500+)' },
 ]
 
-// AI wizard for creating a client-tailored starting scenario. The full
-// WizardConfig is exposed here — every field steers both the generation
-// prompt and the framework validation. The wizard always writes drafts.
+// Twee paden naar een startscenario, met dezelfde config.
+//
+//   'draft' — lib/wizard/deterministic: rekent het scenario in code uit. Geen
+//             AI, geen wachttijd, haalt alle framework-regels. Dit is de
+//             primaire knop, want hij werkt altijd.
+//   'ai'    — de bestaande pipeline: schrijft het verhaal uit met een model,
+//             maar doet dat in tien of meer aanroepen en kan daardoor in de
+//             5-minuten-timeout van de route lopen.
+//
+// Elk configuratieveld stuurt zowel de generatie als de framework-validatie.
+// Beide paden schrijven altijd een draft, nooit een gepubliceerd scenario.
+type GenerationMode = 'draft' | 'ai'
+
+const ENDPOINTS: Record<GenerationMode, string> = {
+  draft: "/api/scenario-graph/draft",
+  ai: "/api/scenario-graph/ai-wizard",
+}
+
 export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig }: Props) {
   const [config, setConfig] = useState<WizardConfig>(() => ({ ...defaultWizardConfig(), ...initialConfig }))
-  const [loading, setLoading] = useState(false)
+  const [runningMode, setRunningMode] = useState<GenerationMode | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastLog, setLastLog] = useState<{ seed: string; repairLog: RepairLogEntry[] } | null>(null)
   const [elapsedSec, setElapsedSec] = useState(0)
   const requestController = useRef<AbortController | null>(null)
+  const loading = runningMode !== null
 
   // Reset config bij open-transition zodat een nieuwe klant of nieuwe prefill
   // niet blijft hangen op de vorige state. User-edits binnen de dialoog blijven
@@ -105,14 +121,14 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
     config.rolesIncluded.length > 0
   ), [loading, config])
 
-  async function submit() {
+  async function submit(mode: GenerationMode) {
     const controller = new AbortController()
     requestController.current = controller
-    setLoading(true)
+    setRunningMode(mode)
     setError(null)
     setLastLog(null)
     try {
-      const res = await fetch("/api/scenario-graph/ai-wizard", {
+      const res = await fetch(ENDPOINTS[mode], {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
@@ -124,7 +140,7 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
       const contentType = res.headers.get("content-type") ?? ""
       if (!contentType.includes("application/json")) {
         if (res.status === 504) {
-          setError("Wizard nam te lang (5 min timeout). Probeer opnieuw of vereenvoudig de config (minder rondes/rollen).")
+          setError("Wizard nam te lang (5 min timeout). Probeer opnieuw of vereenvoudig de config (minder rondes/rollen). \"Concept maken\" heeft die grens niet en is direct klaar.")
         } else if (res.status === 401) {
           setError("Sessie verlopen. Log opnieuw in.")
         } else if (res.status >= 500) {
@@ -165,7 +181,7 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
     } finally {
       if (requestController.current === controller) {
         requestController.current = null
-        setLoading(false)
+        setRunningMode(null)
       }
     }
   }
@@ -173,7 +189,7 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
   const cancel = () => {
     requestController.current?.abort()
     requestController.current = null
-    setLoading(false)
+    setRunningMode(null)
     onOpenChange(false)
   }
 
@@ -197,11 +213,15 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary" />
-            AI-wizard — startpunt genereren (draft)
+            Wizard — startpunt genereren (draft)
           </DialogTitle>
         </DialogHeader>
         <p className="text-xs text-muted-foreground -mt-2">
-          Vul de klantcontext in — AI maakt een draft-scenario en controleert de keuzes. Dit kan tot 5 minuten duren.
+          Vul de klantcontext in. <strong className="text-foreground">Concept maken</strong> rekent het scenario
+          direct uit: volledige rondes, injects, keuzes en scores, gecontroleerd op alle framework-regels. De teksten
+          zijn een bruikbaar raamwerk dat u hierna in de builder aanscherpt — geen afgewerkt verhaal.
+          <strong className="text-foreground"> Met AI uitwerken</strong> schrijft het verhaal wél uit, maar duurt
+          enkele minuten en kan aflopen op de tijdslimiet.
         </p>
 
         {/* ── Verhaal ── */}
@@ -371,24 +391,37 @@ export function AiWizardDialog({ open, onOpenChange, onGenerated, initialConfig 
           </div>
         )}
 
-        {loading && (
+        {runningMode === 'ai' && (
           <div role="status" aria-live="polite" className="rounded-md border border-primary/30 bg-primary/5 px-3 py-3 text-xs">
             <div className="flex items-center justify-between gap-3">
               <span className="font-medium text-foreground">AI maakt en controleert het scenario…</span>
               <span className="font-mono text-muted-foreground">{Math.floor(elapsedSec / 60)}:{String(elapsedSec % 60).padStart(2, '0')}</span>
             </div>
-            <p className="mt-1 text-muted-foreground">Dit kan 1–5 minuten duren. Er is nog geen echte voortgangsmeting; de teller toont alleen de verstreken tijd.</p>
+            <p className="mt-1 text-muted-foreground">
+              Dit kan 1–5 minuten duren en loopt daarna af op de tijdslimiet van de server. Er is nog geen echte
+              voortgangsmeting; de teller toont alleen de verstreken tijd. Lukt het niet: stop het wachten en kies
+              Concept maken.
+            </p>
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <p className="text-[11px] text-muted-foreground">
+        <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-end sm:justify-between">
+          <p className="text-[11px] text-muted-foreground sm:max-w-xs">
             Keuzes, scores en verbindingen zijn verplicht. Redactionele aandachtspunten verschijnen als waarschuwing bij het concept.
           </p>
-          <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={loading ? cancel : () => onOpenChange(false)}>{loading ? 'Stop wachten' : 'Annuleren'}</Button>
-            <Button type="button" onClick={submit} disabled={!canSubmit} className="gap-2">
-              {loading ? <><Loader2 className="size-3.5 animate-spin" /> Genereren…</> : <><Sparkles className="size-3.5" /> Genereer</>}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="ghost" onClick={loading ? cancel : () => onOpenChange(false)}>
+              {loading ? 'Stop wachten' : 'Annuleren'}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => submit('ai')} disabled={!canSubmit} className="gap-2">
+              {runningMode === 'ai'
+                ? <><Loader2 className="size-3.5 animate-spin" /> AI schrijft… (minuten)</>
+                : <><Sparkles className="size-3.5" /> Met AI uitwerken (minuten)</>}
+            </Button>
+            <Button type="button" onClick={() => submit('draft')} disabled={!canSubmit} className="gap-2">
+              {runningMode === 'draft'
+                ? <><Loader2 className="size-3.5 animate-spin" /> Concept maken…</>
+                : <><FileText className="size-3.5" /> Concept maken</>}
             </Button>
           </div>
         </div>

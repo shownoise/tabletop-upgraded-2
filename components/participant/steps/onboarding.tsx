@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowRight, Gavel, Inbox, Scale, ShieldCheck, Users } from "lucide-react"
+import { ArrowRight, FileText, Gavel, Inbox, Scale, ShieldCheck, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { ONBOARDING_CARDS, ONBOARDING_LEAD, type OnboardingIcon } from "./flow"
 
@@ -14,8 +14,13 @@ const ICONS: Record<OnboardingIcon, LucideIcon> = {
   overleg: Users,
   keuze: Gavel,
   dimensies: Scale,
+  document: FileText,
 }
 
+// De kaarten blijven hoogover: wat ga je doen, in zes regels. Wie je bent en
+// welke documenten je hebt staat niet hier maar in het menu zelf, bij het
+// knopje waar het over gaat — de eigenaar: "het eerste tutorial moet hoogover
+// en dan in menu balkjes hier staan jouw document (per rol etc)".
 export function Onboarding({ onDone }: { onDone: (startTour: boolean) => void }) {
   const [i, setI] = useState(0)
   const card = ONBOARDING_CARDS[i]

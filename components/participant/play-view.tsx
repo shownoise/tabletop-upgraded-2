@@ -5,6 +5,7 @@ import { Component, useCallback, useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import { ArrowLeft, FileText, HelpCircle, ShieldAlert } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
+import { ROLE_META } from "@/lib/types"
 import type { Inject, LiveEvent, Role, SubmittedDecision } from "@/lib/types"
 import { analyzeGraph } from "@/lib/graph/analyze"
 import { api } from "@/lib/api-client"
@@ -25,7 +26,7 @@ import { tr } from "@/lib/i18n"
 import { playNotificationSound } from "@/lib/sounds"
 import { GuidedTour } from "@/components/shared/guided-tour"
 import { TOURS, type Tour } from "@/lib/guided-tour-steps"
-import { DocumentsSheet } from "./steps/documents-sheet"
+import { DocumentsSheet, documentsForRoles } from "./steps/documents-sheet"
 import { activeRoleView } from "./steps/active-role"
 import {
   clampStep,
@@ -157,6 +158,23 @@ export function PlayView() {
     currentRound: session?.currentRound ?? -1,
     hasRole: hasStanding,
   }
+  // Wat er onder het Documenten-knopje in het menu staat: hoeveel en voor welke
+  // rol(len). Dat hoort bij het knopje en niet in de tutorial, want daar zoek je
+  // het ook op. Komt uit de sessie, dus geen tekst om te onderhouden.
+  const docSub = (() => {
+    if (!session) return null
+    const docs = documentsForRoles(session, roles.all)
+    if (docs.length === 0) return roles.active ? "geen voor jouw rol" : null
+    const namen = [...new Set(docs.map(d => d.targetRole).filter(Boolean))]
+      .map(r => ROLE_META[r as Role]?.label ?? r)
+    const stuks = docs.length === 1 ? "1 document" : `${docs.length} documenten`
+    if (namen.length === 0) return stuks
+    // Bij een of twee rollen de namen; daarboven wordt het een opsomming die
+    // niet meer in het menu past.
+    if (namen.length <= 2) return `${stuks} · ${namen.join(" en ")}`
+    return `${stuks} · al je rollen`
+  })()
+
   const highest = highestOpenStep(flow)
   const landing = landingStep(flow)
   const key = phaseKey(flow)
@@ -474,12 +492,22 @@ export function PlayView() {
                 trigger={
                   <button
                     type="button"
-                    title="Jouw documenten — overal te openen"
-                    className="flex items-center gap-2.5 rounded-md border border-border bg-card px-2.5 py-2 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary lg:w-full"
+                    title={docSub ? `Jouw documenten — ${docSub}` : "Jouw documenten — overal te openen"}
+                    className="flex items-start gap-2.5 rounded-md border border-border bg-card px-2.5 py-2 text-left text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary lg:w-full"
                   >
-                    <FileText className="size-4 shrink-0" aria-hidden />
-                    <span className="hidden font-mono text-[11px] uppercase tracking-wider lg:inline">
-                      Documenten
+                    <FileText className="mt-px size-4 shrink-0" aria-hidden />
+                    <span className="hidden min-w-0 flex-1 lg:block">
+                      <span className="block font-mono text-[11px] uppercase tracking-wider">
+                        Documenten
+                      </span>
+                      {/* De uitleg staat bij het knopje waar het over gaat, niet
+                          in de tutorial. Hier dus hoeveel documenten je hebt en
+                          voor welke rol(len). */}
+                      {docSub && (
+                        <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground/80">
+                          {docSub}
+                        </span>
+                      )}
                     </span>
                     <span className="sr-only lg:hidden">Jouw documenten</span>
                   </button>
@@ -489,11 +517,14 @@ export function PlayView() {
                 type="button"
                 onClick={() => setTour(TOURS.deelnemer)}
                 title="Hoe werkt dit scherm?"
-                className="flex items-center gap-2.5 rounded-md border border-border bg-card px-2.5 py-2 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary lg:w-full"
+                className="flex items-start gap-2.5 rounded-md border border-border bg-card px-2.5 py-2 text-left text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary lg:w-full"
               >
-                <HelpCircle className="size-4 shrink-0" aria-hidden />
-                <span className="hidden font-mono text-[11px] uppercase tracking-wider lg:inline">
-                  Uitleg
+                <HelpCircle className="mt-px size-4 shrink-0" aria-hidden />
+                <span className="hidden min-w-0 flex-1 lg:block">
+                  <span className="block font-mono text-[11px] uppercase tracking-wider">Uitleg</span>
+                  <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground/80">
+                    Wijst aan waar alles staat
+                  </span>
                 </span>
                 <span className="sr-only lg:hidden">Hoe werkt dit scherm?</span>
               </button>
