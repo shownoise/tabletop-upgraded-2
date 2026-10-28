@@ -90,11 +90,19 @@ export function StepMenu({
                   }`}>
                     {i + 1}. {STEP_META[id].title}
                   </span>
-                  {done && (
+                  {/* Bij het knopje staat wat er achter zit. Voor de stap waar
+                      je bent de hele regel, voor een stap die je gehad hebt dat
+                      je terug kunt. De eigenaar wilde de uitleg hier en niet in
+                      de tutorial. */}
+                  {active ? (
+                    <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
+                      {STEP_META[id].lead}
+                    </span>
+                  ) : done ? (
                     <span className="block font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                       terugkijken
                     </span>
-                  )}
+                  ) : null}
                 </span>
               </button>
             </li>
