@@ -54,10 +54,15 @@ export function timerPhase(secondsLeft: number, totalSeconds: number): "green" |
   return "green"
 }
 
+// Dit label hoort bij de klok, niet bij de fase. Het stond er als "Overleg
+// loopt" / "Discussieer + beslis binnenkort", en dat sprak de stappenbalk
+// tegen: in de inject-fase staat Overleg juist nog dicht, terwijl de HUD al
+// zei dat het liep. Wat de deelnemer nú moet doen staat in de stapkop; hier
+// staat alleen hoeveel tijd er nog is.
 export function timerPhaseText(phase: "green" | "yellow" | "red"): string {
-  if (phase === "red") return "BESLIS NU"
-  if (phase === "yellow") return "Discussieer + beslis binnenkort"
-  return "Overleg loopt"
+  if (phase === "red") return "Tijd bijna om"
+  if (phase === "yellow") return "Tijd dringt"
+  return "Tijd genoeg"
 }
 
 export function RoundTimer({ roundStartedAt, timerMinutes, status, lang }: RoundTimerProps) {
