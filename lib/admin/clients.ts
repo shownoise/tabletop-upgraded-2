@@ -69,6 +69,5 @@ export async function seedClients(clients: AdminClient[]): Promise<{ added: numb
   })
 }
 
-export function newClientId(): string {
-  return `client_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-}
+// newClientId staat in ids.ts: het klantformulier is een client component en
+// mag de opslag (en daarmee pg) niet mee de browserbundel in trekken.

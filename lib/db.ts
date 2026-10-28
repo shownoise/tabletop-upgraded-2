@@ -17,6 +17,13 @@
  * herstart en ziet een tweede instantie hem niet.
  */
 
+// Alleen op de server. Zonder deze regel trekt één waarde-import uit een client
+// component de hele keten mee de browserbundel in — tot en met `pg`, dat daar
+// `util/types` niet kan vinden. Dat is precies hoe de build omviel toen
+// rubric-scores.ts (geïmporteerd door de score-invoer) hier binnenkwam. Nu
+// faalt zo'n import meteen, met een foutmelding die de oorzaak noemt.
+import "server-only"
+
 import type { SessionState } from "./types"
 import type { ScenarioTemplate } from "./template-types"
 import type { ScenarioGraph } from "./graph/types"

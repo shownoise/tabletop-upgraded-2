@@ -5,6 +5,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+      // Zie test-stubs/server-only.ts: zonder deze regel gooit het echte
+      // pakket in elke test die lib/db.ts aanraakt.
+      'server-only': path.resolve(__dirname, 'test-stubs/server-only.ts'),
     },
   },
   test: {

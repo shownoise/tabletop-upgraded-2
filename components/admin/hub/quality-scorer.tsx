@@ -10,7 +10,8 @@ import { useToast } from "./toast"
 import type { AdminClient } from "@/lib/admin/clients"
 import { TESTKLANTEN_SEED } from "@/lib/admin/seed-clients"
 import type { RubricScoreEntry, RubricScorePerPoint } from "@/lib/admin/rubric-scores"
-import { RUBRIC_POINTS, newRubricEntryId } from "@/lib/admin/rubric-scores"
+import { RUBRIC_POINTS } from "@/lib/admin/rubric-punten"
+import { newRubricEntryId } from "@/lib/admin/ids"
 
 // Kwaliteit — testklant kiezen, scenario genereren (of naam invullen van een
 // bestaande run), en tegen de 10-punts rubric scoren. Elke score wordt bewaard
