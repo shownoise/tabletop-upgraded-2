@@ -3,6 +3,7 @@
 // tabel-vertaling is.
 
 import type { Role } from "@/lib/types"
+import { getLiveKv } from "@/lib/db"
 
 export interface AdminClient {
   id: string
@@ -24,12 +25,11 @@ const KEY = "admin:clients"
 
 const globalAny = globalThis as unknown as { __ctt_admin_clients__?: Record<string, AdminClient> }
 
+// Via lib/db.ts, zodat er één plek is die bepaalt of de opslag leeft. Deze
+// module had zijn eigen variant die alleen de import afschermde: viel de store
+// weg, dan gooide elke read en werd het een 500.
 async function getKv() {
-  if (!process.env.KV_REST_API_URL && !process.env.KV_URL) return null
-  try {
-    const { kv } = await import("@vercel/kv")
-    return kv
-  } catch { return null }
+  return await getLiveKv()
 }
 
 export async function listClients(): Promise<AdminClient[]> {
