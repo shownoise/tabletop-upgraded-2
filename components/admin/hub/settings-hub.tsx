@@ -6,14 +6,16 @@ import { RolesTab } from "./roles-tab"
 import { RegimesTab } from "./regimes-tab"
 import { WizardPromptTab } from "./wizard-prompt-tab"
 import { LegacyTemplateMigration } from "./legacy-template-migration"
+import { OpslagTab } from "./opslag-tab"
 
-type Tab = "texts" | "roles" | "regimes" | "wizard" | "migration"
+type Tab = "texts" | "roles" | "regimes" | "wizard" | "migration" | "opslag"
 const TABS: Array<{ key: Tab; label: string; hint: string }> = [
   { key: "texts",   label: "Teksten",   hint: "Labels, foutmeldingen, guides" },
   { key: "roles",   label: "Rollen",    hint: "Standaard rollenset + briefings" },
   { key: "regimes", label: "Regimes",   hint: "Meldplicht-regimes en autoriteiten" },
   { key: "wizard",  label: "AI-wizard", hint: "Prompt + generatieregels" },
   { key: "migration", label: "Migratie", hint: "Oude templates naar scenario's" },
+  { key: "opslag",  label: "Opslag",    hint: "Waar sessies staan + KV overzetten" },
 ]
 
 function readInitial(): Tab {
@@ -45,7 +47,7 @@ export function SettingsHub() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Instellingen</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Standaard-waardes zitten in code. Wijzigingen worden als override in KV bewaard; elk veld heeft een "terug naar standaard".
+          Standaard-waardes zitten in code. Wijzigingen worden als override in de opslag bewaard; elk veld heeft een "terug naar standaard". Onder Opslag zie je welke opslag dat is.
         </p>
       </div>
 
@@ -73,6 +75,7 @@ export function SettingsHub() {
       {tab === "regimes" && <RegimesTab />}
       {tab === "wizard" && <WizardPromptTab />}
       {tab === "migration" && <LegacyTemplateMigration />}
+      {tab === "opslag" && <OpslagTab />}
     </section>
   )
 }

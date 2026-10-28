@@ -1,9 +1,9 @@
-// Klant-store. Records worden in KV bewaard als één blob "admin:clients"
-// zodat de developer-migratie naar een echte database een simpele
-// tabel-vertaling is.
+// Klant-store. Records worden bewaard als één blob "admin:clients" zodat de
+// developer-migratie naar een echte database een simpele tabel-vertaling is.
+// Waar die blob heen gaat bepaalt de opslagnaad (lib/store/backend.ts).
 
 import type { Role } from "@/lib/types"
-import { getLiveKv } from "@/lib/db"
+import { withStore } from "@/lib/db"
 
 export interface AdminClient {
   id: string
@@ -23,23 +23,13 @@ export interface AdminClient {
 
 const KEY = "admin:clients"
 
-const globalAny = globalThis as unknown as { __ctt_admin_clients__?: Record<string, AdminClient> }
-
-// Via lib/db.ts, zodat er één plek is die bepaalt of de opslag leeft. Deze
-// module had zijn eigen variant die alleen de import afschermde: viel de store
-// weg, dan gooide elke read en werd het een 500.
-async function getKv() {
-  return await getLiveKv()
-}
-
+// Alles loopt via withStore uit lib/db.ts: één plek die bepaalt of de opslag
+// leeft. Deze module had zijn eigen client die alleen de import afschermde —
+// viel de store weg, dan gooide elke read en werd het een 500. De eigen
+// geheugen-fallback is ook weg; die rol heeft de geheugen-achterkant nu.
 export async function listClients(): Promise<AdminClient[]> {
-  const kv = await getKv()
-  let obj: Record<string, AdminClient> = {}
-  if (kv) {
-    obj = (await kv.get<Record<string, AdminClient>>(KEY)) ?? {}
-  } else {
-    obj = globalAny.__ctt_admin_clients__ ?? {}
-  }
+  const obj = await withStore("klanten lezen", async s =>
+    (await s.get<Record<string, AdminClient>>(KEY)) ?? {})
   return Object.values(obj).sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
@@ -49,45 +39,35 @@ export async function getClient(id: string): Promise<AdminClient | null> {
 }
 
 export async function saveClient(client: AdminClient): Promise<void> {
-  const kv = await getKv()
-  const current = kv
-    ? (await kv.get<Record<string, AdminClient>>(KEY)) ?? {}
-    : globalAny.__ctt_admin_clients__ ?? {}
-  const next = { ...current, [client.id]: { ...client, updatedAt: Date.now() } }
-  if (kv) await kv.set(KEY, next)
-  else globalAny.__ctt_admin_clients__ = next
+  await withStore("klant schrijven", async s => {
+    const current = (await s.get<Record<string, AdminClient>>(KEY)) ?? {}
+    await s.set(KEY, { ...current, [client.id]: { ...client, updatedAt: Date.now() } })
+  })
 }
 
 export async function deleteClient(id: string): Promise<void> {
-  const kv = await getKv()
-  const current = kv
-    ? (await kv.get<Record<string, AdminClient>>(KEY)) ?? {}
-    : globalAny.__ctt_admin_clients__ ?? {}
-  const next = { ...current }
-  delete next[id]
-  if (kv) await kv.set(KEY, next)
-  else globalAny.__ctt_admin_clients__ = next
+  await withStore("klant verwijderen", async s => {
+    const next = { ...((await s.get<Record<string, AdminClient>>(KEY)) ?? {}) }
+    delete next[id]
+    await s.set(KEY, next)
+  })
 }
 
 // Bulk-seed voor migratie / testdata. Overslaat bestaande IDs.
 export async function seedClients(clients: AdminClient[]): Promise<{ added: number; existing: number }> {
-  const kv = await getKv()
-  const current = kv
-    ? (await kv.get<Record<string, AdminClient>>(KEY)) ?? {}
-    : globalAny.__ctt_admin_clients__ ?? {}
-  let added = 0
-  let existing = 0
-  const next = { ...current }
-  for (const c of clients) {
-    if (next[c.id]) { existing++; continue }
-    next[c.id] = c
-    added++
-  }
-  if (kv) await kv.set(KEY, next)
-  else globalAny.__ctt_admin_clients__ = next
-  return { added, existing }
+  return await withStore("klanten seeden", async s => {
+    const next = { ...((await s.get<Record<string, AdminClient>>(KEY)) ?? {}) }
+    let added = 0
+    let existing = 0
+    for (const c of clients) {
+      if (next[c.id]) { existing++; continue }
+      next[c.id] = c
+      added++
+    }
+    await s.set(KEY, next)
+    return { added, existing }
+  })
 }
 
-export function newClientId(): string {
-  return `client_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-}
+// newClientId staat in ids.ts: het klantformulier is een client component en
+// mag de opslag (en daarmee pg) niet mee de browserbundel in trekken.

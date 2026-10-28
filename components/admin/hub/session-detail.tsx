@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { Loader2, Printer, Save } from "lucide-react"
+import { FileText, Loader2, Printer, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import type { SessionSnapshot } from "@/lib/admin/sessions-archive"
@@ -318,6 +318,14 @@ export function SessionDetail({ id }: { id: string }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Deze pagina is de facilitator-terugblik; het scorerapport met de
+              punten en de zes dimensies staat op zijn eigen route en blijft daar
+              ook na een volgende oefening staan. */}
+          <Link href={`/admin/report/${encodeURIComponent(snapshot.id)}`}>
+            <Button size="sm" variant="outline" className="gap-1.5">
+              <FileText className="size-3.5" /> Scorerapport
+            </Button>
+          </Link>
           <Button size="sm" variant="outline" onClick={() => window.print()} className="gap-1.5">
             <Printer className="size-3.5" /> Print / PDF
           </Button>

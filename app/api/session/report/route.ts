@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
-import type { GovernanceFlag, LearningObjective, SessionReport, SubmittedDecision } from "@/lib/types"
+import type { GovernanceFlag, LearningObjective, SessionReport, SessionState, SubmittedDecision } from "@/lib/types"
 import { requireFacilitator } from "@/lib/auth-guard"
 import { scoreCoverage, submissionsFromDecisions } from "@/lib/graph/outcome-selector"
+import { migrateSessionClassifications } from "@/lib/classification"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 
@@ -40,18 +41,42 @@ function generateRecommendations(flags: GovernanceFlag[], hasIrPlan: boolean, gr
   return recs
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const gate = await requireFacilitator()
   if (!gate.ok) return gate.response
+
+  // `?sessionId=` lost op in dezelfde volgorde als de rapportpagina: geen
+  // parameter of 'current' is de sessie uit de store, het id van de actieve
+  // sessie wijst naar diezelfde, en elk ander id komt uit het sessie-archief.
+  // Zonder die derde stap kon deze route alleen de actieve sessie opleveren en
+  // was het rapport van een afgeronde oefening weg zodra er een nieuwe begon.
+  const requested = new URL(req.url).searchParams.get("sessionId")
   const { getSession } = await import("@/lib/session-store")
-  const session = await getSession()
-  if (!session) {
-    // Nederlandse foutteksten: report-view toont `error` rechtstreeks aan de
-    // facilitator.
-    return NextResponse.json({ error: "Geen actieve sessie." }, { status: 404 })
-  }
-  if (session.status !== "ended") {
-    return NextResponse.json({ error: "Het rapport is pas beschikbaar nadat de sessie is afgerond." }, { status: 400 })
+  const active = await getSession()
+  const fromStore = !requested || requested === "current" || requested === active?.id
+
+  let session: SessionState | null = null
+  if (fromStore) {
+    session = active
+    if (!session) {
+      // Nederlandse foutteksten: report-view toont `error` rechtstreeks aan de
+      // facilitator.
+      return NextResponse.json({ error: "Geen actieve sessie." }, { status: 404 })
+    }
+    if (session.status !== "ended") {
+      return NextResponse.json({ error: "Het rapport is pas beschikbaar nadat de sessie is afgerond." }, { status: 400 })
+    }
+  } else {
+    const { getSnapshot } = await import("@/lib/admin/sessions-archive")
+    const archived = await getSnapshot(requested)
+    if (!archived) {
+      return NextResponse.json({ error: "Deze sessie staat niet in het archief." }, { status: 404 })
+    }
+    // Een gearchiveerde sessie is per definitie niet meer aan de gang, ook als
+    // hij bij het archiveren nog 'active' stond — dus geen afgerond-check hier.
+    // readSession() migreert de classificaties van een live sessie bij elke
+    // read; een snapshot komt daar niet langs, dus hier dezelfde migratie.
+    session = migrateSessionClassifications(archived.snapshot)
   }
 
   const decisions: SubmittedDecision[] = session.submittedDecisions ?? []

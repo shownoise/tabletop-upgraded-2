@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { Play, Trash2 } from "lucide-react"
+import { FileText, Play, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useToast } from "./toast"
 import type { SessionSnapshot } from "@/lib/admin/sessions-archive"
@@ -102,9 +102,18 @@ export function SessionsList() {
                   </td>
                   <td className="px-4 py-2 text-xs">{s.finalOutcomeLabel ?? "—"}</td>
                   <td className="px-4 py-2 text-right">
-                    <Button size="sm" variant="ghost" className="h-8 px-2 hover:text-destructive" onClick={() => del(s)}>
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      {/* Het scorerapport van een afgeronde oefening blijft op
+                          zijn eigen id bereikbaar, ook na een nieuwe sessie. */}
+                      <Link href={`/admin/report/${encodeURIComponent(s.id)}`}>
+                        <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2 font-mono text-[11px] uppercase tracking-wider">
+                          <FileText className="size-3.5" /> Rapport
+                        </Button>
+                      </Link>
+                      <Button size="sm" variant="ghost" className="h-8 px-2 hover:text-destructive" onClick={() => del(s)}>
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

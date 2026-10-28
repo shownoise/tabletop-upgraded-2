@@ -9,6 +9,7 @@
 // defaults) blijft geldig.
 
 import type { OutcomeVector } from '@/lib/scoring/vector-overrides'
+import { withStore } from "@/lib/db"
 import type { Role } from '@/lib/types'
 
 export interface RoleOverride {
@@ -39,39 +40,21 @@ const KEY = 'admin:overrides'
 let cache: { data: AdminOverrides; loadedAt: number } | null = null
 const CACHE_TTL_MS = 30_000
 
-const globalAny = globalThis as unknown as { __ctt_admin_overrides__?: AdminOverrides }
 
-async function getKv() {
-  if (!process.env.KV_REST_API_URL && !process.env.KV_URL) return null
-  try {
-    const { kv } = await import('@vercel/kv')
-    return kv
-  } catch {
-    return null
-  }
-}
 
 export async function loadOverrides(): Promise<AdminOverrides> {
   if (cache && Date.now() - cache.loadedAt < CACHE_TTL_MS) return cache.data
-  const kv = await getKv()
-  let data: AdminOverrides = {}
-  if (kv) {
-    data = (await kv.get<AdminOverrides>(KEY)) ?? {}
-  } else {
-    data = globalAny.__ctt_admin_overrides__ ?? {}
-  }
+  // Via withStore, niet via een eigen @vercel/kv-client. Deze module had zijn
+  // eigen variant die alleen de import afschermde — exact het gat dat in #115
+  // de hele app plat legde toen de store wegviel.
+  const data = await withStore("overrides lezen", s => s.get<AdminOverrides>(KEY)) ?? {}
   cache = { data, loadedAt: Date.now() }
   return data
 }
 
 export async function saveOverrides(next: AdminOverrides): Promise<void> {
   const withStamp: AdminOverrides = { ...next, updatedAt: Date.now() }
-  const kv = await getKv()
-  if (kv) {
-    await kv.set(KEY, withStamp)
-  } else {
-    globalAny.__ctt_admin_overrides__ = withStamp
-  }
+  await withStore("overrides schrijven", s => s.set(KEY, withStamp))
   cache = { data: withStamp, loadedAt: Date.now() }
 }
 

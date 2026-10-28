@@ -1,9 +1,10 @@
 // Sessie-archief. BEWUST simpel: elke afgeronde/gestarte sessie krijgt één
-// snapshot in KV. Geen relationeel model — developers vervangen de opslag
-// later. Snapshot is een subset van SessionState + een paar computed velden.
+// snapshot. Geen relationeel model — waar de snapshots heen gaan bepaalt de
+// opslagnaad (lib/store/backend.ts). Snapshot is een subset van SessionState +
+// een paar computed velden.
 
 import type { SessionState } from "@/lib/types"
-import { getLiveKv } from "@/lib/db"
+import { withStore } from "@/lib/db"
 
 export interface SessionSnapshot {
   id: string                      // sessionId (uit SessionState.id)
@@ -22,7 +23,7 @@ export interface SessionSnapshot {
   finalOutcomeLabel?: string
   // De volledige sessie-state bewaren maakt "openen" trivial — de
   // ScorePanel + narrative kunnen erop draaien alsof het live is.
-  // Grote blob (~100KB) maar KV kan het aan.
+  // Grote blob (~100KB), maar elke achterkant kan dat aan.
   snapshot: SessionState
   // Post-sessie facilitator-notities. Bewerken via het session-detail
   // rapport. Optioneel — rapport rendert prima zonder.
@@ -39,18 +40,12 @@ export interface SessionSnapshot {
 
 const KEY = "admin:sessions-archive"
 
-const globalAny = globalThis as unknown as { __ctt_admin_sessions_archive__?: Record<string, SessionSnapshot> }
-
-async function getKv() {
-  // Zie lib/db.ts: één gezondheidscheck voor de hele opslag.
-  return await getLiveKv()
-}
-
+// Via withStore uit lib/db.ts: één plek die bepaalt of de opslag leeft, en één
+// plek die een omvallende store opvangt. De eigen geheugen-fallback die hier
+// stond is weg — die rol heeft de geheugen-achterkant nu.
 export async function listSnapshots(): Promise<SessionSnapshot[]> {
-  const kv = await getKv()
-  const obj = kv
-    ? (await kv.get<Record<string, SessionSnapshot>>(KEY)) ?? {}
-    : globalAny.__ctt_admin_sessions_archive__ ?? {}
+  const obj = await withStore("archief lezen", async s =>
+    (await s.get<Record<string, SessionSnapshot>>(KEY)) ?? {})
   return Object.values(obj).sort((a, b) => (b.endedAt ?? b.startedAt) - (a.endedAt ?? a.startedAt))
 }
 
@@ -60,24 +55,18 @@ export async function getSnapshot(id: string): Promise<SessionSnapshot | null> {
 }
 
 export async function upsertSnapshot(snap: SessionSnapshot): Promise<void> {
-  const kv = await getKv()
-  const current = kv
-    ? (await kv.get<Record<string, SessionSnapshot>>(KEY)) ?? {}
-    : globalAny.__ctt_admin_sessions_archive__ ?? {}
-  const next = { ...current, [snap.id]: snap }
-  if (kv) await kv.set(KEY, next)
-  else globalAny.__ctt_admin_sessions_archive__ = next
+  await withStore("archief schrijven", async s => {
+    const current = (await s.get<Record<string, SessionSnapshot>>(KEY)) ?? {}
+    await s.set(KEY, { ...current, [snap.id]: snap })
+  })
 }
 
 export async function deleteSnapshot(id: string): Promise<void> {
-  const kv = await getKv()
-  const current = kv
-    ? (await kv.get<Record<string, SessionSnapshot>>(KEY)) ?? {}
-    : globalAny.__ctt_admin_sessions_archive__ ?? {}
-  const next = { ...current }
-  delete next[id]
-  if (kv) await kv.set(KEY, next)
-  else globalAny.__ctt_admin_sessions_archive__ = next
+  await withStore("archief verwijderen", async s => {
+    const next = { ...((await s.get<Record<string, SessionSnapshot>>(KEY)) ?? {}) }
+    delete next[id]
+    await s.set(KEY, next)
+  })
 }
 
 // Snapshot bouwen vanuit een live SessionState.
