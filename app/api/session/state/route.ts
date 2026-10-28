@@ -10,7 +10,23 @@ export async function GET(req: Request) {
   const isAdmin = !!session?.user
   // Settle: tick round-phase auto-advance in case a boundary crossed between mutations.
   // Without this, phases only advance on user actions — fase-timers zouden dood zijn.
-  const state = await settleAndGetState().catch(() => getState())
+  //
+  // Beide aanroepen afgeschermd. De `.catch(() => getState())` die hier stond
+  // dekte alleen settleAndGetState: gooide getState óók, dan werd dit een 500.
+  // Dat gebeurde live toen de KV-store wegviel, en deze endpoint is precies de
+  // endpoint die elke deelnemer en het dashboard elke paar seconden opvragen —
+  // de hele app lag eruit op een lege sessie.
+  let state: Awaited<ReturnType<typeof getState>>
+  try {
+    state = await settleAndGetState()
+  } catch {
+    try {
+      state = await getState()
+    } catch (err) {
+      console.error("[ctt] sessiestate onleesbaar", err)
+      return NextResponse.json({ session: null, storageError: true })
+    }
+  }
 
   if (isAdmin) return NextResponse.json(state)
   if (!state.session) return NextResponse.json({ session: null })

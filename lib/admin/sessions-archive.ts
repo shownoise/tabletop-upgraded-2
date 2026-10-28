@@ -3,6 +3,7 @@
 // later. Snapshot is een subset van SessionState + een paar computed velden.
 
 import type { SessionState } from "@/lib/types"
+import { getLiveKv } from "@/lib/db"
 
 export interface SessionSnapshot {
   id: string                      // sessionId (uit SessionState.id)
@@ -41,9 +42,8 @@ const KEY = "admin:sessions-archive"
 const globalAny = globalThis as unknown as { __ctt_admin_sessions_archive__?: Record<string, SessionSnapshot> }
 
 async function getKv() {
-  if (!process.env.KV_REST_API_URL && !process.env.KV_URL) return null
-  try { const { kv } = await import("@vercel/kv"); return kv }
-  catch { return null }
+  // Zie lib/db.ts: één gezondheidscheck voor de hele opslag.
+  return await getLiveKv()
 }
 
 export async function listSnapshots(): Promise<SessionSnapshot[]> {

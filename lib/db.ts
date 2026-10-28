@@ -36,11 +36,66 @@ function graphKey(id: string) { return `scenario-graph:${id}` }
 // ─────────────────────────────────────────────────────────────
 
 let kvLoadWarned = false
+// Zodra een echte KV-aanroep faalt zetten we de opslag op gedegradeerd. Dan
+// blijven we niet bij elke request opnieuw een dode store aanroepen, en vooral:
+// dan geeft de app geen 500 meer.
+//
+// Waarom dit nodig was: `getKV()` schermde alleen de *import* af. Elke
+// `kv.get`/`kv.set` stond onbeschermd, dus toen de store wegviel gooide elke
+// read en gaf /api/session/state een 500 — de endpoint die elke deelnemer en
+// het facilitatordashboard elke paar seconden opvragen. De hele app lag eruit.
+let kvDegraded = false
+let kvDegradedWarned = false
+
+export function storageDegraded(): boolean {
+  return kvDegraded
+}
+
+// Doe een KV-aanroep; valt die om, val dan terug op het geheugen in plaats van
+// de request te laten klappen. De fout wordt een keer luid gelogd.
+async function kvTry<T>(label: string, fn: () => Promise<T>, fallback: () => T): Promise<T> {
+  try {
+    return await fn()
+  } catch (err) {
+    kvDegraded = true
+    if (!kvDegradedWarned) {
+      console.error(
+        `[ctt] opslag onbereikbaar bij ${label} — verder in geheugen. Sessies overleven geen herstart of tweede instantie.`,
+        err,
+      )
+      kvDegradedWarned = true
+    }
+    return fallback()
+  }
+}
+
+let kvProbed = false
+
+// Dezelfde client voor de andere opslagmodules, met dezelfde gezondheidscheck.
+// Zij hadden allemaal hun eigen variant die alleen de import afschermde.
+export async function getLiveKv() {
+  return await getKV()
+}
 
 async function getKV() {
+  if (kvDegraded) return null
   if (!process.env.KV_REST_API_URL && !process.env.KV_URL) return null
   try {
     const { kv } = await import("@vercel/kv")
+    // Eén keer per instantie controleren of de store er echt is. Vercel KV is
+    // als product uitgefaseerd, dus de envvars kunnen naar een store wijzen die
+    // niet meer bestaat. Zonder deze check gooit pas de eerste echte read, en
+    // dat werd een 500 op /api/session/state.
+    if (!kvProbed) {
+      kvProbed = true
+      try {
+        await kv.get("ctt:health")
+      } catch (err) {
+        kvDegraded = true
+        console.error("[ctt] opslag reageert niet op een testread — verder in geheugen.", err)
+        return null
+      }
+    }
     return kv
   } catch (err) {
     // KV envs are set but the client can't load — this is an operational incident
@@ -90,7 +145,10 @@ export interface StoredUser {
 export async function dbGetSession(): Promise<SessionState | null> {
   const kv = await getKV()
   if (kv) {
-    return await kv.get<SessionState>(KEYS.session)
+    // Dubbel afgeschermd, want /api/session/state hangt hieraan en wordt door
+    // elke deelnemer en het dashboard elke paar seconden opgevraagd. Een fout
+    // hier mag nooit een 500 worden.
+    return await kvTry("sessie lezen", () => kv.get<SessionState>(KEYS.session), () => mem.session)
   }
   return mem.session
 }
@@ -98,12 +156,17 @@ export async function dbGetSession(): Promise<SessionState | null> {
 export async function dbSetSession(session: SessionState | null): Promise<void> {
   const kv = await getKV()
   if (kv) {
-    if (session) {
-      await kv.set(KEYS.session, session, { ex: 60 * 60 * 24 }) // 24h TTL
-    } else {
-      await kv.del(KEYS.session)
-    }
-    return
+    const ok = await kvTry("sessie schrijven", async () => {
+      if (session) {
+        await kv.set(KEYS.session, session, { ex: 60 * 60 * 24 }) // 24h TTL
+      } else {
+        await kv.del(KEYS.session)
+      }
+      return true
+    }, () => false)
+    // Lukte het schrijven niet, dan houden we de sessie in het geheugen vast
+    // zodat de lopende oefening niet halverwege stilvalt.
+    if (ok) return
   }
   mem.session = session
 }
@@ -146,14 +209,21 @@ export async function withSessionLock<T>(fn: () => Promise<T>): Promise<T> {
     try { return await fn() } finally { resolveNext() }
   }
 
-  // KV mode: try to acquire, retry once with backoff.
-  let token = await acquireKvLock(kv)
-  if (!token) {
+  // KV mode: try to acquire, retry once with backoff. Valt de store om terwijl
+  // we het slot pakken, dan draaien we zonder slot door in plaats van de
+  // mutatie te laten mislukken — degraded is beter dan stil.
+  let token = await kvTry("slot pakken", () => acquireKvLock(kv), () => null)
+  if (!token && !kvDegraded) {
     await new Promise(r => setTimeout(r, 100))
-    token = await acquireKvLock(kv)
+    token = await kvTry("slot pakken", () => acquireKvLock(kv), () => null)
   }
-  if (!token) throw new Error("Session busy — could not acquire lock")
-  try { return await fn() } finally { await releaseKvLock(kv, token) }
+  if (!token) {
+    if (kvDegraded) return await fn()
+    throw new Error("Session busy — could not acquire lock")
+  }
+  try { return await fn() } finally {
+    await kvTry("slot vrijgeven", () => releaseKvLock(kv, token!), () => undefined)
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
