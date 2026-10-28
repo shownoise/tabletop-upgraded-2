@@ -15,8 +15,15 @@ export async function POST(req: Request) {
   if (!body.force) {
     const notReady = session.participants.filter(p => !p.readyAt)
     if (notReady.length > 0) {
+      // Geen API-instructie in de tekst: dit komt in het facilitatorscherm
+      // terecht en werd gelezen door iemand die geen developer is. De
+      // aanroeper ziet de 409 en het `notReady`-veld, en vraagt zelf of er
+      // toch gestart moet worden.
+      const namen = notReady.map(p => p.name).join(", ")
       return NextResponse.json({
-        error: `${notReady.length} deelnemer(s) hebben nog niet op 'Ready' geklikt: ${notReady.map(p => p.name).join(", ")}. Stuur { force: true } om alsnog te starten.`,
+        error: notReady.length === 1
+          ? `${namen} staat nog niet op klaar.`
+          : `${notReady.length} deelnemers staan nog niet op klaar: ${namen}.`,
         notReady: notReady.map(p => ({ id: p.id, name: p.name })),
       }, { status: 409 })
     }

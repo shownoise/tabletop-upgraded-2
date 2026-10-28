@@ -15,7 +15,7 @@ import { useState } from "react"
 import { ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSessionStream } from "@/lib/use-session-stream"
-import { api } from "@/lib/api-client"
+import { api, ApiError } from "@/lib/api-client"
 import { useLang } from "@/lib/use-lang"
 import { tr } from "@/lib/i18n"
 import { FacilitatorShell, type FacilitatorActions } from "./facilitator/facilitator-shell"
@@ -50,9 +50,12 @@ export function ControlDashboard({ step }: { step?: FacilitatorStep } = {}) {
       try {
         await api.startSession()
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
         // 409 → nog niet iedereen staat op klaar. De facilitator mag forceren.
-        if (msg.includes("Ready") && window.confirm(`${msg}\n\nToch starten?`)) {
+        // Op de status kijken, niet op de tekst: die tekst moest daarvoor
+        // technisch blijven en was voor de facilitator onleesbaar.
+        const nogNietKlaar = err instanceof ApiError && err.status === 409
+        const msg = err instanceof Error ? err.message : String(err)
+        if (nogNietKlaar && window.confirm(`${msg}\n\nToch beginnen? Wie later aanhaakt kan gewoon nog meedoen.`)) {
           await api.startSession({ force: true })
         } else {
           throw err
