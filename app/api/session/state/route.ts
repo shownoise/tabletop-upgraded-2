@@ -28,12 +28,17 @@ export async function GET(req: Request) {
     }
   }
 
-  if (isAdmin) return NextResponse.json(state)
-  if (!state.session) return NextResponse.json({ session: null })
-
   // Phase 6 — pass participantId so the projection narrows participantViewState.
   const url = new URL(req.url)
   const participantId = url.searchParams.get("participantId") ?? undefined
+  // `as=participant` is de deelnemerpagina die om zijn eigen projectie vraagt.
+  // Zonder dit kreeg een ingelogde facilitator op /play de volledige sessie, en
+  // die heeft geen `activeDecision` — dat veld maakt de projectie. De keuze
+  // stond dan dicht terwijl de facilitator er zelf op wachtte.
+  const wilDeelnemerBlik = url.searchParams.get("as") === "participant"
+
+  if (isAdmin && !wilDeelnemerBlik) return NextResponse.json(state)
+  if (!state.session) return NextResponse.json({ session: null })
   // The participant projection still carries the join code and the client's
   // context (sector, crown jewels, critical systems), so it may only go to
   // someone who actually joined. A participantId is only ever handed out in

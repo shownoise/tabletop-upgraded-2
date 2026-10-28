@@ -19,7 +19,23 @@ export interface SessionStream {
  *  - an event subscription helper for transient notifications
  *    (popups, alerts, etc.) that should not be re-played on reconnect.
  */
-export function useSessionStream(): SessionStream {
+/**
+ * `as: "participant"` vraagt expliciet om de deelnemer-projectie, ook als deze
+ * browser een facilitator-cookie heeft.
+ *
+ * Waarom dat nodig is: beide routes gaven een ingelogde facilitator altijd de
+ * volledige sessie, en de volledige sessie heeft geen `activeDecision` — dat
+ * veld maakt de projectie. Een facilitator die in zijn eigen browser als
+ * deelnemer meeliep zag op /play dus "de facilitator heeft de keuze nog niet
+ * opengezet", terwijl hij zelf op fase 'beslissing' stond en op vier rollen
+ * wachtte. Precies de manier waarop dit product solo getest wordt.
+ *
+ * Alleen de rol omdraaien kon niet: deze hook stuurt `participantId` uit
+ * localStorage altijd mee, ook op het facilitatordashboard. Dan zou dát scherm
+ * de deelnemer-projectie krijgen zodra je ooit hebt meegedaan.
+ */
+export function useSessionStream(opties: { as?: "participant" | "facilitator" } = {}): SessionStream {
+  const alsDeelnemer = opties.as === "participant"
   const [state, setState] = useState<PublicState>({ session: null })
   const [connected, setConnected] = useState(false)
   const [expired, setExpired] = useState(false)
@@ -32,7 +48,10 @@ export function useSessionStream(): SessionStream {
     const participantId = (typeof window !== "undefined")
       ? window.localStorage.getItem("ctt:participantId") ?? undefined
       : undefined
-    const qs = participantId ? `?participantId=${encodeURIComponent(participantId)}` : ""
+    const params = new URLSearchParams()
+    if (participantId) params.set("participantId", participantId)
+    if (alsDeelnemer) params.set("as", "participant")
+    const qs = params.size > 0 ? `?${params}` : ""
     const es = new EventSource(`/api/events${qs}`)
 
     const handleState = (ev: MessageEvent) => {
@@ -97,7 +116,7 @@ export function useSessionStream(): SessionStream {
       es.close()
       clearInterval(poll)
     }
-  }, [])
+  }, [alsDeelnemer])
 
   return {
     state,
