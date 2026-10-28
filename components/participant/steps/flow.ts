@@ -184,7 +184,7 @@ export function shortLead(text: string, maxChars = 320): { lead: string; rest: s
 // feit/aanname-uitleg. Dat is niet meer de kern. Vijf kaarten, onder de 150
 // woorden, en geen enkel woord over een raamwerk.
 
-export type OnboardingIcon = 'rol' | 'bericht' | 'overleg' | 'keuze' | 'dimensies'
+export type OnboardingIcon = 'rol' | 'bericht' | 'overleg' | 'keuze' | 'dimensies' | 'document'
 
 export interface OnboardingCard {
   icon: OnboardingIcon
@@ -192,7 +192,7 @@ export interface OnboardingCard {
   body: string
 }
 
-export const ONBOARDING_LEAD = 'Vijf kaarten, dan begin je.'
+export const ONBOARDING_LEAD = 'Zes kaarten, dan begin je.'
 
 export const ONBOARDING_CARDS: readonly OnboardingCard[] = [
   {
@@ -216,11 +216,50 @@ export const ONBOARDING_CARDS: readonly OnboardingCard[] = [
     body: 'Elke keuze hoort bij één rol. Die rol dient in, de rest adviseert.',
   },
   {
+    icon: 'document',
+    title: 'Lees je documenten',
+    body: 'Polis, protocol, draaiboek — daar staat wat je rol mag. Let ook op wat er niet in staat: dat gat bepaalt in een echte crisis net zo veel.',
+  },
+  {
     icon: 'dimensies',
     title: 'Bespreek de gevolgen',
     body: 'In de review zie je wat je keuze doet op zes dimensies: containment, forensiek, continuïteit, juridisch, verantwoording en kosten.',
   },
 ]
+
+// Wat de kaarten erbij krijgen als we weten wie je bent. Geen tweede set
+// teksten om te onderhouden: dit komt uit ROLE_META en uit de documenten die
+// de sessie al voor je rol heeft klaarstaan. De eigenaar vroeg om uitleg die
+// vertelt waarom je je documenten leest, en of dat rolafhankelijk kan.
+export interface OnboardingContext {
+  roleLabel?: string
+  mandateSummary?: string
+  notMine?: string
+  documentTitles?: readonly string[]
+}
+
+export function onboardingDetail(icon: OnboardingIcon, ctx: OnboardingContext): string | null {
+  if (icon === 'rol') {
+    if (!ctx.roleLabel) return null
+    const delen = [`Jij bent ${ctx.roleLabel}.`]
+    if (ctx.mandateSummary) delen.push(ctx.mandateSummary)
+    if (ctx.notMine) delen.push(`Niet van jou: ${ctx.notMine}.`)
+    return delen.join(' ')
+  }
+  if (icon === 'document') {
+    const titels = ctx.documentTitles ?? []
+    if (titels.length === 0) {
+      return ctx.roleLabel
+        ? `Voor ${ctx.roleLabel} zijn in deze oefening geen documenten vastgelegd — dat is zelf al een bevinding.`
+        : null
+    }
+    const lijst = titels.length === 1
+      ? titels[0]
+      : `${titels.slice(0, -1).join(', ')} en ${titels[titels.length - 1]}`
+    return `Jij hebt ${titels.length === 1 ? 'één document' : `${titels.length} documenten`}: ${lijst}. Te openen vanaf elke stap.`
+  }
+  return null
+}
 
 // Het woordaantal van álle onboardingtekst bij elkaar. Issue #105 vraagt
 // expliciet om dit getal, dus het komt uit de tekst zelf en niet uit een

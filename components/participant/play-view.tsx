@@ -5,6 +5,7 @@ import { Component, useCallback, useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import { ArrowLeft, FileText, HelpCircle, ShieldAlert } from "lucide-react"
 import { useSessionStream } from "@/lib/use-session-stream"
+import { ROLE_META } from "@/lib/types"
 import type { Inject, LiveEvent, Role, SubmittedDecision } from "@/lib/types"
 import { analyzeGraph } from "@/lib/graph/analyze"
 import { api } from "@/lib/api-client"
@@ -25,7 +26,7 @@ import { tr } from "@/lib/i18n"
 import { playNotificationSound } from "@/lib/sounds"
 import { GuidedTour } from "@/components/shared/guided-tour"
 import { TOURS, type Tour } from "@/lib/guided-tour-steps"
-import { DocumentsSheet } from "./steps/documents-sheet"
+import { DocumentsSheet, documentsForRoles } from "./steps/documents-sheet"
 import { activeRoleView } from "./steps/active-role"
 import {
   clampStep,
@@ -414,7 +415,21 @@ export function PlayView() {
         <TeamPicker session={session} participantId={participantId} onJoined={() => { /* de stream levert groupId */ }} />
       )}
       {participantId && <AchievementsToaster session={session} participantId={participantId} />}
-      {showOnboarding && status !== "ended" && <Onboarding onDone={dismissOnboarding} />}
+      {showOnboarding && status !== "ended" && (
+        <Onboarding
+          onDone={dismissOnboarding}
+          /* Wie je bent en welke documenten je hebt, uit de serverstate en uit
+             ROLE_META. De eigenaar vroeg om uitleg die vertelt waarom je je
+             documenten leest, en of dat rolafhankelijk kan — dit is dat, zonder
+             een tweede set teksten om te onderhouden. */
+          context={{
+            roleLabel: roles.active ? ROLE_META[roles.active]?.label : undefined,
+            mandateSummary: roles.active ? ROLE_META[roles.active]?.mandateSummary : undefined,
+            notMine: roles.active ? ROLE_META[roles.active]?.notResponsibleFor : undefined,
+            documentTitles: documentsForRoles(session, roles.all).map(d => d.title),
+          }}
+        />
+      )}
       {session.mode !== "event" && activeSpecial && participantId && (
         <SpecialModal
           special={activeSpecial}

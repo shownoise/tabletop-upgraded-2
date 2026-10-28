@@ -1,9 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowRight, Gavel, Inbox, Scale, ShieldCheck, Users } from "lucide-react"
+import { ArrowRight, FileText, Gavel, Inbox, Scale, ShieldCheck, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { ONBOARDING_CARDS, ONBOARDING_LEAD, type OnboardingIcon } from "./flow"
+import {
+  ONBOARDING_CARDS, ONBOARDING_LEAD, onboardingDetail,
+  type OnboardingContext, type OnboardingIcon,
+} from "./flow"
 
 // Vijf kaarten in plaats van 964 woorden (issue #105 §2). Geen raamwerk, geen
 // feit/aanname: alleen de kern van wat een deelnemer gaat doen.
@@ -14,13 +17,23 @@ const ICONS: Record<OnboardingIcon, LucideIcon> = {
   overleg: Users,
   keuze: Gavel,
   dimensies: Scale,
+  document: FileText,
 }
 
-export function Onboarding({ onDone }: { onDone: (startTour: boolean) => void }) {
+export function Onboarding({
+  onDone,
+  context,
+}: {
+  onDone: (startTour: boolean) => void
+  // Wie je bent en welke documenten je hebt. Leeg mag: dan staan er alleen de
+  // algemene kaarten, zoals wanneer je nog geen rol hebt gekozen.
+  context?: OnboardingContext
+}) {
   const [i, setI] = useState(0)
   const card = ONBOARDING_CARDS[i]
   const Icon = ICONS[card.icon]
   const last = i === ONBOARDING_CARDS.length - 1
+  const detail = context ? onboardingDetail(card.icon, context) : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/95 px-4 py-10 backdrop-blur">
@@ -39,6 +52,11 @@ export function Onboarding({ onDone }: { onDone: (startTour: boolean) => void })
             </span>
             <h2 className="text-lg font-semibold tracking-tight text-foreground">{card.title}</h2>
             <p className="text-sm leading-relaxed text-muted-foreground">{card.body}</p>
+            {detail && (
+              <p className="mt-1 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-sm leading-relaxed text-foreground">
+                {detail}
+              </p>
+            )}
           </div>
         </div>
 
