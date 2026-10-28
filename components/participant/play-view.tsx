@@ -27,6 +27,7 @@ import { playNotificationSound } from "@/lib/sounds"
 import { GuidedTour } from "@/components/shared/guided-tour"
 import { TOURS, type Tour } from "@/lib/guided-tour-steps"
 import { DocumentsSheet, documentsForRoles } from "./steps/documents-sheet"
+import { RoleSwitcher } from "./steps/role-switcher"
 import { activeRoleView } from "./steps/active-role"
 import {
   clampStep,
@@ -144,6 +145,16 @@ export function PlayView() {
     [session, participantId],
   )
 
+  // Waarop de weergave gefilterd is. `null` is alles van al je rollen; zodra je
+  // er meer dan een draagt begint het op je actieve rol, want alles door elkaar
+  // is dan onleesbaar.
+  const [rolFilterUit, setRolFilterUit] = useState(false)
+  const rolFilter: Role | null = rolFilterUit ? null : roles.active ?? null
+  // Rollen waarop gefilterd mag worden, geclaimde rol eerst.
+  const filterRollen = roles.all
+  // Wat er na het filter overblijft: de rol zelf, of al je rollen.
+  const zichtbareRollen: Role[] = rolFilter ? [rolFilter] : roles.all
+
   // ── Stap ─────────────────────────────────────────────────────────────
   // Event-modus kent het teamdevice: niemand claimt een rol en dat ene tablet
   // speelt namens álle rollen. Zo'n device heeft wél recht om door te spelen en
@@ -163,7 +174,7 @@ export function PlayView() {
   // het ook op. Komt uit de sessie, dus geen tekst om te onderhouden.
   const docSub = (() => {
     if (!session) return null
-    const docs = documentsForRoles(session, roles.all)
+    const docs = documentsForRoles(session, zichtbareRollen)
     if (docs.length === 0) return roles.active ? "geen voor jouw rol" : null
     const namen = [...new Set(docs.map(d => d.targetRole).filter(Boolean))]
       .map(r => ROLE_META[r as Role]?.label ?? r)
@@ -325,6 +336,21 @@ export function PlayView() {
       : "De facilitator zet de volgende stap open."
   }
 
+  // Bovenaan de stapinhoud, op elke stap: hiermee wissel je van rol en
+  // filtert alles mee.
+  const rolwisselaar = (
+    <RoleSwitcher
+      roles={filterRollen}
+      active={rolFilter}
+      mandated={mandate?.mandate.mandatedRoles ?? []}
+      onPick={role => {
+        if (role === null) { setRolFilterUit(true); return }
+        setRolFilterUit(false)
+        setRolePreference(role)
+      }}
+    />
+  )
+
   const content = (() => {
     switch (step) {
       case "welkom":
@@ -387,6 +413,10 @@ export function PlayView() {
                 participantName={name ?? ""}
                 view={mandate}
                 deadline={deadline}
+                /* Alleen de opties van de rol die je nu bekijkt. Zonder filter
+                   stonden er met zeven overgenomen rollen 32 opties op een
+                   rij. */
+                filterRole={rolFilter}
               />
             ) : currentRound?.roleActions && participantId ? (
               // Sessies zonder scenariograph hebben geen `activeDecision`; daar
@@ -488,7 +518,7 @@ export function PlayView() {
             <>
               <DocumentsSheet
                 session={session}
-                roles={roles.all}
+                roles={zichtbareRollen}
                 trigger={
                   <button
                     type="button"
@@ -531,6 +561,7 @@ export function PlayView() {
             </>
           }
         >
+          {rolwisselaar}
           {content}
         </StepShell>
       </main>

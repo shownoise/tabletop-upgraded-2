@@ -61,12 +61,16 @@ export function StepChoice({
   participantName,
   view,
   deadline,
+  filterRole,
 }: {
   session: SessionState
   participantId: string | null
   participantName: string
   view: MandateView | null
   deadline?: string
+  // De rol die de deelnemer nu bekijkt, of null voor al zijn rollen. Met zeven
+  // overgenomen rollen stonden er anders 32 opties op een rij.
+  filterRole?: Role | null
 }) {
   // Het eerste document van een rol die nu mandaat heeft. Eén tip, niet zes:
   // een lijst met alle documenten staat al achter de knop in het stapmenu.
@@ -90,7 +94,12 @@ export function StepChoice({
   }
 
   const roundIndex = session.currentRound
-  const options = (session.activeDecision?.options ?? []) as OptionWithVector[]
+  const alleOpties = (session.activeDecision?.options ?? []) as OptionWithVector[]
+  // Opties zonder rol zijn van iedereen en blijven dus staan.
+  const options = filterRole
+    ? alleOpties.filter(o => !o.allowedRole || o.allowedRole === filterRole)
+    : alleOpties
+  const verborgenDoorFilter = alleOpties.length - options.length
 
   // Event-modus met een teamdevice: niemand claimt een rol en dat ene tablet
   // dient namens álle rollen in. Dekking is daar een eigenschap van het team,
@@ -245,6 +254,14 @@ export function StepChoice({
               Elke optie werkt door op de zes dimensies. Wat precies, hoor je bij de nabespreking —
               je kiest nu op wat je weet.
             </span>
+          </p>
+        )}
+        {/* Zeg hoeveel er door het rolfilter buiten beeld staan, anders lijkt
+            het alsof er opties verdwenen zijn. */}
+        {verborgenDoorFilter > 0 && (
+          <p className="text-[11px] text-muted-foreground">
+            {verborgenDoorFilter} {verborgenDoorFilter === 1 ? "optie hoort" : "opties horen"} bij je
+            andere rollen. Wissel bovenaan van rol om die te zien.
           </p>
         )}
         {options.length === 0 && (
