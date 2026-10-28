@@ -2,9 +2,86 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { ArrowLeft, Plus, Trash2, Users, Shield, Loader2 } from "lucide-react"
+import { ArrowLeft, Plus, Users, Shield, Loader2, KeyRound, Check } from "lucide-react"
 
 interface User { id: string; email: string; name: string; role: string; createdAt: number }
+
+// Nederlands, zoals de rest van het beheer. De omringende teksten op deze
+// pagina zijn nog Engels; die laat ik staan, dat is i18n-werk.
+function WachtwoordWijzigen({ gebruiker, eigenEmail }: { gebruiker: User; eigenEmail: string | null }) {
+  const zelf = !!eigenEmail && gebruiker.email.toLowerCase() === eigenEmail.toLowerCase()
+  const [open, setOpen] = useState(false)
+  const [huidig, setHuidig] = useState("")
+  const [nieuw, setNieuw] = useState("")
+  const [bezig, setBezig] = useState(false)
+  const [fout, setFout] = useState<string | null>(null)
+  const [klaar, setKlaar] = useState(false)
+
+  async function opslaan(e: React.FormEvent) {
+    e.preventDefault()
+    setBezig(true); setFout(null)
+    try {
+      const res = await fetch("/api/users/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: gebruiker.id,
+          ...(zelf ? { currentPassword: huidig } : {}),
+          newPassword: nieuw,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      setKlaar(true); setOpen(false); setHuidig(""); setNieuw("")
+    } catch (err) {
+      setFout(err instanceof Error ? err.message : "Mislukt")
+    } finally { setBezig(false) }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setOpen(true); setKlaar(false) }}
+        className="flex items-center gap-1.5 rounded border border-border px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+      >
+        {klaar ? <Check className="size-3 text-emerald-600" /> : <KeyRound className="size-3" />}
+        {klaar ? "gewijzigd" : "wachtwoord"}
+      </button>
+    )
+  }
+
+  return (
+    <form onSubmit={opslaan} className="flex flex-col gap-2 w-full max-w-xs">
+      {zelf && (
+        <input
+          type="password" value={huidig} onChange={e => setHuidig(e.target.value)} required
+          autoComplete="current-password" placeholder="huidig wachtwoord"
+          className="rounded border border-border bg-background px-2 py-1.5 font-mono text-xs"
+        />
+      )}
+      <input
+        type="password" value={nieuw} onChange={e => setNieuw(e.target.value)} required minLength={10}
+        autoComplete="new-password" placeholder="nieuw — min. 10 tekens"
+        className="rounded border border-border bg-background px-2 py-1.5 font-mono text-xs"
+      />
+      {!zelf && (
+        <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+          reset door admin — het oude wachtwoord is niet nodig
+        </p>
+      )}
+      {fout && <p className="font-mono text-[10px] text-destructive">✗ {fout}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={bezig} className="flex items-center gap-1.5 rounded bg-primary px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-primary-foreground disabled:opacity-50">
+          {bezig && <Loader2 className="size-3 animate-spin" />}opslaan
+        </button>
+        <button type="button" onClick={() => { setOpen(false); setFout(null) }} className="rounded border border-border px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+          annuleren
+        </button>
+      </div>
+    </form>
+  )
+}
 
 export function UserManager() {
   const [users, setUsers] = useState<User[]>([])
@@ -12,8 +89,16 @@ export function UserManager() {
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "facilitator" })
   const [error, setError] = useState<string | null>(null)
+  // Wie ben ik zelf: dat bepaalt of het veld "huidig wachtwoord" nodig is.
+  const [eigenEmail, setEigenEmail] = useState<string | null>(null)
 
   useEffect(() => { fetch("/api/users").then(r => r.json()).then(setUsers).finally(() => setLoading(false)) }, [])
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then(r => r.json())
+      .then((d: { user?: { email?: string } }) => setEigenEmail(d?.user?.email ?? null))
+      .catch(() => setEigenEmail(null))
+  }, [])
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -56,7 +141,7 @@ export function UserManager() {
           ) : (
             <ul className="divide-y divide-border">
               {users.map(u => (
-                <li key={u.id} className="flex items-center justify-between px-5 py-3.5">
+                <li key={u.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
                   <div className="flex items-center gap-3">
                     <div className="size-8 rounded-full border border-border bg-background flex items-center justify-center font-mono text-[10px] uppercase text-muted-foreground">
                       {u.name.slice(0, 2)}
@@ -70,6 +155,7 @@ export function UserManager() {
                     <span className={`font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded border ${u.role === "admin" ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground"}`}>
                       {u.role}
                     </span>
+                    <WachtwoordWijzigen gebruiker={u} eigenEmail={eigenEmail} />
                   </div>
                 </li>
               ))}
