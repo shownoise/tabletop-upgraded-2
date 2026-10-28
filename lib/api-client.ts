@@ -1,6 +1,18 @@
 import type { ExerciseConfig, FactCheckTag, InjectChannel, InjectType, RegulatoryObligationState, Role, RoundPhase, SessionReport, SimulationMode, SpecialEvent, SpecialType, SupervisionReportEdits, Urgency } from "./types"
 import type { SupervisionReport } from "./engine/supervision"
 
+// Fout mét statuscode en body. Een aanroeper die op een specifieke situatie wil
+// reageren (409: nog niet iedereen staat op klaar) kon dat alleen door op de
+// tekst van de foutmelding te matchen — dus moest die tekst technisch blijven,
+// en las de facilitator "Stuur { force: true }". Blijft een gewone Error, dus
+// elke bestaande `err.message` werkt door.
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly body: unknown) {
+    super(message)
+    this.name = "ApiError"
+  }
+}
+
 async function post<T = unknown>(url: string, body?: unknown): Promise<T> {
   let res: Response
   try {
@@ -17,7 +29,7 @@ async function post<T = unknown>(url: string, body?: unknown): Promise<T> {
   if (!res.ok) {
     const err = (json as { error?: string }).error ?? "Request failed"
     console.error(`[api] POST ${url} ${res.status}:`, err)
-    throw new Error(err)
+    throw new ApiError(err, res.status, json)
   }
   return json
 }

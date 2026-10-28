@@ -11,7 +11,13 @@ export async function GET(req: Request): Promise<Response> {
   const session = await auth()
   const isAdmin = !!session?.user
 
-  const participantId = new URL(req.url).searchParams.get("participantId") ?? undefined
+  const url = new URL(req.url)
+  const participantId = url.searchParams.get("participantId") ?? undefined
+  // Zie /api/session/state: de deelnemerpagina vraagt expliciet om haar eigen
+  // projectie, zodat een facilitator die in dezelfde browser meeloopt niet de
+  // volledige sessie (zonder `activeDecision`) binnenkrijgt.
+  const alsDeelnemer = url.searchParams.get("as") === "participant"
+  const volledigeStaat = isAdmin && !alsDeelnemer
   // Same membership rule as /api/session/state: the participant projection
   // carries the join code and client context, so an anonymous subscriber may
   // not open a stream of it. Only enforced once a session exists — before that
@@ -44,7 +50,7 @@ export async function GET(req: Request): Promise<Response> {
 
       // Participant-scoped SSE: the participantId narrows participantViewState
       // to just this participant's own entry.
-      const unsubscribe = isAdmin ? subscribe(send) : subscribeParticipant(send, participantId)
+      const unsubscribe = volledigeStaat ? subscribe(send) : subscribeParticipant(send, participantId)
 
       const heartbeat = setInterval(() => {
         safeEnqueue(`: hb ${Date.now()}\n\n`)

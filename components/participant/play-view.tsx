@@ -75,7 +75,10 @@ class DecisionBoundary extends Component<{ children: ReactNode }, { crashed: boo
 
 export function PlayView() {
   const [lang] = useLang()
-  const { state, connected, expired, onEvent } = useSessionStream()
+  // Expliciet de deelnemer-blik: anders krijgt een facilitator die in zijn
+  // eigen browser meeloopt de volledige sessie, en die heeft geen
+  // `activeDecision` — dan staat de keuze hier dicht terwijl hij openstaat.
+  const { state, connected, expired, onEvent } = useSessionStream({ as: "participant" })
 
   // Terug naar /join als de sessie verdwijnt of de deelname verloopt.
   useEffect(() => {
