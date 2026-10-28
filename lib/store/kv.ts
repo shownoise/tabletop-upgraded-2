@@ -12,7 +12,7 @@ import type { Gebeurtenis, NieuweGebeurtenis, StoreBackend } from "./backend"
 
 type Kv = {
   get: <T>(key: string) => Promise<T | null>
-  set: (key: string, value: unknown) => Promise<unknown>
+  set: (key: string, value: unknown, opties?: { nx?: true; px?: number }) => Promise<unknown>
   del: (key: string) => Promise<unknown>
   keys: (pattern: string) => Promise<string[]>
 }
@@ -32,12 +32,22 @@ export async function kvBackend(): Promise<StoreBackend | null> {
       return await kv.get<T>(key)
     },
 
+    // Let op de ontbrekende derde parameter: géén `{ ex: ... }`. Hier zat de
+    // 24-uurs TTL op de sessie. Zet hem niet terug.
     async set<T>(key: string, value: T): Promise<void> {
       await kv.set(key, value)
     },
 
     async del(key: string): Promise<void> {
       await kv.del(key)
+    },
+
+    // SET NX (+ PX als er een levensduur bij hoort). @vercel/kv gaf historisch
+    // "OK" terug bij succes, nieuwere versies de waarde zelf; bij een botsing
+    // altijd null. Elke truthy waarde betekent dus "gelukt".
+    async setIfAbsent(key: string, value: unknown, ttlMs?: number): Promise<boolean> {
+      const opties = ttlMs ? ({ nx: true, px: ttlMs } as const) : ({ nx: true } as const)
+      return !!(await kv.set(key, value, opties))
     },
 
     async keys(prefix: string): Promise<string[]> {

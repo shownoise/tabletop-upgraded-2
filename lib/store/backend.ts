@@ -25,6 +25,13 @@ export interface StoreBackend {
   // Sleutels met een prefix. Nodig om sessies te kunnen opsommen zonder een
   // aparte index bij te houden die uit de pas kan lopen.
   keys(prefix: string): Promise<string[]>
+  // Schrijf alleen als de sleutel nog vrij is; `true` betekent "van jou".
+  // Atomair, want hier hangen twee dingen aan die een race niet mogen
+  // verliezen: het sessieslot en de e-mailreservering bij een nieuwe
+  // gebruiker. Optioneel: een achterkant die maar één proces bedient (het
+  // geheugen) laat dit weg, en de bovenliggende code gebruikt dan een
+  // Promise-keten die beter is dan een slot op een sleutel.
+  setIfAbsent?(key: string, value: unknown, ttlMs?: number): Promise<boolean>
   // Append-only gebeurtenissen per sessie. `seq` wordt door de achterkant
   // bepaald, zodat twee gelijktijdige writers niet hetzelfde nummer krijgen.
   appendEvent(event: NieuweGebeurtenis): Promise<Gebeurtenis>

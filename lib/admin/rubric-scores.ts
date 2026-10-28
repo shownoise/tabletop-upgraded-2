@@ -2,6 +2,8 @@
 // Elke score-run legt vast: welke testklant, welke prompt-versie, per punt
 // 0/1/2, en de notitie. Zo zie je over tijd of de wizard beter wordt.
 
+import { withStore } from "@/lib/db"
+
 export type RubricScorePerPoint = 0 | 1 | 2
 
 export interface RubricScoreEntry {
@@ -25,30 +27,22 @@ export interface RubricScoreEntry {
 
 const KEY = "admin:rubric-scores"
 
-const globalAny = globalThis as unknown as { __ctt_admin_rubric__?: Record<string, RubricScoreEntry> }
-
-async function getKv() {
-  if (!process.env.KV_REST_API_URL && !process.env.KV_URL) return null
-  try { const { kv } = await import("@vercel/kv"); return kv }
-  catch { return null }
-}
-
+// Via withStore, niet via een eigen @vercel/kv-client. Deze module had er een,
+// die alleen de *import* afschermde: elke echte kv.get stond onbeschermd en
+// nam bij een wegvallende store het hele admin-paneel mee. Hetzelfde gat als
+// in #115.
 export async function listRubricScores(): Promise<RubricScoreEntry[]> {
-  const kv = await getKv()
-  const obj = kv
-    ? (await kv.get<Record<string, RubricScoreEntry>>(KEY)) ?? {}
-    : globalAny.__ctt_admin_rubric__ ?? {}
+  const obj = await withStore("rubric-scores lezen", async s =>
+    (await s.get<Record<string, RubricScoreEntry>>(KEY)) ?? {},
+  )
   return Object.values(obj).sort((a, b) => b.createdAt - a.createdAt)
 }
 
 export async function saveRubricScore(entry: RubricScoreEntry): Promise<void> {
-  const kv = await getKv()
-  const current = kv
-    ? (await kv.get<Record<string, RubricScoreEntry>>(KEY)) ?? {}
-    : globalAny.__ctt_admin_rubric__ ?? {}
-  const next = { ...current, [entry.id]: entry }
-  if (kv) await kv.set(KEY, next)
-  else globalAny.__ctt_admin_rubric__ = next
+  await withStore("rubric-score schrijven", async s => {
+    const current = (await s.get<Record<string, RubricScoreEntry>>(KEY)) ?? {}
+    await s.set(KEY, { ...current, [entry.id]: entry })
+  })
 }
 
 export function newRubricEntryId(): string {

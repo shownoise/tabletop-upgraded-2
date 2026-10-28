@@ -19,8 +19,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const rl = await rateLimit(`login:${emailKey}`, 5, 60)
         if (!rl.ok) return null
 
-        // Ensure default admin exists on first run
-        await dbEnsureAdminUser()
+        // Ensure default admin exists on first run. Weigert de seed (geen
+        // ADMIN_PASSWORD bij gedeelde opslag), dan is dat een configuratiefout
+        // en geen reden om het inloggen van een bestaande gebruiker te laten
+        // klappen met een 500.
+        try {
+          await dbEnsureAdminUser()
+        } catch (err) {
+          console.error("[ctt] standaard-admin niet aangemaakt.", err)
+        }
 
         const user = await dbGetUserByEmail(credentials.email as string)
         if (!user) return null

@@ -3,6 +3,8 @@
 // je in het admin-paneel bewerkt — plus een versie-string zodat rubric-scores
 // weten welke prompt ze scoorden.
 
+import { withStore } from "@/lib/db"
+
 export interface WizardPromptOverride {
   systemPromptTemplate?: string  // volledige system prompt, tokens ${clientName} etc. blijven werken
   ruleAdditions?: string         // extra regels toegevoegd aan de 12 kern-rules (freeform tekst)
@@ -12,23 +14,15 @@ export interface WizardPromptOverride {
 
 const KEY = "admin:wizard-prompt"
 
-const globalAny = globalThis as unknown as { __ctt_admin_wizard_prompt__?: WizardPromptOverride }
-
-async function getKv() {
-  if (!process.env.KV_REST_API_URL && !process.env.KV_URL) return null
-  try { const { kv } = await import("@vercel/kv"); return kv }
-  catch { return null }
-}
-
+// Via withStore; zie de opmerking in rubric-scores.ts. Dit was de laatste
+// module met een eigen, half afgeschermde @vercel/kv-client.
 export async function loadPromptOverride(): Promise<WizardPromptOverride | null> {
-  const kv = await getKv()
-  if (kv) return (await kv.get<WizardPromptOverride>(KEY)) ?? null
-  return globalAny.__ctt_admin_wizard_prompt__ ?? null
+  return await withStore("wizard-prompt lezen", async s =>
+    (await s.get<WizardPromptOverride>(KEY)) ?? null,
+  )
 }
 
 export async function savePromptOverride(override: WizardPromptOverride): Promise<void> {
-  const kv = await getKv()
   const next: WizardPromptOverride = { ...override, updatedAt: Date.now() }
-  if (kv) await kv.set(KEY, next)
-  else globalAny.__ctt_admin_wizard_prompt__ = next
+  await withStore("wizard-prompt schrijven", s => s.set(KEY, next))
 }

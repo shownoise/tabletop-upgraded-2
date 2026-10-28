@@ -38,6 +38,12 @@ export function geheugenBackend(): StoreBackend {
       return [...opslag.waarden.keys()].filter(k => k.startsWith(prefix)).sort()
     },
 
+    // Bewust géén `setIfAbsent`. Deze achterkant bedient één proces, en de
+    // bovenliggende code kiest dan een Promise-keten die wacht in plaats van
+    // een slot dat kan mislukken. De afwezigheid van deze methode is het
+    // signaal waarop die keuze valt — vul hem dus niet "voor de volledigheid"
+    // aan.
+
     async appendEvent(event: NieuweGebeurtenis): Promise<Gebeurtenis> {
       const rij = opslag.gebeurtenissen.get(event.sessionId) ?? []
       const volledig: Gebeurtenis = {
