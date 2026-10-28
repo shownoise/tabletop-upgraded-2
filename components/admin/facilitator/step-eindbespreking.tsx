@@ -45,8 +45,11 @@ export function StepEindbespreking({
             ? "De deelnemers zien hun eindscherm. Hieronder staat per gespeelde ronde dezelfde bespreking die zij voor zich hebben."
             : "Hieronder staat alles wat tot nu toe is gespeeld. Beëindig de oefening met de knop rechtsboven; deelnemers krijgen dan hun eindscherm."}
         </p>
+        {/* Het echte sessie-id, niet /admin/report: die laatste leest altijd de
+            sessie die nú in de store staat. Met het id blijft deze link naar
+            déze oefening wijzen, ook nadat er een volgende is gestart. */}
         <Link
-          href="/admin/report"
+          href={`/admin/report/${encodeURIComponent(session.id)}`}
           className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-primary hover:bg-primary/20"
         >
           <FileText className="size-3" /> Naar rapport
