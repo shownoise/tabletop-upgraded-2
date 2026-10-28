@@ -63,7 +63,7 @@ export async function migreerVanKv(
   try {
     bron = await kvBackend()
   } catch (err) {
-    return { ...leeg, nietsTeDoen: `De KV-store antwoordt niet: ${foutTekst(err)}` }
+    return { ...leeg, nietsTeDoen: uitlegBijKvFout(err) }
   }
   if (!bron) return { ...leeg, nietsTeDoen: "De KV-store is niet te openen." }
 
@@ -136,4 +136,23 @@ async function kopieerGebeurtenissen(
 
 function foutTekst(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+// De fout die Upstash geeft bij een volle gratis database is voor niemand te
+// lezen: "ERR This database has reached current Fixed plan limits. Please
+// upgrade manually or enable auto upgrade on Upstash Console, command was:
+// [[\"get\",\"ctt:health\"]]". Dat is geen storing in deze app, en het is ook
+// niet iets wat opnieuw proberen oplost — behalve als het dagquotum reset.
+function uitlegBijKvFout(err: unknown): string {
+  const tekst = foutTekst(err)
+  if (/plan limit|quota|max.?requests|exceeded/i.test(tekst)) {
+    return (
+      "De oude Upstash-store zit aan de limiet van zijn gratis plan en weigert " +
+      "ook leesopdrachten, dus er is nu niets uit over te zetten. Het dagquotum " +
+      "loopt doorgaans binnen 24 uur terug; probeer het dan opnieuw, of verhoog " +
+      "het plan in de Upstash Console als je er nu bij moet. De gegevens zelf " +
+      "staan er nog — ze zijn alleen onbereikbaar zolang de store dichtzit."
+    )
+  }
+  return `De oude KV-store antwoordt niet: ${tekst}`
 }
