@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth-guard"
 import { dbGetUsers, dbCreateUserIfEmailFree, type StoredUser } from "@/lib/db"
+import { wachtwoordFout } from "@/lib/wachtwoord"
 import { hash } from "bcryptjs"
 import { randomBytes } from "crypto"
 
@@ -19,6 +20,11 @@ export async function POST(req: Request) {
   if (!gate.ok) return gate.response
   const body = await req.json() as { email?: string; password?: string; name?: string; role?: string }
   if (!body.email || !body.password || !body.name) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
+  // Deze route controleerde de lengte niet, terwijl de wijzigroute tien tekens
+  // eist en het formulier acht zei. Je kon dus een account aanmaken met een
+  // wachtwoord dat je daarna niet meer mocht instellen.
+  const fout = wachtwoordFout(body.password)
+  if (fout) return NextResponse.json({ error: fout }, { status: 400 })
   const passwordHash = await hash(body.password, 12)
   const user: StoredUser = {
     id: `usr_${randomBytes(6).toString("hex")}`,

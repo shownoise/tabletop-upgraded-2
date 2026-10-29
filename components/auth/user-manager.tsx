@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { ArrowLeft, Plus, Users, Shield, Loader2, KeyRound, Check } from "lucide-react"
+import { MIN_WACHTWOORD_LENGTE, WACHTWOORD_HINT } from "@/lib/wachtwoord"
 
 interface User { id: string; email: string; name: string; role: string; createdAt: number }
 
@@ -61,8 +62,8 @@ function WachtwoordWijzigen({ gebruiker, eigenEmail }: { gebruiker: User; eigenE
         />
       )}
       <input
-        type="password" value={nieuw} onChange={e => setNieuw(e.target.value)} required minLength={10}
-        autoComplete="new-password" placeholder="nieuw — min. 10 tekens"
+        type="password" value={nieuw} onChange={e => setNieuw(e.target.value)} required minLength={MIN_WACHTWOORD_LENGTE}
+        autoComplete="new-password" placeholder={`nieuw — ${WACHTWOORD_HINT}`}
         className="rounded border border-border bg-background px-2 py-1.5 font-mono text-xs"
       />
       {!zelf && (
@@ -189,7 +190,7 @@ export function UserManager() {
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Password</label>
-              <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required minLength={8} className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-primary/40" placeholder="min. 8 characters" />
+              <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required minLength={MIN_WACHTWOORD_LENGTE} className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-primary/40" placeholder={WACHTWOORD_HINT} />
             </div>
             {error && <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 font-mono text-xs text-destructive">✗ {error}</div>}
             <button type="submit" disabled={adding} className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 font-mono text-xs uppercase tracking-wider text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
