@@ -38,7 +38,9 @@ export {
   tradeOffSentence, NO_DECISION_REASON,
 } from './dimensions'
 export type { DimensionImpact, DimensionMeta, ImpactDirection, OutcomeVectorLike } from './dimensions'
-export { decisionReviewItems } from './decision-review'
+export {
+  decisionReviewItems, isNoDecisionSubmission, noDecisionSummarySentence,
+} from './decision-review'
 export type { DecisionReviewEntry, DecisionReviewRound } from './decision-review'
 export { referenceExercise, REFERENCE_EXPECTED } from './reference-case'
 export {

@@ -111,7 +111,11 @@ interface Props {
 export function SessionClosing({ session, closing, participantId }: Props) {
   const rounds = closing?.rounds ?? []
   const scored = closing?.totalPoints !== undefined && closing.maxPoints !== undefined
-  const anyChoice = rounds.some(r => r.choices.length > 0)
+  // Alleen echte keuzes tellen: de impliciete "geen besluit"-rijen van
+  // `finalizeDecision` dragen in EVENT-modus een groupId en staan dus ook in
+  // deze terugblik. Zonder dit filter verdween de regel "er is geen keuze
+  // ingediend" juist zodra de facilitator de beslissing netjes afsloot.
+  const anyChoice = rounds.some(r => r.choices.some(c => !c.noDecision))
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
@@ -187,6 +191,7 @@ export function SessionClosing({ session, closing, participantId }: Props) {
             <DecisionReviewCard
               item={{
                 question: round.decisionPrompt ?? round.title,
+                noDecision: true,
                 chosenLabel: null,
                 vector: NO_DECISION_FALLBACK_VECTOR,
               }}
@@ -197,7 +202,10 @@ export function SessionClosing({ session, closing, participantId }: Props) {
                 // De terugblik van de deelnemer draagt de rondetitel, niet de
                 // beslisvraag zelf: `ParticipantClosingRound` bewaart die niet.
                 question: round.decisionPrompt ?? round.title,
-                chosenLabel: `${choice.optionLabel} — ${choice.roleLabel}`,
+                noDecision: !!choice.noDecision,
+                chosenLabel: choice.noDecision
+                  ? null
+                  : `${choice.optionLabel} — ${choice.roleLabel}`,
                 vector: choice.outcomeVector,
                 facilitatorCommentary: choice.debriefNote,
               }

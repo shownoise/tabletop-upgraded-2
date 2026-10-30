@@ -19,6 +19,7 @@ import {
   scoreExercise,
   type OutcomeDimension,
 } from "@/lib/scoring"
+import { isNoDecisionSubmission } from "@/lib/scoring/decision-review"
 import { sessionToScoringInput } from "@/lib/scoring/graph-adapter"
 import { vectorOverrideFor } from "@/lib/scoring/vector-overrides"
 import { roleCoverage } from "@/lib/session-roles"
@@ -121,10 +122,13 @@ export function buildRoundReviews(
         // inzending met participantId 'IMPLICIT'. Zonder deze tak leest die als
         // een genomen besluit waarvan het label nu eenmaal 'Geen besluit binnen
         // de tijd' heet, en mist de kaart de reden en de opvallende opmaak die
-        // issue #105 §6 vraagt. De reden reist mee in `reasoning`.
-        const noDecision = sub.participantId === 'IMPLICIT'
+        // issue #105 §6 vraagt. De reden reist mee in `reasoning`. Het predikaat
+        // komt uit lib/scoring/decision-review.ts, zodat dit pad en het rapport
+        // niet opnieuw uit elkaar kunnen lopen.
+        const noDecision = isNoDecisionSubmission(sub, hit?.option)
         items.push({
           question: hit?.data.prompt ?? questionFor(nodes, round?.title, roundIndex),
+          noDecision,
           chosenLabel: noDecision ? null : label,
           role: sub.role,
           byName: noDecision ? undefined : sub.participantName,
@@ -152,6 +156,7 @@ export function buildRoundReviews(
           const implicit = node.data.options.find(o => o.implicit && (!o.allowedRole || o.allowedRole === role))
           items.push({
             question: node.data.prompt,
+            noDecision: true,
             chosenLabel: null,
             role,
             vector: implicit ? vectorForOption(implicit) : { ...NO_DECISION_FALLBACK_VECTOR },
