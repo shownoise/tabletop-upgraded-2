@@ -1,6 +1,6 @@
 import type { PremadeInject, RoleBriefing, ScenarioGraph } from "./types"
 import { RETAINER_ACTIVATED_FLAG } from "./types"
-import { planToGraph, type WizardPlan } from "./wizard-plan"
+import { planToGraph, type WizardPlan, type WizardPlanInject } from "./wizard-plan"
 import type { Role } from "@/lib/types"
 
 // ONDERWIJSVERENIGING NOORD-OOST — Play-ransomware bij een MKB+ schoolbestuur.
@@ -29,6 +29,45 @@ import type { Role } from "@/lib/types"
 //
 // Dit is een starter-scenario voor Eye Security-trainingen — facilitator kan
 // per klant tweaken via de builder of via de AI-wizard.
+
+// ── Rol-injects ───────────────────────────────────────────────────────────
+//
+// Naast het gedeelde beeld krijgt elke rol met mandaat een eigen bericht van
+// iemand die hém belt, eindigend op zíjn vraag (rule17). Het gedeelde
+// beeld staat in de wij-vorm en noemt de teamvraag; zonder deze berichten
+// leest een deelnemer die vraag als een mededeling aan de zaal en moet hij
+// zelf bedenken dat hij degene is die antwoordt.
+//
+// Alle injects van een ronde liggen samen gespreid over de inject-fase — bij
+// vijftien minuten de eerste 96 seconden (rule16). De rolberichten komen ná
+// het gedeelde beeld binnen, zodat je eerst leest wat iedereen weet.
+function rolBericht(b: {
+  id: string
+  rol: Role
+  decision: string
+  afzender: string
+  titel: string
+  kanaal: WizardPlanInject["channel"]
+  seconden: number
+  classification: "feit" | "aanname"
+  tekst: string
+  facilitatorNote: string
+}): WizardPlanInject {
+  return {
+    id: b.id,
+    type: "internal",
+    channel: b.kanaal,
+    urgency: "high",
+    deliverySeconds: b.seconden,
+    title: b.titel,
+    senderName: b.afzender,
+    targetRoles: [b.rol],
+    content: b.tekst,
+    classification: b.classification,
+    setsUpDecisionNodeId: b.decision,
+    facilitatorNote: b.facilitatorNote,
+  }
+}
 
 const plan: WizardPlan = {
   name: "★ Onderwijsvereniging Noord-Oost — Play-ransomware (AVG + NIS2)",
@@ -98,7 +137,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r1-msp-alert",
-          deliverySeconds: 27,
+          deliverySeconds: 12,
           type: "alert", channel: "siem", urgency: "high",
           title: "WestNet MSP-dashboard — Ongebruikelijke schrijfactiviteit FS-01 (AVG/NIS2-relevant)",
           content:
@@ -116,7 +155,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r1-parent-sms",
-          deliverySeconds: 55,
+          deliverySeconds: 23,
           type: "social", channel: "sms", urgency: "low",
           title: "Ouders melden vreemde SMS over wachtwoord-reset",
           content:
@@ -136,9 +175,57 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           senderName: "Rob de Vries — IT-coordinator",
           timestamp: "09:28",
           classification: "aanname",
-          deliverySeconds: 82,
+          deliverySeconds: 35,
           targetTeam: "technical_it",
         },
+        rolBericht({
+          id: "r1-rol-ciso",
+          rol: "ciso",
+          decision: "d1-r1-ambigue",
+          afzender: "WestNet servicedesk",
+          titel: "De servicedesk wil weten of dit opgeschaald moet",
+          kanaal: "phone",
+          seconden: 47,
+          classification: "feit",
+          tekst: "Telefoon om 09:10. 'Ik heb jullie notificatie van 08:42 hier staan op low. Dat is wat het systeem er zelf van maakt; ik heb er niemand op zitten. Als jullie willen dat ik een engineer vrijmaak moet iemand bij jullie het woord incident gebruiken, anders blijft het in de wachtrij tot morgen. En Rob is er niet, dus ik bel jou. Is dit ruis of een incident, en wat moet ik nu voor jullie vrijmaken?'",
+          facilitatorNote: "De CISO heeft hier een mens aan de lijn die niets doet tot hij iets zegt. Let op of hij het woord incident durft te gebruiken zonder bevestiging.",
+        }),
+        rolBericht({
+          id: "r1-rol-ceo",
+          rol: "ceo",
+          decision: "d1-r1-ambigue",
+          afzender: "Bestuurssecretaris",
+          titel: "De bestuurssecretaris vraagt wie vandaag mag beslissen",
+          kanaal: "teams",
+          seconden: 59,
+          classification: "feit",
+          tekst: "Ik krijg vragen van drie locatiedirecteuren en ik kan geen van hun vragen beantwoorden. In het draaiboek staat dat ik bij afwezigheid van Rob meld bij de MSP en jou informeer — dat heb ik gedaan. Wat er niet staat is wie er vandaag knopen doorhakt als jij in de RvT-vergadering zit. Wat autoriseer je nu, en wie mag er vandaag namens jou tekenen?",
+          facilitatorNote: "De mandaatvraag bij de bestuurder, los van de techniek. Het draaiboek heeft hier een echt gat; de bestuurssecretaris benoemt het zelf.",
+        }),
+        rolBericht({
+          id: "r1-rol-legal",
+          rol: "legal",
+          decision: "d1-r1-ambigue",
+          afzender: "Bestuurssecretaris",
+          titel: "Er is een tijdstip en nog geen logboek",
+          kanaal: "email",
+          seconden: 70,
+          classification: "feit",
+          tekst: "Ik leg vast wat er vanmorgen gebeurd is, maar ik weet niet vanaf welk moment ik moet rekenen. De eerste melding van een locatie was 08:15, de MSP-notificatie staat op 08:42, en bevestigd is er nog niets. Onder de AVG gaat de klok lopen bij kennis, niet bij zekerheid — maar dat moet jij zeggen, niet ik. Start ik de meldingsklok nu, en op welk tijdstip?",
+          facilitatorNote: "Dit is de klokvraag, en bewust vóór bevestiging. De keuze om op 08:42 te starten is later in de nabespreking het verschil tussen een houdbare en een onhoudbare AP-melding.",
+        }),
+        rolBericht({
+          id: "r1-rol-it",
+          rol: "it_manager",
+          decision: "d1-r1-ambigue",
+          afzender: "Rob de Vries (ICT-coordinator)",
+          titel: "Rob belt vanuit Portugal met zijn laptop open",
+          kanaal: "whatsapp",
+          seconden: 82,
+          classification: "aanname",
+          tekst: "'Ik zit hier met mijn laptop op een terras en ik kan op afstand bij FS-01. Ik zie iets wat ik niet mooi vind in de sharelogs. Ik kan twee dingen doen en niet beide: ik kan WestNet vragen FS-01 en FS-02 van het netwerk te halen, of ik kan eerst de hele bak resetten en kijken of het weggaat. Wat doe ik eerst, en wie moet daarvoor ja zeggen?'",
+          facilitatorNote: "De technische afweging bij de IT-rol, met de ongemakkelijke bijzaak dat Rob niet paraat is en dus niet zelf de knoop kan doorhakken.",
+        }),
       ],
       roleActions: [
         {
@@ -257,7 +344,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r2-westnet-technical",
-          deliverySeconds: 27,
+          deliverySeconds: 12,
           type: "technical", channel: "email", urgency: "high",
           title: "WestNet — Voorlopig technisch beeld",
           content:
@@ -279,7 +366,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r2-magister-notify",
-          deliverySeconds: 55,
+          deliverySeconds: 23,
           type: "regulatory", channel: "email", urgency: "high",
           title: "Reminder: Magister-contract kent 48u breach-notification. De verzekeringspolis eist parallel activatie.",
           content:
@@ -295,7 +382,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r2-teacher-panic",
-          deliverySeconds: 82,
+          deliverySeconds: 35,
           type: "internal", channel: "whatsapp", urgency: "medium",
           title: "Docentengroep op WhatsApp — paniek + roddel",
           content:
@@ -305,6 +392,54 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           classification: "aanname",
           targetTeam: "crisis_management",
         },
+        rolBericht({
+          id: "r2-rol-ceo",
+          rol: "ceo",
+          decision: "d2-r2-forensiek-comms",
+          afzender: "Locatiedirecteur Hengelo",
+          titel: "Een locatiedirecteur wil weten wat hij vanmiddag zegt",
+          kanaal: "phone",
+          seconden: 47,
+          classification: "aanname",
+          tekst: "Ik heb om 15:00 een personeelsvergadering en de helft weet al dat er iets is. Als ik niets zeg vult iedereen het zelf in, en dat gaat vanavond op Facebook staan. Als ik wel iets zeg wil ik niet dat ik morgen iets anders moet zeggen. Wat mag ik vanmiddag vertellen, en zeg jij het zelf of doe ik het?",
+          facilitatorNote: "Communicatiedruk bij de bestuurder op het moment dat de technische bevestiging nog niet rond is. Het dilemma is snelheid tegen houdbaarheid.",
+        }),
+        rolBericht({
+          id: "r2-rol-cfo",
+          rol: "cfo",
+          decision: "d2-r2-forensiek-comms",
+          afzender: "Accountmanager Univé Zakelijk",
+          titel: "De verzekeraar wil binnen 24 uur een melding zien",
+          kanaal: "email",
+          seconden: 59,
+          classification: "feit",
+          tekst: "Wij zien in het nieuws nog niets, maar ik word intern gevraagd of jullie polis actief is. Voor de goede orde: de melding moet binnen 24 uur na eerste kennis bij ons liggen, en voor onderhandelingsondersteuning hebben wij een formele activering nodig. Ik kan vandaag nog een onderhandelaar aanvragen. Activeer je de polis nu, en vraag je die onderhandelaar aan?",
+          facilitatorNote: "De polisvraag bij de controller. Let op of hij de polis activeert vóórdat betalen op tafel ligt — dat is de clausule die niemand gelezen heeft.",
+        }),
+        rolBericht({
+          id: "r2-rol-legal",
+          rol: "legal",
+          decision: "d2-r2-forensiek-comms",
+          afzender: "Privacy-contactpersoon",
+          titel: "De 72 uur loopt en het beeld is niet rond",
+          kanaal: "teams",
+          seconden: 70,
+          classification: "aanname",
+          tekst: "We hebben nu een ransomnote en de claim dat er 41 GB weg is, inclusief medische en allergiegegevens van leerlingen. Dat is bijzondere persoonsgegevens. De 72 uur vanaf 08:42 gisteren loopt, en volledig krijgen we dit beeld niet voor morgen. Dien je vandaag een voorlopige melding in bij de AP, of wacht je op completering?",
+          facilitatorNote: "De voorlopige-versus-volledige melding. Dit is de klassieke fout: wachten tot het beeld rond is en daarmee de termijn missen.",
+        }),
+        rolBericht({
+          id: "r2-rol-ciso",
+          rol: "ciso",
+          decision: "d2-r2-forensiek-comms",
+          afzender: "IR-lead Eye Security",
+          titel: "De IR-lead wil weten wie de lead heeft",
+          kanaal: "phone",
+          seconden: 82,
+          classification: "feit",
+          tekst: "'Ik heb nu twee partijen op dezelfde omgeving: WestNet die hun eigen beheertooling kent en wij met forensiek. Als we beide op eigen initiatief bezig zijn trappen we elkaars bewijs stuk — ik heb vanmorgen al een machine gezien die opnieuw opgestart is. Iemand moet de lead hebben en dat moet jij beslissen. Wie voert, en wie ondersteunt?'",
+          facilitatorNote: "Regievraag bij de CISO. De details — een al herstarte machine — maken concreet wat het kost om dit open te laten.",
+        }),
       ],
       meldingMoment: {
         id: "r2-msp-escalate",
@@ -441,7 +576,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r3-parent-facebook",
-          deliverySeconds: 21,
+          deliverySeconds: 10,
           type: "social", channel: "raw", urgency: "medium",
           title: "Screenshots uit ouders-Facebookgroep",
           content:
@@ -453,7 +588,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r3-ap-guidance",
-          deliverySeconds: 41,
+          deliverySeconds: 21,
           type: "regulatory", channel: "email", urgency: "high",
           title: "AP-portaal — Ontvangstbevestiging + aanvullende vragen (AVG art. 33)",
           content:
@@ -488,7 +623,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           source: "Eye Security",
           timestamp: "11:15",
           classification: "feit",
-          deliverySeconds: 62,
+          deliverySeconds: 31,
           requiresCapability: RETAINER_ACTIVATED_FLAG,
           targetTeam: "crisis_management",
           facilitatorNote: "Feit — alleen zichtbaar als het team in R2 de retainer heeft geactiveerd. Cross-round capability-check.",
@@ -498,7 +633,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           // over rooster, toetsweek en docentenlijn zonder dat iemand hen in deze
           // ronde iets heeft verteld — hun opties stonden er wel, de aanleiding niet.
           id: "r3-locatiedirecteuren",
-          deliverySeconds: 82,
+          deliverySeconds: 41,
           type: "internal", channel: "email", urgency: "high",
           title: "Locatiedirecteuren — hoe lang houdt papier het, en wat zeggen docenten bij de poort?",
           content:
@@ -514,6 +649,54 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           setsUpDecisionNodeId: "d3-r3-comms-meldingen",
           facilitatorNote: "Aanname — 'tot vrijdag' is een inschatting van de directeuren, geen meting. Dit is het enige R3-signaal dat de bedrijfsvoerings- en personeelsopties van deze ronde opzet; let op teams die hier niet op terugkomen.",
         },
+        rolBericht({
+          id: "r3-rol-comms",
+          rol: "head_of_comms",
+          decision: "d3-r3-comms-meldingen",
+          afzender: "Redactie RTV Oost",
+          titel: "RTV Oost heeft al drie keer gebeld",
+          kanaal: "phone",
+          seconden: 51,
+          classification: "aanname",
+          tekst: "'Ik heb twee ouders die mij vertellen dat de cijfers van hun kind weg zijn en een screenshot van een leaksite met jullie naam erop. Ik ga dit vanavond om 18:00 uitzenden, met of zonder jullie. Ik geef je tot 15:00 voor een reactie. Wat wordt het, en wie spreekt er namens de vereniging?'",
+          facilitatorNote: "Harde deadline bij communicatie. Let op of hij zelf wil spreken of de bestuurder vooruitschuift, en wat hij feitelijk kan onderbouwen.",
+        }),
+        rolBericht({
+          id: "r3-rol-legal",
+          rol: "legal",
+          decision: "d3-r3-comms-meldingen",
+          afzender: "Privacy-contactpersoon",
+          titel: "Twee klokken en één is al verstreken",
+          kanaal: "email",
+          seconden: 62,
+          classification: "feit",
+          tekst: "Stand van zaken: de AP-melding staat als voorlopig ingediend en moet worden aangevuld. De NIS2 vroege waarschuwing had binnen 24 uur bij het CSIRT moeten liggen en die termijn is gisteravond verstreken. Ik kan hem alsnog indienen met vermelding van de vertraging, of het erbij laten en hopen dat niemand het merkt. Wat doe je met de NCSC-melding, en rond je de AP-completering vandaag af?",
+          facilitatorNote: "Een verstreken termijn. De interessante vraag is niet of ze te laat zijn maar wat ze dan doen — te laat melden is iets anders dan niet melden.",
+        }),
+        rolBericht({
+          id: "r3-rol-ops",
+          rol: "ops_manager",
+          decision: "d3-r3-comms-meldingen",
+          afzender: "Teamleider onderbouw",
+          titel: "Toetsweek 46 begint maandag en Magister staat uit",
+          kanaal: "teams",
+          seconden: 72,
+          classification: "aanname",
+          tekst: "Ik heb acht docenten die niet weten of ze maandag kunnen toetsen. Zonder Magister hebben we geen rooster, geen cijferinvoer en geen leerlingenlijsten anders dan op papier. Ik kan het noodrooster vasthouden tot vrijdag, of we schuiven de toetsweek. Beide moeten vandaag naar de ouders. Wat doe je met de toetsweek, en hoe lang houden we het noodrooster aan?",
+          facilitatorNote: "De operationele keuze met de echte kosten erin: een toetsweek verschuiven raakt 4000 leerlingen en hun ouders.",
+        }),
+        rolBericht({
+          id: "r3-rol-hr",
+          rol: "hr_lead",
+          decision: "d3-r3-comms-meldingen",
+          afzender: "Vertrouwenspersoon",
+          titel: "Docenten vragen of hun eigen gegevens ook weg zijn",
+          kanaal: "whatsapp",
+          seconden: 82,
+          classification: "aanname",
+          tekst: "Ik heb vanmorgen vier mensen aan mijn bureau gehad. Het gaat niet over Magister — het gaat erover dat er salarisgegevens in die 41 GB kunnen zitten en niemand hun iets vertelt. Twee van hen willen weten of ze zelf aangifte moeten doen. Ik kan ze niet blijven afhouden. Wat vertel je de medewerkers nu, en via wie?",
+          facilitatorNote: "De medewerkerskant, die in oefeningen bijna altijd wordt overgeslagen. Let op of ze kiezen voor niet verontrusten — dat is hier de valkuil.",
+        }),
       ],
       meldingMoment: {
         id: "r3-insurer-claim",
@@ -657,7 +840,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r4-univé-scope",
-          deliverySeconds: 27,
+          deliverySeconds: 12,
           type: "executive", channel: "email", urgency: "high",
           title: "Univé Zakelijk — Vereiste incident-scope",
           content:
@@ -677,7 +860,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r4-parent-ap-complaint",
-          deliverySeconds: 55,
+          deliverySeconds: 23,
           type: "regulatory", channel: "email", urgency: "medium",
           title: "AP — ontvangst klacht van betrokkene",
           content:
@@ -693,7 +876,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           // Die rol had dus geen eigen aanleiding. De onderhandelaar vraagt hier
           // niet om een voorkeur maar om een criterium — dat is de beslisvraag.
           id: "r4-onderhandelaar-status",
-          deliverySeconds: 82,
+          deliverySeconds: 35,
           type: "executive", channel: "phone", urgency: "critical",
           title: "Onderhandelaar: 'geef mij het criterium, niet een voorkeur'",
           content:
@@ -708,6 +891,54 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           setsUpDecisionNodeId: "d4-r4-losgeld",
           facilitatorNote: "Feit — de drie opties van de onderhandelaar (rekken, laatste bod, afbreken) zijn één op één de keuze van deze ronde. Hij vraagt expliciet om het criterium; teams die alleen een voorkeur geven, horen dat in de nabespreking terug.",
         },
+        rolBericht({
+          id: "r4-rol-ceo",
+          rol: "ceo",
+          decision: "d4-r4-losgeld",
+          afzender: "Onderhandelaar via Univé",
+          titel: "De onderhandelaar wil een mandaat van jou",
+          kanaal: "phone",
+          seconden: 47,
+          classification: "aanname",
+          tekst: "'Ik heb contact met de groep. Ze vragen 340.000 euro en ze hebben de eerste map met leerlingdossiers al op hun leaksite gezet als drukmiddel. Ik kan ze vierentwintig uur laten rekken, maar dan moet ik weten waar ik sta: ga ik onderhandelen over een bedrag, of voer ik een gesprek dat nooit tot betalen leidt? Betalen we, rekken we, of weigeren we?'",
+          facilitatorNote: "Het losgeldbesluit, bij de enige rol die het mag nemen. Let op of er criteria onder liggen of alleen een onderbuikgevoel.",
+        }),
+        rolBericht({
+          id: "r4-rol-ciso",
+          rol: "ciso",
+          decision: "d4-r4-losgeld",
+          afzender: "IR-lead Eye Security",
+          titel: "De verzekeraar wil een scope-document dat jij moet ondertekenen",
+          kanaal: "email",
+          seconden: 59,
+          classification: "feit",
+          tekst: "Univé vraagt een scope-verklaring voordat zij over dekking beslissen. Ik kan je vandaag een beperkte verklaring geven op basis van wat we zeker weten, of morgen een volledige met de exfiltratie-analyse erin. Daarnaast: begin ik de restore parallel aan de sweep, of wil je eerst volledige eradication? Dat laatste kost twee dagen. Wat lever ik, en wat doe ik eerst?",
+          facilitatorNote: "Twee vragen die botsen: snelheid voor de verzekeraar tegen zekerheid dat de aanvaller eruit is. De beste optie kiest niet voor snelheid.",
+        }),
+        rolBericht({
+          id: "r4-rol-cfo",
+          rol: "cfo",
+          decision: "d4-r4-losgeld",
+          afzender: "Accountmanager Univé Zakelijk",
+          titel: "De polislimiet en de uitsluitingsclausule",
+          kanaal: "email",
+          seconden: 70,
+          classification: "aanname",
+          tekst: "Ik moet je op twee dingen wijzen voordat er een besluit valt. De polislimiet is 250.000 euro, dus bij 340.000 betalen jullie in elk geval zelf bij. En er staat een uitsluiting voor vermijdbare fouten in — het ontbreken van een getest herstelproces kan daaronder vallen. Wat lever je aan het bestuur aan cijfers, en bereid je een betaling buiten ons om voor?",
+          facilitatorNote: "Hier komt de nooit-gelezen clausule binnen. De vraag aan de controller is of hij het bestuur een volledig beeld geeft of alleen het bedrag.",
+        }),
+        rolBericht({
+          id: "r4-rol-legal",
+          rol: "legal",
+          decision: "d4-r4-losgeld",
+          afzender: "Privacy-contactpersoon",
+          titel: "Een betaling heeft een juridische voorvraag",
+          kanaal: "teams",
+          seconden: 82,
+          classification: "feit",
+          tekst: "Als er betaald wordt moet ik eerst een sanctielijstencheck doen: betalen aan een partij op de OFAC- of EU-lijst is zelf een overtreding, los van wat je van losgeld vindt. Dat kost mij een paar uur. En er ligt een klacht bij de AP van een ouder met een reactietermijn van deze week. Wat doe ik eerst, en leg je het betaalbesluit juridisch vast?",
+          facilitatorNote: "De voorvraag die vaak wordt overgeslagen: betalen kan zelf illegaal zijn. Daarnaast de AP-klacht die om aandacht vraagt op het slechtste moment.",
+        }),
       ],
       roleActions: [
         {
@@ -834,7 +1065,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r5-aob-statement",
-          deliverySeconds: 27,
+          deliverySeconds: 12,
           type: "media", channel: "news", urgency: "medium",
           title: "AOb-statement noemt Onderwijsvereniging Noord-Oost",
           content:
@@ -847,7 +1078,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r5-teacher-refuse",
-          deliverySeconds: 55,
+          deliverySeconds: 23,
           type: "internal", channel: "email", urgency: "medium",
           title: "PMR vraagt of cijfer-herinvoer overuren zijn",
           content:
@@ -864,7 +1095,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           // worden volgehouden, maar geen enkele inject bracht bedrijfsvoering
           // iets om dat op te baseren. Dit is zijn eigen signaal.
           id: "r5-noodproces-kraakt",
-          deliverySeconds: 82,
+          deliverySeconds: 35,
           type: "internal", channel: "email", urgency: "high",
           title: "Bedrijfsvoering — het noodproces kraakt, ik heb een einddatum nodig",
           content:
@@ -879,6 +1110,54 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           setsUpDecisionNodeId: "d5-r5-ketenverbreding",
           facilitatorNote: "Aanname — 'tot en met vrijdag' is een inschatting uit de locatieronde, geen meting. Zet de tweede helft van de beslisvraag op: hoe lang houden jullie de noodprocessen vol, en wie mag terugschakelen?",
         },
+        rolBericht({
+          id: "r5-rol-ceo",
+          rol: "ceo",
+          decision: "d5-r5-ketenverbreding",
+          afzender: "Bestuurssecretaris",
+          titel: "LoonBureau Oost heeft gebeld en wil jou spreken",
+          kanaal: "phone",
+          seconden: 47,
+          classification: "aanname",
+          tekst: "De directie van LoonBureau Oost heeft gebeld. Zij zien verkeer uit onze omgeving naar hun portaal in de dagen voor de encryptie en willen weten of hun systemen ook geraakt zijn. Ze vragen naar jou persoonlijk, niet naar onze ICT. Dit is de eerste keer dat een ketenpartij ons aanspreekt. Wie spreekt LoonBureau aan, en op welk niveau?",
+          facilitatorNote: "Ketenaansprakelijkheid, van de andere kant bekeken. Let op of de bestuurder het zelf pakt of naar de verzekeraar doorschuift.",
+        }),
+        rolBericht({
+          id: "r5-rol-hr",
+          rol: "hr_lead",
+          decision: "d5-r5-ketenverbreding",
+          afzender: "Voorzitter PMR",
+          titel: "De PMR wil vanmiddag om 15:00 een antwoord",
+          kanaal: "teams",
+          seconden: 59,
+          classification: "feit",
+          tekst: "Wij zitten vanmiddag met je aan tafel en ik zeg je nu al waar het over gaat: mensen draaien de vierde week dubbel werk op papier en er is nog niets gezegd over compensatie. De AOb heeft ons gevraagd of wij een statement steunen. Ik wil liever met jou tot iets komen dan via de bond. Wat bied je de medewerkers, en kan dat vanmiddag al?",
+          facilitatorNote: "Een onderhandeling in plaats van een mededeling. De PMR biedt een opening — let op of ze die pakken of het gesprek verzetten.",
+        }),
+        rolBericht({
+          id: "r5-rol-comms",
+          rol: "head_of_comms",
+          decision: "d5-r5-ketenverbreding",
+          afzender: "Voorzitter oudervereniging",
+          titel: "De oudervereniging reageert op het AOb-statement",
+          kanaal: "email",
+          seconden: 70,
+          classification: "aanname",
+          tekst: "Het statement van de AOb staat sinds vanmorgen online en wij worden er door ouders op aangesproken. Een deel van wat er staat is terecht, een deel niet. Wij willen niet dat dit een welles-nietes wordt in de regionale pers. Ik bied je aan dat wij meedenken in een verbetertraject, maar dan moet er wel iets inhoudelijks terugkomen. Beantwoord je het statement inhoudelijk, en betrek je ons erbij?",
+          facilitatorNote: "De reflex is defensief weerleggen of negeren. Hier ligt een aanbod op tafel — let op of iemand dat ziet.",
+        }),
+        rolBericht({
+          id: "r5-rol-ops",
+          rol: "ops_manager",
+          decision: "d5-r5-ketenverbreding",
+          afzender: "Teamleider bovenbouw",
+          titel: "De nieuwe Magister-tenant werkt, half",
+          kanaal: "whatsapp",
+          seconden: 82,
+          classification: "aanname",
+          tekst: "De nieuwe tenant staat en ik kan er sinds een uur in. Niet alles is er: de cijfers van voor oktober missen en de koppeling met ParnasSys loopt nog niet. Als we donderdag terug naar Magister gaan hebben we de rapportvergadering met halve gegevens. Als we papier volhouden halen we die week wel, maar dan nog een week dubbel werk. Wat doen we deze week, en gaat de rapportvergadering door?",
+          facilitatorNote: "Herstel is zelden een moment maar een keuze over hoe half je accepteert. Beide opties kosten iets echt.",
+        }),
       ],
       roleActions: [
         {
@@ -999,7 +1278,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r6-rvt-agenda",
-          deliverySeconds: 27,
+          deliverySeconds: 12,
           type: "executive", channel: "email", urgency: "medium",
           title: "RvT vraagt post-mortem + governance-agenda",
           content:
@@ -1015,7 +1294,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r6-univé-claim-deadline",
-          deliverySeconds: 55,
+          deliverySeconds: 23,
           type: "executive", channel: "email", urgency: "medium",
           title: "Univé — Final claim deadline 3 weken",
           content:
@@ -1031,7 +1310,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           // dat onderwerp alleen als subpunt in de brief van de RvT. De
           // stilzwijgende verlenging geeft die keuze een eigen harde datum.
           id: "r6-westnet-verlenging",
-          deliverySeconds: 82,
+          deliverySeconds: 35,
           type: "executive", channel: "email", urgency: "high",
           title: "WestNet ICT — verlenging per 1 januari, opzegtermijn verstrijkt 1 december",
           content:
@@ -1047,6 +1326,54 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           setsUpDecisionNodeId: "d6-r6-verankering",
           facilitatorNote: "Feit — de stilzwijgende verlenging zet een harde datum (1 december) onder de ICT-keuze van deze ronde. Let op teams die 'heronderhandelen' zeggen zonder die datum te noemen; dan verlengt het contract zich gewoon.",
         },
+        rolBericht({
+          id: "r6-rol-ceo",
+          rol: "ceo",
+          decision: "d6-r6-verankering",
+          afzender: "Voorzitter Raad van Toezicht",
+          titel: "De RvT-voorzitter wil weten wat er dinsdag op tafel ligt",
+          kanaal: "email",
+          seconden: 47,
+          classification: "feit",
+          tekst: "Dinsdag vergaderen we en ik wil weten wat ik kan verwachten. Eerlijk: een verhaal over hoe goed het team het gedaan heeft gaat mij niet helpen tegenover de ouders en de AP. Ik heb iets nodig met een eigenaar, een datum en een bedrag erachter, anders is dit over een halfjaar weer precies zo. Wat leg je dinsdag voor, en wat gaat het kosten?",
+          facilitatorNote: "De RvT vraagt expliciet om het tegenovergestelde van de valkuil. Let op of de bestuurder het alsnog uitstelt of doorschuift naar een consultant.",
+        }),
+        rolBericht({
+          id: "r6-rol-ciso",
+          rol: "ciso",
+          decision: "d6-r6-verankering",
+          afzender: "IR-lead Eye Security",
+          titel: "Het eindrapport heeft een hoofdstuk nodig dat jij vult",
+          kanaal: "teams",
+          seconden: 59,
+          classification: "feit",
+          tekst: "Mijn feitelijke rapport is klaar: ingang via een VPN-account van een medewerker die in juli uit dienst ging, geen MFA, geen segmentatie tussen finance en de rest. Wat ik niet voor jullie kan schrijven is wat jullie eraan gaan doen en wat dat mag kosten. Zonder dat deel is het een mooi rapport zonder gevolg. Wat zet je in het hardeningsplan, en met welk bedrag?",
+          facilitatorNote: "De les is bekend; de vraag is of er een investeringsvoorstel achter komt. Een rapport zonder bedrag verandert niets.",
+        }),
+        rolBericht({
+          id: "r6-rol-it",
+          rol: "it_manager",
+          decision: "d6-r6-verankering",
+          afzender: "Accountmanager WestNet ICT",
+          titel: "WestNet wil het contract verlengen zoals het is",
+          kanaal: "email",
+          seconden: 70,
+          classification: "aanname",
+          tekst: "Het contract loopt in januari af en ik stel voor dat we gewoon verlengen tegen dezelfde voorwaarden. Voor de goede orde: ransomware viel en valt buiten onze scope, en de respons van acht werkuren is wat jullie hebben afgesproken. Als jullie daar iets anders in willen moeten we opnieuw rekenen. Wat doe je met het WestNet-contract, en wat vraag je erin terug?",
+          facilitatorNote: "De leverancier biedt aan precies hetzelfde te verlengen dat net gefaald heeft. Let op of iemand de scope-uitsluiting benoemt.",
+        }),
+        rolBericht({
+          id: "r6-rol-legal",
+          rol: "legal",
+          decision: "d6-r6-verankering",
+          afzender: "Privacy-contactpersoon",
+          titel: "De AP heeft vervolgvragen en NIS2 vraagt een eindrapport",
+          kanaal: "email",
+          seconden: 82,
+          classification: "feit",
+          tekst: "Twee dingen liggen er. De AP heeft vervolgvragen gesteld over de vertraging tussen 08:42 maandag en onze melding, en onder NIS2 moet er binnen een maand een eindrapport bij het CSIRT liggen. Ik kan beide minimaal houden of ik kan ze inhoudelijk sluitend maken, met het risico dat we zelf dingen opschrijven die tegen ons werken. Hoe pakken we de AP-follow-up aan, en wat zetten we in het eindrapport?",
+          facilitatorNote: "De verleiding is minimaliseren. Vraag het team wat een onvolledig eindrapport kost als de AP er later zelf achter komt.",
+        }),
       ],
       roleActions: [
         {

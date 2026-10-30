@@ -123,10 +123,10 @@ describe('buildDraftGraph — framework', () => {
     }
   })
 
-  it('toetst werkelijk alle zeventien regels', () => {
+  it('toetst werkelijk alle achttien regels', () => {
     // Vangt af dat een regel stilletjes uit de set verdwijnt en de test
     // daarmee niets meer zegt.
-    expect(FRAMEWORK_RULE_IDS).toHaveLength(17)
+    expect(FRAMEWORK_RULE_IDS).toHaveLength(18)
   })
 
   it('levert een graph zonder blokkerende structuurfouten', () => {
@@ -156,7 +156,13 @@ describe('buildDraftGraph — structuur', () => {
       const decisions = graph.nodes.filter(n => n.type === 'decision')
 
       expect(rounds.length, name).toBe(cfg.rounds)
-      expect(injects.length, name).toBe(cfg.rounds * cfg.injectsPerRound)
+      // Per ronde het gedeelde beeld plus één rolbericht per rol: elke rol
+      // krijgt zijn eigen vraag binnen in plaats van hem uit een teamtekst te
+      // moeten halen (rule17).
+      const perRonde = cfg.injectsPerRound + cfg.rolesIncluded.length
+      expect(injects.length, name).toBe(cfg.rounds * perRonde)
+      const rolInjects = injects.filter(n => (n.data as InjectNodeData).targetRoles?.length === 1)
+      expect(rolInjects.length, name).toBe(cfg.rounds * cfg.rolesIncluded.length)
       expect(decisions.length, name).toBe(cfg.rounds)
 
       for (const decision of decisions) {

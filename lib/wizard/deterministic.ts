@@ -17,7 +17,7 @@ import {
   type WizardPlanInject,
   type WizardPlanRound,
 } from "@/lib/graph/wizard-plan"
-import type { ChoiceQuality, Role } from "@/lib/types"
+import type { ChoiceQuality, InjectChannel, Role } from "@/lib/types"
 import { ROLE_META, ROLE_ORDER } from "@/lib/types"
 
 // Deterministische conceptgenerator — het pad zonder LLM.
@@ -503,8 +503,89 @@ const REGULATORY_PARAGRAAF =
 const HUMAN_VOICE_ORDER: readonly number[] = [4, 3, 2, 5, 0]
 
 // ───────────────────────────────────────────────────────────────────────────
+// Rol-injects
+//
+// Naast de gedeelde setup-inject krijgt elke rol met mandaat een eigen bericht
+// met `targetRoles: [rol]`, van een afzender die bij die rol hoort, eindigend
+// op zíjn vraag. Zonder dat leest een deelnemer de beslisvraag als een
+// mededeling aan het team en moet hij zelf bedenken dat hij aan zet is — in
+// een echt incident bélt iemand je.
+//
+// Dit stond tot nu toe alleen met de hand in examples-eye-security.ts. De
+// generatoren maakten het niet, dus elk nieuw gegenereerd scenario miste het.
+// Afgedwongen door rule17_role_setup_inject.
+// ───────────────────────────────────────────────────────────────────────────
+
+interface RolBericht {
+  afzender: string
+  kanaal: InjectChannel
+  // Waarom déze persoon juist deze rol belt.
+  aanloop: string
+  // De vraag waarmee het bericht eindigt. Rolspecifiek: dit is wat de
+  // deelnemer uit het bericht moet halen.
+  vraag: string
+}
+
+const ROL_BERICHT: Record<Role, RolBericht> = {
+  ceo: {
+    afzender: 'Directiesecretaris',
+    kanaal: 'phone',
+    aanloop: 'Ik stoor je omdat er een paar dingen liggen die niemand anders mag ondertekenen',
+    vraag: 'Wat autoriseer jij nu, en wat houd je expliciet nog tegen?',
+  },
+  ciso: {
+    afzender: 'SOC-analist dienst',
+    kanaal: 'phone',
+    aanloop: 'Ik bel jou omdat jij degene bent die hier incident van mag maken',
+    vraag: 'Noem jij dit een incident, en wie schaal je op?',
+  },
+  cfo: {
+    afzender: 'Controller',
+    kanaal: 'email',
+    aanloop: 'Dit komt bij jou terecht omdat er geld en polisvoorwaarden aan vastzitten',
+    vraag: 'Welk budget zet je nu vrij, en wat meld je aan de verzekeraar?',
+  },
+  legal: {
+    afzender: 'Compliance-collega',
+    kanaal: 'teams',
+    aanloop: 'Ik leg dit bij jou neer omdat de termijnen beginnen te lopen op het eerste signaal',
+    vraag: 'Loopt hier een meldklok, en vanaf welk moment reken jij die?',
+  },
+  head_of_comms: {
+    afzender: 'Woordvoerder op dienst',
+    kanaal: 'whatsapp',
+    aanloop: 'Ik word gebeld en ik heb nog geen lijn',
+    vraag: 'Wat zeggen we naar buiten, en wie zegt het?',
+  },
+  hr_lead: {
+    afzender: 'HR-businesspartner',
+    kanaal: 'teams',
+    aanloop: 'Medewerkers stellen vragen en ik wil ze niet verkeerd voorlichten',
+    vraag: 'Wat vertel je de mensen nu, en wat bewaar je?',
+  },
+  ops_manager: {
+    afzender: 'Teamleider dienst',
+    kanaal: 'phone',
+    aanloop: 'Ik moet nu kiezen wat ik laat draaien en dat kan ik niet zelf besluiten',
+    vraag: 'Wat laat je doorlopen en wat zet je stil?',
+  },
+  it_manager: {
+    afzender: 'Beheerder dienst',
+    kanaal: 'whatsapp',
+    aanloop: 'Ik kan twee dingen doen en niet beide snel',
+    vraag: 'Welke technische stap zet ik eerst, en wat laat ik staan?',
+  },
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Opbouw
 // ───────────────────────────────────────────────────────────────────────────
+
+// `mandateSummary` begint met een hoofdletter; midden in een zin leest dat als
+// een nieuwe zin.
+function lowerFirst(text: string): string {
+  return text.length === 0 ? text : text[0].toLowerCase() + text.slice(1)
+}
 
 function capitalize(text: string): string {
   return text.length === 0 ? text : text[0].toUpperCase() + text.slice(1)
@@ -672,7 +753,6 @@ export function buildDraftGraph(config: WizardConfig, options: BuildDraftOptions
         id: `r${roundNumber}-i${slot + 1}`,
         title: repeat > 0 ? `${base.title} (vervolg ${repeat})` : base.title,
         classification,
-        deliverySeconds: aflevermoment(slot, injectsPerRound, TIMER_MINUTEN),
       }
     })
 
@@ -695,6 +775,40 @@ export function buildDraftGraph(config: WizardConfig, options: BuildDraftOptions
     // hem tot aankondiging maakt in plaats van tot mededeling (rule1).
     injects[0].content = `${injects[0].content}\n\n${phase.prompt}`
 
+    // Per rol één eigen bericht met zíjn vraag erin (rule17). Deze komen direct
+    // na de gedeelde setup-inject, zodat elke rol vroeg in de ronde weet dat
+    // hij aan zet is in plaats van halverwege.
+    const rolInjects: WizardPlanInject[] = roles.map(rol => {
+      const bericht = ROL_BERICHT[rol]
+      const meta = ROLE_META[rol]
+      const classification = classificationAt(injectCounter, config.factsNoiseRatio)
+      injectCounter += 1
+      return {
+        id: `r${roundNumber}-rol-${rol}`,
+        type: 'internal',
+        channel: bericht.kanaal,
+        title: `${bericht.afzender} vraagt jou om een keuze`,
+        senderName: bericht.afzender,
+        urgency: 'high',
+        targetRoles: [rol],
+        classification,
+        setsUpDecisionNodeId: decisionAuthorIds[index],
+        facilitatorNote:
+          `Rol-inject voor ${meta.label}: dezelfde ronde, maar de vraag is op zijn mandaat ` +
+          `geschreven. Komt alleen bij wie deze rol draagt.`,
+        content:
+          `${bericht.aanloop}. ${capitalize(phase.signal)}. ` +
+          `Jij gaat hierover omdat ${lowerFirst(meta.mandateSummary)}\n\n${bericht.vraag}`,
+      }
+    })
+
+    // Volgorde van aflevering: eerst de gedeelde aankondiging, dan de
+    // rolberichten, dan de rest van het algemene beeld.
+    const alleInjects = [injects[0], ...rolInjects, ...injects.slice(1)]
+    alleInjects.forEach((inject, slot) => {
+      inject.deliverySeconds = aflevermoment(slot, alleInjects.length, TIMER_MINUTEN)
+    })
+
     const previousEcho = index > 0 ? phases[index - 1].echo : null
     const situation = [
       previousEcho ? `${previousEcho} werkt door in wat er nu op tafel ligt.` : null,
@@ -707,7 +821,7 @@ export function buildDraftGraph(config: WizardConfig, options: BuildDraftOptions
       title: `Ronde ${roundNumber} — ${phase.title}`,
       situation,
       timerMinutes: TIMER_MINUTEN,
-      injects,
+      injects: alleInjects,
       decisionAuthorId: decisionAuthorIds[index],
       discussionGoal: phase.goal,
       keyQuestions: [...phase.opening],

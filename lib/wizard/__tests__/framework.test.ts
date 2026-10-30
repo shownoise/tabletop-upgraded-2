@@ -17,10 +17,12 @@ import {
   ruleSpecialConditionsAppear,
   ruleRegulatoryWindowPlaced,
   ruleFacilitatorGuidanceExists,
+  ruleRoleSetupInject,
   validateFramework,
   FRAMEWORK_RULE_IDS,
 } from "@/lib/wizard/framework"
 import { defaultWizardConfig, type WizardConfig } from "@/lib/wizard/config"
+import type { Role } from "@/lib/types"
 
 // Framework fixtures.
 //
@@ -144,6 +146,36 @@ function baseGraph(): ScenarioGraph {
     classification: 'aanname', deliverySeconds: 240,
   }
 
+  // Rol-injects (rule17): elke rol die een optie bezit krijgt zijn vraag als
+  // eigen bericht. Zonder deze vier zakt de baseline op rule17 en zouden alle
+  // andere regeltests onder een falende basis draaien.
+  function rolInject(
+    rol: Role,
+    decision: string,
+    afzender: string,
+    vraag: string,
+    seconden: number,
+    classification: 'feit' | 'aanname',
+  ): InjectNodeData {
+    return {
+      kind: 'inject',
+      type: 'internal', urgency: 'high',
+      title: `${afzender} vraagt jou om een keuze`,
+      senderName: afzender,
+      content: `${afzender} aan de lijn over het segment prod-01. ${vraag}`,
+      classification,
+      targetRoles: [rol],
+      setsUpDecisionNodeId: decision,
+      deliverySeconds: seconden,
+    }
+  }
+  // Twee feiten en twee aannames, zodat de baseline op de 0,50-ratio van
+  // rule7 blijft staan.
+  const rol1a = rolInject('ciso', 'D1', 'SOC-analist', 'Noem jij dit een incident?', 30, 'feit')
+  const rol1b = rolInject('ceo', 'D1', 'Directiesecretaris', 'Wat autoriseer jij nu?', 60, 'aanname')
+  const rol2a = rolInject('ciso', 'D2', 'SOC-analist', 'Welke stap zet ik eerst?', 30, 'feit')
+  const rol2b = rolInject('ceo', 'D2', 'Directiesecretaris', 'Wat houd je nog tegen?', 60, 'aanname')
+
   return {
     id: 'g1', name: 'test', version: 1, scenarioType: 'ransomware_double_extortion',
     createdAt: now, updatedAt: now,
@@ -158,6 +190,10 @@ function baseGraph(): ScenarioGraph {
       { id: 'I2', type: 'inject', position: { x: 100, y: 200 }, data: inj2 },
       { id: 'I3', type: 'inject', position: { x: 300, y: 100 }, data: inj3 },
       { id: 'I4', type: 'inject', position: { x: 300, y: 200 }, data: inj4 },
+      { id: 'I1A', type: 'inject', position: { x: 100, y: 300 }, data: rol1a },
+      { id: 'I1B', type: 'inject', position: { x: 100, y: 400 }, data: rol1b },
+      { id: 'I2A', type: 'inject', position: { x: 300, y: 300 }, data: rol2a },
+      { id: 'I2B', type: 'inject', position: { x: 300, y: 400 }, data: rol2b },
     ],
     edges: [
       { id: 'e1', source: 'start', target: 'R1', type: 'sequence' },
@@ -169,6 +205,10 @@ function baseGraph(): ScenarioGraph {
       { id: 'e7', source: 'R2', target: 'I4', type: 'inject' },
       { id: 'e8', source: 'R2', target: 'D2', type: 'sequence' },
       { id: 'e9', source: 'D2', target: 'OUT', type: 'sequence' },
+      { id: 'e10', source: 'R1', target: 'I1A', type: 'inject' },
+      { id: 'e11', source: 'R1', target: 'I1B', type: 'inject' },
+      { id: 'e12', source: 'R2', target: 'I2A', type: 'inject' },
+      { id: 'e13', source: 'R2', target: 'I2B', type: 'inject' },
     ],
     // Rule 11 — hidden weakness in de briefing van minstens één rol.
     roleBriefings: {
@@ -178,7 +218,7 @@ function baseGraph(): ScenarioGraph {
 }
 
 describe("wizard framework — passing baseline", () => {
-  it("baseGraph + baseConfig passes all 17 rules", () => {
+  it("baseGraph + baseConfig passes all 18 rules", () => {
     const graph = baseGraph()
     const config = baseConfig()
     const result = validateFramework(graph, config)
@@ -186,7 +226,7 @@ describe("wizard framework — passing baseline", () => {
       throw new Error(`baseline expected to pass but got: ${result.failures.map(f => f.ruleId + ': ' + f.violation).join(' | ')}`)
     }
     expect(result.ok).toBe(true)
-    expect(FRAMEWORK_RULE_IDS.length).toBe(17)
+    expect(FRAMEWORK_RULE_IDS.length).toBe(18)
   })
 })
 
@@ -196,9 +236,14 @@ describe("rule 1 — every decision has a setup-inject", () => {
   })
   it("fails when decision has no setup inject", () => {
     const g = baseGraph()
-    // Detach D1's setup.
-    const i1 = g.nodes.find(n => n.id === 'I1')!
-    ;(i1.data as InjectNodeData).setsUpDecisionNodeId = undefined
+    // Álle verwijzingen naar D1 losknippen, ook die van de rol-injects: die
+    // zijn sinds rule17 óók setup-injects, dus alleen I1 losmaken laat D1 met
+    // een setup achter en dan toetst deze test niets meer.
+    for (const node of g.nodes) {
+      if (node.type !== 'inject') continue
+      const data = node.data as InjectNodeData
+      if (data.setsUpDecisionNodeId === 'D1') data.setsUpDecisionNodeId = undefined
+    }
     const res = ruleEveryDecisionHasSetupInject(g)
     expect(res.ok).toBe(false)
     if (!res.ok) expect(res.violation).toContain('D1')
@@ -397,8 +442,12 @@ describe("aggregate — validateFramework", () => {
   })
   it("collects failures across independently-broken rules", () => {
     const g = baseGraph()
-    // Break rule 1: detach setup-inject from D1.
-    ;(g.nodes.find(n => n.id === 'I1')!.data as InjectNodeData).setsUpDecisionNodeId = undefined
+    // Break rule 1: alle setups van D1 losknippen, inclusief de rol-injects.
+    for (const node of g.nodes) {
+      if (node.type !== 'inject') continue
+      const data = node.data as InjectNodeData
+      if (data.setsUpDecisionNodeId === 'D1') data.setsUpDecisionNodeId = undefined
+    }
     // Break rule 6: zero-vector option.
     const d1 = g.nodes.find(n => n.id === 'D1')!.data as DecisionNodeData
     d1.options[0].outcomeVector = { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: 0 }
@@ -407,5 +456,55 @@ describe("aggregate — validateFramework", () => {
     const ids = res.failures.map(f => f.ruleId)
     expect(ids).toContain('rule1_setup_inject')
     expect(ids).toContain('rule6_dimension_mapped')
+  })
+})
+
+describe("rule 17 — elke rol krijgt zijn beslisvraag als eigen inject", () => {
+  it("slaagt op baseGraph: CISO en CEO hebben elk een eigen bericht", () => {
+    expect(ruleRoleSetupInject(baseGraph()).ok).toBe(true)
+  })
+
+  it("faalt als een rol wel een optie bezit maar geen eigen bericht", () => {
+    const g = baseGraph()
+    // Het bericht aan de CEO van D1 weghalen; de CISO houdt het zijne.
+    g.nodes = g.nodes.filter(n => n.id !== 'I1B')
+    const res = ruleRoleSetupInject(g)
+    expect(res.ok).toBe(false)
+    if (!res.ok) {
+      expect(res.violation).toContain('D1')
+      expect(res.violation).toContain('ceo')
+      expect(res.violation).not.toContain('D2')
+    }
+  })
+
+  it("faalt als het rol-bericht een mededeling is in plaats van een vraag", () => {
+    const g = baseGraph()
+    const bericht = g.nodes.find(n => n.id === 'I1A')!.data as InjectNodeData
+    bericht.content = 'De dienstdoende analist laat weten dat hij niets gaat doen.'
+    const res = ruleRoleSetupInject(g)
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.violation).toContain('ciso')
+  })
+
+  it("rekent een gedeeld bericht niet mee als rol-bericht", () => {
+    const g = baseGraph()
+    // targetRoles weghalen: de tekst blijft, maar hij komt bij iedereen binnen
+    // en is dus niet de vraag áán die rol.
+    const bericht = g.nodes.find(n => n.id === 'I1A')!.data as InjectNodeData
+    bericht.targetRoles = undefined
+    const res = ruleRoleSetupInject(g)
+    expect(res.ok).toBe(false)
+    if (!res.ok) expect(res.violation).toContain('ciso')
+  })
+
+  it("negeert de impliciete 'geen besluit'-optie bij het bepalen van mandaat", () => {
+    const g = baseGraph()
+    const d1 = g.nodes.find(n => n.id === 'D1')!.data as DecisionNodeData
+    d1.options.push({
+      id: 'p-geen', label: 'Geen besluit binnen de tijd', allowedRole: 'legal', implicit: true,
+    })
+    // Legal bezit alleen een impliciete optie en heeft dus geen mandaat — er
+    // hoeft geen bericht aan Legal te zijn.
+    expect(ruleRoleSetupInject(g).ok).toBe(true)
   })
 })

@@ -52,7 +52,9 @@ describe('POST /api/scenario-graph/draft', () => {
     expect(data.seed.length).toBeGreaterThan(0)
     expect(data.graph.publishStatus).toBe('draft')
     expect(data.graph.nodes.filter(n => n.type === 'round')).toHaveLength(4)
-    expect(data.graph.nodes.filter(n => n.type === 'inject')).toHaveLength(12)
+    // 4 rondes × (3 gedeelde injects + 1 rolbericht per rol).
+    const perRonde = CONFIG.injectsPerRound + CONFIG.rolesIncluded.length
+    expect(data.graph.nodes.filter(n => n.type === 'inject')).toHaveLength(4 * perRonde)
     expect(data.graph.nodes.filter(n => n.type === 'decision')).toHaveLength(4)
   })
 

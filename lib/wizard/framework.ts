@@ -318,9 +318,81 @@ export function ruleInjectsStaggered(graph: ScenarioGraph): RuleResult {
       'Zet `deliverySeconds` op de injects van een ronde zodat ze tijdens de ronde ' +
       'binnendruppelen, elk op zijn eigen moment. Op seconde 0 mogen meerdere staan — de ' +
       'gedeelde setup-inject met de beslisvraag en het rol-bericht van wie meteen aan zet ' +
-      'is openen samen de ronde. Verdeel de rest over verschillende momenten tot ongeveer ' +
-      'tweederde van de rondetijd, zodat er na het laatste bericht nog tijd is om te ' +
-      'overleggen en te kiezen.',
+      'is openen samen de ronde. Verdeel de rest over de inject-fase: dat is het eerste ' +
+      'tiende deel van de rondetijd (bij vijftien minuten ongeveer 96 seconden), want ' +
+      'daarna gaat het scherm naar de discussie en komt een bericht als verrassing.',
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Rule 17 — elke gemandateerde rol krijgt zijn vraag als eigen inject
+//
+// rule1 eist één setup-inject per beslispunt, en die is gedeeld: hij staat in
+// de wij-vorm en noemt de vraag van het team. De eigenaar: "het is belangrijk
+// dat de vraag van de ronde voor elke aparte rol als een inject is beschreven
+// en dat hij het daaruit moet halen (gebeurt in het echt ook)".
+//
+// Zonder dit leest een deelnemer de beslisvraag als een mededeling aan de zaal
+// en moet hij zelf bedenken dat hij degene is die moet antwoorden. In een echt
+// incident belt iemand je, met jouw vraag, omdat jij er iets mee mag.
+//
+// Dit stond met de hand in examples-eye-security.ts maar werd door geen enkele
+// generator gemaakt, dus elk nieuw scenario miste het. Daarom een regel: dan
+// geldt hij voor het deterministische pad én voor de AI.
+// ───────────────────────────────────────────────────────────────────────────
+// Een rol-bericht is vaak iemand die je belt, en dan staat de vraag tussen
+// aanhalingstekens: `... bel ik de CISO erbij of handel ik dit met jou af?'`.
+// Een naïeve endsWith('?') wijst dat af, terwijl het juist de vorm is die we
+// willen. Daarom eerst de sluitende aanhalings- en haakjestekens eraf.
+function eindigtOpVraag(content: string): boolean {
+  return content.replace(/[\s"'”’»)\]]+$/u, '').endsWith('?')
+}
+
+export function ruleRoleSetupInject(graph: ScenarioGraph): RuleResult {
+  const map = buildRoundIndexMap(graph)
+  const injects = injectNodes(graph)
+  const problems: string[] = []
+
+  for (const d of decisionNodes(graph)) {
+    const dRound = map.byNode.get(d.id)
+    if (!dRound) continue
+
+    // Alleen rollen die hier werkelijk een keuze bezitten. De impliciete
+    // "geen besluit"-optie geeft geen mandaat.
+    const gemandateerd = new Set<Role>()
+    for (const option of d.data.options) {
+      if (option.implicit || !option.allowedRole) continue
+      gemandateerd.add(option.allowedRole)
+    }
+    if (gemandateerd.size === 0) continue
+
+    const zonderBericht = [...gemandateerd].filter(rol => {
+      return !injects.some(i => {
+        if (i.data.setsUpDecisionNodeId !== d.id) return false
+        if (!i.data.targetRoles?.includes(rol)) return false
+        const iRound = map.byNode.get(i.id)
+        if (!iRound) return false
+        if (iRound !== dRound && iRound !== dRound - 1) return false
+        // Het moet een vraag aan die rol zijn, geen mededeling.
+        return eindigtOpVraag(i.data.content)
+      })
+    })
+
+    if (zonderBericht.length > 0) {
+      problems.push(`${d.id}: ${zonderBericht.join(', ')}`)
+    }
+  }
+
+  if (problems.length === 0) return { ok: true }
+  return {
+    ok: false,
+    violation: `Rollen zonder eigen beslisvraag-inject: ${problems.join('; ')}`,
+    hint:
+      'Geef elke rol die bij een beslispunt een optie bezit een eigen inject in dezelfde ' +
+      'of de vorige ronde, met `targetRoles: [die rol]`, `setsUpDecisionNodeId` van het ' +
+      'beslispunt, een afzender die bij die rol hoort, en als laatste zin de vraag zoals ' +
+      'die persoon hem aan díe rol zou stellen. Niet de teamvraag herhalen: de CISO wordt ' +
+      'gebeld door de analist, de woordvoerder door een journalist.',
   }
 }
 
@@ -898,6 +970,7 @@ const RULES: readonly FrameworkRule[] = [
   { id: 'rule14_quality_ranking',       description: 'Per rol per beslispunt: precies één beste optie, één tweede-beste, rest slecht.',               fn: (g)     => ruleQualityRanking(g) },
   { id: 'rule15_enough_explanation',    description: 'Beslisvraag, opties en facilitator-motivatie hebben genoeg tekst om een keuze te wegen.',        fn: (g)     => ruleEnoughExplanation(g) },
   { id: 'rule16_injects_staggered',     description: 'Injects komen gespreid binnen tijdens de ronde, niet allemaal op het startsignaal.',             fn: (g)     => ruleInjectsStaggered(g) },
+  { id: 'rule17_role_setup_inject',     description: 'Elke rol met een optie krijgt zijn beslisvraag als eigen inject, niet alleen de teamvraag.',     fn: (g)     => ruleRoleSetupInject(g) },
 ]
 
 export function validateFramework(graph: ScenarioGraph, config: WizardConfig): FrameworkResult {
