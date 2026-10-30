@@ -55,6 +55,11 @@ export function DecisionBrief({
           Beslisvraag van deze ronde
         </span>
         <p className="text-sm font-medium leading-snug text-foreground">{decision.prompt}</p>
+        {/* De vraag alleen was vaak te kort om de context eruit te halen: wat
+            is er al bekend, waar knelt het, en waar gaat deze keuze níet over. */}
+        {decision.context && (
+          <p className="text-xs leading-relaxed text-muted-foreground">{decision.context}</p>
+        )}
         {deadline && (
           <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
             Deadline: {deadline}

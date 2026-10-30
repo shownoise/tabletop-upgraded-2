@@ -129,7 +129,7 @@ const PHASES: readonly PhaseSpec[] = [
     state: 'Er is ruim een uur verstreken sinds het eerste alarm.',
     pressure: 'Het beeld is iets helder, maar nog lang niet rond, en de tijd loopt door.',
     closing: 'Aan het eind van deze ronde kiest elke rol wat zij nu vastlegt en wat zij nog laat wachten. Wat weegt nu meer: snel of zeker?',
-    prompt: 'Leg nu vast wat je weet, of wacht u op harde bevestiging?',
+    prompt: 'Leg je nu vast wat je weet, of wacht je op harde bevestiging voordat je iets opschrijft?',
     focus: 'beeldvorming',
     goal: 'Bespreek hoe het team feit en aanname uit elkaar houdt zonder het tempo te verliezen.',
     opening: [
@@ -279,7 +279,7 @@ const PHASES: readonly PhaseSpec[] = [
     state: 'Het is een week later en de rust is terug.',
     pressure: 'Nu moet er iets blijven hangen, anders was dit alleen een dure week.',
     closing: 'Aan het eind van deze ronde ligt er één vraag op tafel: wat blijft hier straks van over?',
-    prompt: 'Wat legt u nu vast zodat deze week volgende keer anders verloopt?',
+    prompt: 'Wat leg je nu vast zodat deze week de volgende keer anders verloopt?',
     focus: 'nazorg',
     goal: 'Bespreek welke les van deze week morgen nog ergens staat opgeschreven.',
     opening: [
@@ -382,6 +382,10 @@ interface StanceSpec {
   quality: ChoiceQuality
   lesson: string
   commentary: string
+  /** Eén regel die zegt wat je bij deze houding feitelijk dóet. Gaat de
+   *  optie-description in, zodat een deelnemer de keuze op inhoud kan wegen
+   *  in plaats van op toon. */
+  doet: string
   /** Twee assen omhoog, twee omlaag. NV1 en NV2 zijn altijd negatief: dat maakt
    *  dominantie tussen opties van dezelfde rol onmogelijk (rule3). */
   pv1: number
@@ -391,12 +395,12 @@ interface StanceSpec {
 }
 
 const STANCES: readonly StanceSpec[] = [
-  { quality: 'best',  pv1: 2, pv2: 1, nv1: -1, nv2: -1, lesson: 'Snel kiezen levert grip, maar je neemt een risico op een punt dat je nu niet overziet.',   commentary: 'De scherpste keuze van dit rijtje: hij wint op twee vlakken en kost op twee.' },
-  { quality: 'good',  pv1: 2, pv2: 0, nv1: -1, nv2: -1, lesson: 'Deze keuze wint vooral op één vlak; benoem hardop wat hij elders kost.',                   commentary: 'Verdedigbaar. Vraag het team welk verlies zij hiermee bewust accepteren.' },
-  { quality: 'good',  pv1: 1, pv2: 1, nv1: -1, nv2: -1, lesson: 'Een brede keuze: kleine winst op twee vlakken, kleine prijs op twee andere.',               commentary: 'Veilige middenweg. Prima keuze, zolang het team weet dat het weinig grip oplevert.' },
-  { quality: 'poor',  pv1: 1, pv2: 0, nv1: -1, nv2: -2, lesson: 'Dit voelt zorgvuldig, maar het verlies zit in de tijd die het kost.',                       commentary: 'Zorgvuldigheid als uitstel. Vraag wat het team met de gewonnen tijd doet.' },
-  { quality: 'poor',  pv1: 1, pv2: 0, nv1: -2, nv2: -1, lesson: 'Deze route kost meer dan hij oplevert; de aantrekkingskracht zit in de rust die hij geeft.', commentary: 'Begrijpelijke reflex onder druk, maar de rekening komt een ronde later.' },
-  { quality: 'wrong', pv1: 1, pv2: 0, nv1: -2, nv2: -2, lesson: 'Dit is de valkuil: het voelt beheerst, maar je raakt op meerdere vlakken terrein kwijt.',    commentary: 'De valkuil van deze ronde. Laat het team zelf benoemen wat hier misgaat.' },
+  { quality: 'best',  pv1: 2, pv2: 1, nv1: -1, nv2: -1, doet: 'je zet nu een stap met de informatie die je hebt, en legt vast wie hem heeft genomen.',       lesson: 'Snel kiezen levert grip, maar je neemt een risico op een punt dat je nu niet overziet.',   commentary: 'De scherpste keuze van dit rijtje: hij wint op twee vlakken en kost op twee.' },
+  { quality: 'good',  pv1: 2, pv2: 0, nv1: -1, nv2: -1, doet: 'je kiest één doel en accepteert dat een ander doel daardoor blijft liggen.',                  lesson: 'Deze keuze wint vooral op één vlak; benoem hardop wat hij elders kost.',                   commentary: 'Verdedigbaar. Vraag het team welk verlies zij hiermee bewust accepteren.' },
+  { quality: 'good',  pv1: 1, pv2: 1, nv1: -1, nv2: -1, doet: 'je verdeelt de aandacht over twee sporen en houdt op geen van beide het initiatief.',          lesson: 'Een brede keuze: kleine winst op twee vlakken, kleine prijs op twee andere.',               commentary: 'Veilige middenweg. Prima keuze, zolang het team weet dat het weinig grip oplevert.' },
+  { quality: 'poor',  pv1: 1, pv2: 0, nv1: -1, nv2: -2, doet: 'je vraagt eerst om meer zekerheid voordat je iets vastlegt.',                                 lesson: 'Dit voelt zorgvuldig, maar het verlies zit in de tijd die het kost.',                       commentary: 'Zorgvuldigheid als uitstel. Vraag wat het team met de gewonnen tijd doet.' },
+  { quality: 'poor',  pv1: 1, pv2: 0, nv1: -2, nv2: -1, doet: 'je legt de beslissing bij iemand anders of bij een later moment neer.',                       lesson: 'Deze route kost meer dan hij oplevert; de aantrekkingskracht zit in de rust die hij geeft.', commentary: 'Begrijpelijke reflex onder druk, maar de rekening komt een ronde later.' },
+  { quality: 'wrong', pv1: 1, pv2: 0, nv1: -2, nv2: -2, doet: 'je houdt vast aan de bestaande lijn en wacht tot het beeld compleet is.',                     lesson: 'Dit is de valkuil: het voelt beheerst, maar je raakt op meerdere vlakken terrein kwijt.',    commentary: 'De valkuil van deze ronde. Laat het team zelf benoemen wat hier misgaat.' },
 ]
 
 const AXES: readonly (keyof OutcomeVector)[] = ['CONT', 'FOR', 'BC', 'JUR', 'VER', 'KOS']
@@ -530,13 +534,50 @@ function pickPhases(rounds: number): PhaseSpec[] {
 // Welke handelingsrichtingen een rol in een ronde krijgt. De scherpste keuze
 // (index 0) en de valkuil (index 5) staan er altijd bij; het middenveld
 // roteert per ronde, zodat een rol niet vier rondes lang dezelfde lijst ziet.
-function actionIndices(optionCount: number, roundIndex: number): number[] {
-  const total = ROLE_ACTION_COUNT
-  if (optionCount <= 1) return [0]
-  if (optionCount >= total) return Array.from({ length: total }, (_, i) => i)
-  const middle = [1, 2, 3, 4]
-  const rotated = middle.map((_, i) => middle[(i + roundIndex) % middle.length])
-  return [0, ...rotated.slice(0, optionCount - 2), total - 1]
+// De plek in het rijtje bepaalt de kwaliteit, niet het toeval.
+//
+// Hier zat de bug die live opviel: de middelste posities werden per ronde
+// geroteerd over [1,2,3,4], en omdat STANCES daar `good, good, poor, poor`
+// staat kreeg je soms twee tweede-beste antwoorden en soms geen enkele. Dan is
+// er in de nabespreking niets uit te leggen. Nu is het per rol altijd precies
+// één `best`, één `good` (vanaf drie opties), de rest `poor`, en de laatste
+// `wrong`. Zie rule14_quality_ranking, die dit voor élke generator afdwingt.
+//
+// Kwaliteit en tekst staan los van elkaar, want ze hebben verschillende
+// beperkingen: de kwaliteitsverdeling is vast, maar de labels moeten onderling
+// verschillen — en ROLE_ACTIONS heeft zes teksten voor maximaal zes opties.
+function kwaliteitVoorSlot(slot: number, aantal: number): ChoiceQuality {
+  if (slot === 0) return 'best'
+  // De laatste is altijd de valkuil; bij twee opties is dat de tweede, en dan
+  // is er bewust geen tweede-beste — anders zou er geen slecht antwoord zijn.
+  if (slot === aantal - 1) return 'wrong'
+  if (slot === 1) return 'good'
+  return 'poor'
+}
+
+// Welke tekst uit ROLE_ACTIONS bij een slot hoort. Die lijst staat op orde van
+// beste naar slechtste; slot 0 en het laatste slot pakken de uitersten, de
+// middenslots vullen met de zwakkere teksten eerst.
+function tekstIndexVoorSlot(slot: number, aantal: number): number {
+  if (slot === 0) return 0
+  if (slot === aantal - 1) return ROLE_ACTION_COUNT - 1
+  const midden = [1, 3, 4, 2]
+  return midden[(slot - 1) % midden.length]
+}
+
+// Welke STANCES-regel de vector en de begeleidende tekst levert. Per kwaliteit
+// staan er een of twee klaar; de ronde bepaalt welke, zodat twee rondes niet
+// woordelijk hetzelfde zeggen.
+const STANCE_PER_KWALITEIT: Record<ChoiceQuality, readonly number[]> = {
+  best: [0],
+  good: [1, 2],
+  poor: [3, 4],
+  wrong: [5],
+}
+
+function stanceVoorKwaliteit(kwaliteit: ChoiceQuality, roundIndex: number): StanceSpec {
+  const kandidaten = STANCE_PER_KWALITEIT[kwaliteit]
+  return STANCES[kandidaten[roundIndex % kandidaten.length]]
 }
 
 // Verdeelt `feit` en `aanname` over alle injects zodat het aandeel feiten zo
@@ -656,20 +697,42 @@ export function buildDraftGraph(config: WizardConfig, options: BuildDraftOptions
     afterRoundIndex: index,
     authorId: decisionAuthorIds[index],
     prompt: phase.prompt,
+    // Context voor de deelnemer: de prompt alleen was te kort om te wegen.
+    context:
+      `Deze ronde draait om ${phase.focus}. Wat er nu ligt: ${phase.state} ` +
+      `Waar het knelt: ${phase.pressure} Deze keuze gaat níet over wat er daarna ` +
+      `gebeurt — die ronde komt nog. Kijk bij je documenten wat jouw rol hier mag besluiten.`,
+    // Motivatie voor de facilitator: het verschil tússen de beste en de
+    // tweede optie, want dat is wat je in de nabespreking uitlegt.
+    facilitatorRationale:
+      `De beste optie pakt ${phase.focus} aan terwijl de klok loopt: hij wint op twee ` +
+      `assen en kost bewust op twee. De tweede optie is verdedigbaar maar kiest één doel ` +
+      `en laat een ander liggen — vraag het team welk verlies zij hiermee accepteren. ` +
+      `De overige opties voelen beheerst en kosten juist terrein. Concept-tekst: vul aan ` +
+      `met wat hier bij ${clientName} op het spel staat.`,
     perRole: true,
     options: [
       ...roles.flatMap((role, roleIndex) =>
-        actionIndices(optionsPerRole, index).map((actionIndex, slot) => {
-          const stance = STANCES[actionIndex]
+        Array.from({ length: optionsPerRole }, (_, slot) => {
+          const kwaliteit = kwaliteitVoorSlot(slot, optionsPerRole)
+          const stance = stanceVoorKwaliteit(kwaliteit, index)
+          const tekstIndex = tekstIndexVoorSlot(slot, optionsPerRole)
           // De as-rotatie hangt aan de plek in de lijst, niet aan de kwaliteit:
           // dat houdt de assen binnen één rol uniek en maakt dominantie
           // onmogelijk (rule3).
           const offset = (roleIndex + index + slot) % 6
+          const actie = ROLE_ACTIONS[role][tekstIndex]
           return {
-            label: `${ROLE_ACTIONS[role][actionIndex]} — ${phase.focus}`,
+            label: `${actie} — ${phase.focus}`,
+            // Zonder deze toelichting koos men op toon in plaats van op
+            // inhoud: vier labels van één regel lezen als vier varianten van
+            // hetzelfde. Zie rule15_enough_explanation.
+            description:
+              `${actie}, toegepast op ${phase.focus}. Wat je concreet doet: ${stance.doet} ` +
+              `Wat het je oplevert en kost staat in de pijlen hieronder; de weging is aan jou.`,
             allowedRole: role,
-            outcomeVector: outcomeVectorFor(actionIndex, offset),
-            qualityRank: stance.quality,
+            outcomeVector: outcomeVectorFor(STANCE_PER_KWALITEIT[kwaliteit][index % STANCE_PER_KWALITEIT[kwaliteit].length], offset),
+            qualityRank: kwaliteit,
             facilitatorCommentary: `${stance.commentary} Concept-tekst: vul aan met wat dit bij ${clientName} betekent.`,
             lessonLearned: stance.lesson,
           }
