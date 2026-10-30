@@ -1,4 +1,5 @@
 import { scoreDenominator, scoreExerciseByGroup, type ScoringOutput } from "./scoring"
+import { isNoDecisionSubmission } from "./scoring/decision-review"
 import { sessionToScoringInput } from "./scoring/graph-adapter"
 import type { OutcomeVector } from "./graph/types"
 import { ROLE_META } from "./types"
@@ -30,7 +31,10 @@ export function buildParticipantClosing(session: SessionState, participantId: st
 
   // SubmittedDecision.actionId is the chosen option's id, which is what the
   // adapter keys OptionSpec by — for graph options and for legacy roleActions.
-  const optionById = new Map<string, { label?: string; outcomeVector: OutcomeVector; debriefNote?: string }>()
+  const optionById = new Map<
+    string,
+    { label?: string; outcomeVector: OutcomeVector; debriefNote?: string; implicit?: boolean }
+  >()
   for (const dp of input?.scenario.decisionPoints ?? []) {
     for (const option of dp.options) {
       if (optionById.has(option.id)) continue
@@ -38,6 +42,7 @@ export function buildParticipantClosing(session: SessionState, participantId: st
         label: option.label,
         outcomeVector: option.outcomeVector,
         debriefNote: option.debriefNote,
+        implicit: option.implicit,
       })
     }
   }
@@ -65,6 +70,10 @@ export function buildParticipantClosing(session: SessionState, participantId: st
         return {
           roleLabel: ROLE_META[d.role].label,
           optionLabel: d.actionLabel || spec?.label || "Keuze zonder omschrijving",
+          // Zelfde predikaat als het facilitatorrapport, zodat de terugblik van
+          // het team en de bespreking van de facilitator niet het een "gekozen"
+          // en het ander "geen besluit" noemen.
+          noDecision: isNoDecisionSubmission(d, spec),
           outcomeVector: spec?.outcomeVector,
           debriefNote: spec?.debriefNote,
         }

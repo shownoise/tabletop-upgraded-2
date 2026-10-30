@@ -92,6 +92,7 @@ export function StepReview({
     const owner = view?.mandate.mandatedRoles[0] ?? view?.mandate.unoccupiedMandates[0]
     const item: DecisionReviewItem = {
       question: prompt,
+      noDecision: true,
       chosenLabel: null,
       role: owner,
       unoccupied: !!owner && !session.participants.some(p => p.role === owner),
@@ -117,6 +118,7 @@ export function StepReview({
         if (opt?.outcomeVector) {
           const item: DecisionReviewItem = {
             question: prompt,
+            noDecision: false,
             chosenLabel: d.actionLabel,
             role: d.role,
             byName: d.participantName,

@@ -3,7 +3,7 @@
 import { Printer, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import type { AssessmentReport, DecisionReviewRound, ScoringOutput } from "@/lib/scoring"
-import { DIMENSION_META, NOTHING_TO_SCORE_NL, OUTCOME_DIMENSIONS, denominatorFromReport, type OutcomeDimension } from "@/lib/scoring"
+import { DIMENSION_META, NOTHING_TO_SCORE_NL, OUTCOME_DIMENSIONS, denominatorFromReport, noDecisionSummarySentence, type OutcomeDimension } from "@/lib/scoring"
 import { DecisionReviewCard, DimensionImpactList } from "@/components/shared/decision-review-card"
 
 // Geen eigen labelmapping: de namen van de zes dimensies komen uit
@@ -67,8 +67,12 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
   const strongest = sortedByValue[0]
   const weakest = sortedByValue[sortedByValue.length - 1]
 
-  // Hoeveel beslispunten zijn écht ingediend, en hoeveel zijn als "geen besluit
-  // binnen de tijd" gescoord. Een entry zonder `submission` is dat laatste.
+  // Hoeveel beslismomenten als "geen besluit binnen de tijd" zijn gescoord
+  // staat op `item.noDecision` en is níet af te leiden uit een ontbrekende
+  // `submission`: `finalizeDecision` schrijft een onbeantwoorde rol weg als een
+  // gewone inzending met het label van de impliciete optie, dus een entry mét
+  // submission kan nog steeds "geen besluit" zijn. De regel zelf komt uit
+  // lib/scoring/decision-review.ts, bij de bouwer van diezelfde kaarten.
   //
   // Dit onderscheid ontbrak, en daardoor loog de samenvatting zonder onwaar te
   // zijn: een oefening waarin niemand iets koos leverde "Het team scoorde 29
@@ -99,9 +103,12 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
           : "",
         scoring.droppedOptionalDecisions.length > 0
           ? `${scoring.droppedOptionalDecisions.length} optionele beslispunt(en) zijn vervallen door te weinig rolscheiding.`
-          : `Alle beslispunten zijn gescoord.`,
+          // Was "Alle beslispunten zijn gescoord" — naast de regel hieronder
+          // las dat als een uitspraak over gemaakte keuzes, terwijl het over
+          // rolscheiding gaat.
+          : `Geen beslispunt is vervallen door te weinig rolscheiding.`,
       ]
-  ).filter(Boolean)
+  ).concat(noDecisionSummarySentence(reviewRounds)).filter(Boolean)
 
 
   return (
@@ -262,8 +269,15 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
                       </div>
                     ) : (
                       <div key={entry.key} className="avoid-break rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3">
-                        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Gekozen</p>
-                        <p className="text-sm text-foreground">{entry.item.chosenLabel}</p>
+                        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          {entry.item.noDecision ? "Geen besluit" : "Gekozen"}
+                        </p>
+                        {/* Een archiefsessie kan een impliciete optie zonder
+                            scorevector dragen; dan komt een "geen besluit" hier
+                            terecht en is `chosenLabel` leeg. */}
+                        <p className="text-sm text-foreground">
+                          {entry.item.noDecision ? "Geen besluit binnen de tijd" : entry.item.chosenLabel}
+                        </p>
                         <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                           Punten niet vastgesteld — deze optie heeft geen scorevector. Bespreek de gevolgen op de zes
                           dimensies met het team.

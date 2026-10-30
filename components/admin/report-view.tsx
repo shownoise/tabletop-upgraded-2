@@ -420,8 +420,12 @@ export function ReportView({ lang }: Props) {
                         <DecisionReviewCard item={entry.item} />
                       ) : (
                         <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3">
-                          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Gekozen</p>
-                          <p className="text-sm text-foreground">{entry.item.chosenLabel}</p>
+                          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                            {entry.item.noDecision ? "Geen besluit" : "Gekozen"}
+                          </p>
+                          <p className="text-sm text-foreground">
+                            {entry.item.noDecision ? "Geen besluit binnen de tijd" : entry.item.chosenLabel}
+                          </p>
                           <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                             Punten niet vastgesteld — deze optie heeft geen scorevector. Bespreek de gevolgen op de zes dimensies met het team.
                           </p>

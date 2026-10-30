@@ -19,7 +19,15 @@ import { ROLE_META, type Role } from "@/lib/types"
 export interface DecisionReviewItem {
   // De beslisvraag zoals die aan het team is gesteld.
   question: string
-  // De gekozen optie. Null betekent: er is geen besluit ingediend.
+  // Hier is binnen de tijd niets besloten. Expliciet en verplicht, want niet
+  // betrouwbaar af te leiden: `finalizeDecision` schrijft een onbeantwoorde rol
+  // weg als een gewone inzending met het label van de impliciete optie ("Geen
+  // besluit binnen de tijd"). Dat label is niet van een echte keuze te
+  // onderscheiden, dus moet de bouwer het zeggen. Een pad dat dit vergeet
+  // breekt bij `tsc`, niet pas in het rapport.
+  noDecision: boolean
+  // De gekozen optie, of null als er niets te kiezen viel. Bij `noDecision`
+  // toont de kaart hem niet.
   chosenLabel: string | null
   // Rol die de keuze bezat, en wie hem namens die rol indiende.
   role?: Role
@@ -80,7 +88,7 @@ export function DimensionImpactList({ vector }: { vector: OutcomeVectorLike }) {
 }
 
 export function DecisionReviewCard({ item }: { item: DecisionReviewItem }) {
-  const noDecision = item.chosenLabel === null
+  const noDecision = item.noDecision
   const tradeOff = tradeOffSentence(item.vector)
   const roleLabel = item.role ? ROLE_META[item.role]?.label ?? item.role : undefined
 

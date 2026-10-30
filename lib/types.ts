@@ -911,6 +911,11 @@ export interface ParticipantFeedback {
 export interface ParticipantClosingChoice {
   roleLabel: string
   optionLabel: string
+  // Deze "keuze" is de impliciete uitkomst die `finalizeDecision` wegschreef
+  // omdat niemand indiende. In EVENT-modus draagt zo'n rij een groupId en komt
+  // hij dus in de terugblik van het team terecht; zonder deze vlag leest hij
+  // daar als een genomen besluit met het label "Geen besluit binnen de tijd".
+  noDecision?: boolean
   // De vector van de gekozen optie zoals de scoring hem leest — dezelfde
   // getallen als in het facilitator-rapport. Weg als de optie er geen heeft.
   outcomeVector?: OutcomeVector

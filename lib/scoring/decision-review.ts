@@ -35,6 +35,27 @@ export interface DecisionReviewRound {
   entries: DecisionReviewEntry[]
 }
 
+// De inzender die `finalizeDecision` in lib/session-store.ts gebruikt voor een
+// rol die niets heeft ingediend.
+const IMPLICIT_PARTICIPANT_ID = 'IMPLICIT'
+
+// Eén predikaat voor "hier is binnen de tijd niet besloten", voor beide
+// reviewpaden (dit bestand en components/admin/facilitator/review-items.ts).
+// Zonder dit liep het uit elkaar: dit pad las de impliciete inzending als een
+// genomen besluit waarvan het label nu eenmaal "Geen besluit binnen de tijd"
+// heet, en toonde "GEKOZEN" waar de facilitatorconsole "GEEN BESLUIT" toonde.
+//
+// Twee signalen, omdat een pad soms maar één ervan in handen heeft. Ze zeggen
+// hetzelfde: een deelnemer kán een impliciete optie niet indienen
+// (app/api/session/submit-decision/route.ts weigert dat), dus staat zo'n optie
+// er altijd omdat de facilitator de beslissing afsloot.
+export function isNoDecisionSubmission(
+  submission: Pick<SubmittedDecision, 'participantId'>,
+  option?: { implicit?: boolean },
+): boolean {
+  return submission.participantId === IMPLICIT_PARTICIPANT_ID || !!option?.implicit
+}
+
 // Alle beslismomenten van de gespeelde rondes, in rondevolgorde.
 export function decisionReviewItems(session: SessionState): DecisionReviewRound[] {
   const graph = session.graph
@@ -66,15 +87,24 @@ export function decisionReviewItems(session: SessionState): DecisionReviewRound[
     } else {
       for (const d of mine) {
         const option = dd.options.find(o => matches(o, d))!
+        const noDecision = isNoDecisionSubmission(d, option)
         entries.push({
-          key: `${node.id}::${d.participantId}::${d.actionId}`,
+          // De rol hoort in de key: bij meerdere onbeantwoorde rollen op één
+          // beslispunt dragen de impliciete rijen dezelfde inzender én dezelfde
+          // optie, en gaf de key zonder rol dubbele React-keys.
+          key: `${node.id}::${d.role ?? 'geen-rol'}::${d.participantId}::${d.actionId}`,
           submission: d,
           scored: !!option.outcomeVector,
           item: {
             question: dd.prompt,
-            chosenLabel: option.label,
+            noDecision,
+            // Bij "geen besluit" draagt `participantName` de groepsnaam of
+            // 'Geen besluit' en het label de impliciete optie: beide zouden als
+            // een genomen besluit lezen. De reden reist mee in `reasoning`.
+            chosenLabel: noDecision ? null : option.label,
             role: d.role,
-            byName: d.participantName,
+            byName: noDecision ? undefined : d.participantName,
+            unoccupied: noDecision && !!d.role && !session.participants.some(p => p.role === d.role),
             reasoning: d.reasoning || undefined,
             vector: option.outcomeVector ?? null,
             facilitatorCommentary: option.facilitatorCommentary ?? option.lessonLearned,
@@ -94,6 +124,36 @@ export function decisionReviewItems(session: SessionState): DecisionReviewRound[
     }))
 }
 
+// Eén regel voor de rapportsamenvatting: hoeveel van de besproken
+// beslismomenten zijn als "geen besluit binnen de tijd" gescoord. Zonder die
+// regel las een rapport waarin niemand iets koos precies hetzelfde als een
+// rapport met zes magere keuzes — dezelfde dimensies, dezelfde punten, geen
+// woord over het verschil. Staat er geen enkele echte keuze tussen, dan zegt de
+// regel ook waar de punten dan wél vandaan komen.
+//
+// Geteld wordt per kaart in de scorebespreking (één per rol per beslisvraag),
+// vandaar "besproken": de lezer kan het getal naschalen door te scrollen.
+// Elders in die samenvatting staat "beslismoment" voor een hele ronde.
+export function noDecisionSummarySentence(rounds: DecisionReviewRound[]): string {
+  const items = rounds.flatMap(r => r.entries).map(e => e.item)
+  const total = items.length
+  if (total === 0) return ''
+  const noDecision = items.filter(item => item.noDecision).length
+
+  const moments = total === 1
+    ? 'het enige besproken beslismoment'
+    : `alle ${total} besproken beslismomenten`
+  if (noDecision === 0) {
+    return `In ${moments} ligt een gekozen optie; de punten hierboven volgen dus uit wat het team besloot.`
+  }
+  if (noDecision === total) {
+    const kop = moments.charAt(0).toUpperCase() + moments.slice(1)
+    return `${kop} ${total === 1 ? 'is' : 'zijn'} als "geen besluit binnen de tijd" gescoord — de punten zijn het gevolg van niets doen, niet van wat het team besloot.`
+  }
+  const decided = total - noDecision
+  return `${noDecision} van de ${total} besproken beslismomenten ${noDecision === 1 ? 'is' : 'zijn'} als "geen besluit binnen de tijd" gescoord; de andere ${decided} ${decided === 1 ? 'bevat' : 'bevatten'} een gekozen optie.`
+}
+
 // Niemand heeft deze beslisvraag beantwoord. De gevolgen zijn die van niets
 // doen: de auteur-vector van de impliciete optie, anders de standaard.
 function noDecisionEntry(nodeId: string, dd: DecisionNodeData, session: SessionState): DecisionReviewEntry {
@@ -104,6 +164,7 @@ function noDecisionEntry(nodeId: string, dd: DecisionNodeData, session: SessionS
     scored: true,
     item: {
       question: dd.prompt,
+      noDecision: true,
       chosenLabel: null,
       role: owner,
       // Alleen "rol was niet bezet" melden als dat aantoonbaar zo is: niemand
