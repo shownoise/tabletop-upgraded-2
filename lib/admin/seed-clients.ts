@@ -1,8 +1,45 @@
 // Seed voor de 5 testklanten uit docs/kwaliteit/testklanten.md. Wordt via
 // POST /api/admin/clients { seed: [...] } geladen wanneer de admin op
 // "Testklanten inladen" klikt.
+//
+// Eye Security staat er apart bij (EIGEN_ORGANISATIE_SEED): dat is geen
+// testklant maar de eigen organisatie, voor de interne oefening. Vandaar
+// isTestClient: false — anders verdwijnt hij achter het testklant-filter.
 
 import type { AdminClient } from "./clients"
+
+/** Id van de eigen organisatie. Het Eye Security-scenario hangt hieraan via
+ *  ScenarioGraph.clientId, zodat het op de klantpagina staat. */
+export const EYE_SECURITY_CLIENT_ID = "eye_security"
+
+export const EIGEN_ORGANISATIE_SEED: AdminClient[] = [
+  {
+    id: EYE_SECURITY_CLIENT_ID,
+    name: "Eye Security",
+    sector: "cybersecurity — MDR-dienstverlening (Managed Detection & Response)",
+    employees: 250,
+    itArrangement:
+      "Eigen SOC 24/7 met piket. Detectieplatform met agents op klantendpoints en " +
+      "lees- plus interventierechten in klant-tenants (Microsoft 365, EDR). " +
+      "Multi-tenant beheerplatform voor agentbeleid en respons-acties. Eigen omgeving " +
+      "volledig cloud, sterke identity (MFA, PAM, conditional access). " +
+      "Klantcontracten met IR-retainer en reactietermijnen.",
+    crownJewels:
+      "Privileged access naar klantomgevingen (het grootste risico: wij zijn hun keten), " +
+      "detectieregels en telemetrie van klanten, klantcontracten met reactietermijnen, " +
+      "incidentdossiers van klanten, eigen personeelsadministratie",
+    crisisTeamRoles: ["ceo", "ciso", "cfo", "legal", "head_of_comms", "ops_manager", "it_manager", "hr_lead"],
+    regimeId: "nl_avg_nis2",
+    isTestClient: false,
+    notes:
+      "Eigen organisatie, voor interne oefening. NIS2: ICT-dienstverlening, " +
+      "beheerde diensten — essentiële entiteit. Bijzonder aan dit profiel: elk " +
+      "incident bij ons is meteen een ketenincident bij de klant, en onze klanten " +
+      "hebben hun eigen meldklokken die op ons bericht beginnen te lopen.",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  },
+]
 
 export const TESTKLANTEN_SEED: AdminClient[] = [
   {

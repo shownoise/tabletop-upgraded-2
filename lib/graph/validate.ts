@@ -239,9 +239,21 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
   }
 
   // ── Role × round coverage (Phase C) ──────────────────────────
-  // For every authored role appearing anywhere in the graph, every round must
-  // offer at least one option that role can choose. Missing cells are a hard
-  // publish blocker — they cause silent "nothing to decide" for that seat.
+  // Voor elke rol die ergens in de graaf voorkomt: heeft hij per ronde iets te
+  // kiezen, en heeft hij in het hele scenario überhaupt iets te kiezen?
+  //
+  // Dit was één harde fout per ontbrekende cel, met als reden dat zo'n cel een
+  // stille "niets te beslissen" voor die stoel oplevert. Die reden geldt niet
+  // meer: sinds de rolverdeling en de mandaatweergave is dat een benoemde
+  // staat — de deelnemer ziet "Jij adviseert" en de dekkingsregel zet hem bij
+  // "levert input".
+  //
+  // En soms is het precies de bedoeling. In het Eye Security-scenario heeft
+  // ronde 1 opzettelijk maar twee rollen met mandaat, omdat het crisisteam om
+  // 02:48 niet bestaat; dat is daar de les. Een ontbrekende cel is daarom een
+  // waarschuwing. Wat wél een harde fout blijft: een rol die in het héle
+  // scenario nooit iets beslist — dat is een stoel die niets doet, en dat is
+  // altijd een fout van de auteur.
   const authoredRoles = new Set<Role>()
   for (const round of roundNodes) {
     const rd = round.data as RoundNodeData
@@ -263,6 +275,7 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
       decisionsByRoundNode.set(edge.source, list)
     }
   }
+  const rondesMetOptieVoor = new Map<Role, number>()
   for (const round of roundNodes) {
     const rd = round.data as RoundNodeData
     const roundHasOptionFor = new Set<Role>()
@@ -270,14 +283,26 @@ export function validateGraph(graph: ScenarioGraph): GraphIssue[] {
     for (const dd of decisionsByRoundNode.get(round.id) ?? []) {
       for (const o of dd.options) if (o.allowedRole) roundHasOptionFor.add(o.allowedRole)
     }
+    for (const role of roundHasOptionFor) {
+      rondesMetOptieVoor.set(role, (rondesMetOptieVoor.get(role) ?? 0) + 1)
+    }
     for (const role of authoredRoles) {
       if (!roundHasOptionFor.has(role)) {
         issues.push({
-          severity: "error",
+          severity: "warning",
           nodeId: round.id,
-          message: `Rol "${ROLE_META[role]?.label ?? role}" heeft geen beslisoptie in ronde "${rd.title || round.id.slice(0, 8)}". Elke rol die ergens in het scenario voorkomt moet in elke ronde iets te beslissen hebben.`,
+          message: `Rol "${ROLE_META[role]?.label ?? role}" heeft geen beslisoptie in ronde "${rd.title || round.id.slice(0, 8)}" — die deelnemer adviseert daar en beslist niet. Bedoeld? Dan is dit in orde.`,
         })
       }
+    }
+  }
+  // De harde fout: een stoel die in het hele scenario nooit iets beslist.
+  for (const role of authoredRoles) {
+    if ((rondesMetOptieVoor.get(role) ?? 0) === 0) {
+      issues.push({
+        severity: "error",
+        message: `Rol "${ROLE_META[role]?.label ?? role}" komt in het scenario voor maar heeft in geen enkele ronde een beslisoptie. Die deelnemer zit de hele oefening zonder mandaat.`,
+      })
     }
   }
 
