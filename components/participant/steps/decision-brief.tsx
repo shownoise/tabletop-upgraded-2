@@ -1,6 +1,6 @@
 "use client"
 
-import { HelpCircle, Gavel, MessageSquare, UserX } from "lucide-react"
+import { Clock, HelpCircle, Gavel, MessageSquare, UserX } from "lucide-react"
 import { ROLE_META, type Role } from "@/lib/types"
 import { joinNL, type MandateView } from "./mandate"
 
@@ -34,15 +34,28 @@ export function DecisionBrief({
     )
   }
 
-  const { decision, mandate, coverage, mine } = view
+  const { decision, mandate, coverage, mine, nietAanZet } = view
   const mandated = mandate.mandatedRoles
   const myMandates = mandate.myRoles
   const inherited = new Set(mine?.inherited ?? [])
 
-  // Wie levert input: elke rol die iemand draagt en die deze keuze niet bezit.
   const mandatedSet = new Set([...mandated, ...mandate.unoccupiedMandates])
+
+  // Wie er deze ronde niet aan zet is, en dat is iets anders dan "levert
+  // input". Hier stond één groep onder de kop "Levert input": elke bezette rol
+  // zonder mandaat. Maar bij een keuze per rol heeft wie een optie heeft ook
+  // het mandaat — dus die groep is in werkelijkheid "heeft deze ronde niets te
+  // kiezen". In het Eye Security-scenario is dat de hele kern: om 02:48 zit het
+  // crisisteam niet bijeen, en dan hoort de UI dat te zeggen in plaats van te
+  // suggereren dat die mensen input leveren.
+  //
+  // `nietAanZet` komt uit de rolverdeling van de sessie, niet uit `coverage`:
+  // dat laatste universum bevat juist alleen de rollen van dít beslispunt.
+  const nietAanZetSet = new Set(nietAanZet)
+  // Wie wél een optie heeft maar niet het mandaat: dat kan als iemand anders
+  // die rol draagt. Die levert dan echt input.
   const advisors = coverage
-    .filter(c => c.status !== "onbezet" && !mandatedSet.has(c.role))
+    .filter(c => c.status !== "onbezet" && !mandatedSet.has(c.role) && !nietAanZetSet.has(c.role))
     .map(c => c.role)
 
   return (
@@ -88,19 +101,42 @@ export function DecisionBrief({
           </div>
         </div>
 
-        <div className="flex items-start gap-2">
-          <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <div className="min-w-0">
-            <dt className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-              Levert input
-            </dt>
-            <dd className="text-xs text-muted-foreground">
-              {advisors.length > 0
-                ? advisors.map(roleLabel).join(" · ")
-                : "Geen andere bezette rollen in deze oefening."}
-            </dd>
+        {advisors.length > 0 && (
+          <div className="flex items-start gap-2">
+            <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <div className="min-w-0">
+              <dt className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                Levert input
+              </dt>
+              <dd className="text-xs text-muted-foreground">
+                {advisors.map(roleLabel).join(" · ")}
+              </dd>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* De rollen die deze ronde niets te kiezen hebben. Dit is bewust een
+            eigen regel: een scenario mag een ronde met een kleine bezetting
+            openen — om 02:48 is het crisisteam niet bijeen — en dan moet hier
+            staan dat die mensen er nog niet bij zijn, niet dat zij input
+            leveren. */}
+        {nietAanZet.length > 0 && (
+          <div className="flex items-start gap-2">
+            <Clock className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            <div className="min-w-0">
+              <dt className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                Deze ronde niet aan zet
+              </dt>
+              <dd className="text-xs text-muted-foreground">
+                {nietAanZet.map(roleLabel).join(" · ")}
+                <span className="mt-0.5 block text-[11px]">
+                  Deze rollen hebben in deze ronde geen keuze. Lees de rondetekst: soms zijn ze
+                  nog niet gealarmeerd, soms komen ze later aan de beurt.
+                </span>
+              </dd>
+            </div>
+          </div>
+        )}
 
         {mandate.unoccupiedMandates.length > 0 && (
           <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-2.5 py-2">

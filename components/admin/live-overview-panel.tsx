@@ -74,6 +74,10 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
     ? Math.min(100, Math.round((progress.submitted / progress.expected) * 100))
     : 0
   const missingLabels = progress.missingRoles.map(r => ROLE_META[r]?.label ?? r)
+  // Deelnemers zonder gekozen rol. distributeRoles() slaat die over, dus zij
+  // krijgen geen enkele optie te zien — en dat is onzichtbaar als je alleen
+  // naar de inzendingen kijkt.
+  const zonderRol = session.participants.filter(p => !p.role).map(p => p.name)
 
   const submissions = session.submittedDecisions ?? []
   const currentRoundSubs = submissions.filter(d => d.roundIndex === currentIndex)
@@ -150,6 +154,21 @@ export function LiveOverviewPanel({ session }: { session: SessionState }) {
               {missingLabels.length > 3
                 ? `${missingLabels.slice(0, 3).join(", ")} en ${missingLabels.length - 3} andere`
                 : missingLabels.join(", ")}
+            </span>
+          </p>
+        ) : zonderRol.length > 0 ? (
+          /* Hier stond "Geen rol houdt deze ronde nog tegen", ook als niemand
+             een rol had gekozen. Dat las als "alles loopt" terwijl er juist
+             niets kón lopen: de rolverdeling slaat deelnemers zonder gekozen
+             rol over, dus die krijgen geen enkele keuze te zien. Nu staat er
+             wat er aan de hand is én wat je eraan doet. */
+          <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-700 dark:text-amber-400">
+            <Hourglass className="mt-px size-3 shrink-0" aria-hidden />
+            <span>
+              {zonderRol.length === 1
+                ? `${zonderRol[0]} heeft nog geen rol gekozen en krijgt daardoor niets te beslissen.`
+                : `${zonderRol.length} deelnemers hebben nog geen rol gekozen en krijgen daardoor niets te beslissen.`}
+              {" "}Laat ze hun rol kiezen op hun eerste stap, of wijs er een toe bij Gereedschap.
             </span>
           </p>
         ) : (
