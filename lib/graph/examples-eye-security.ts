@@ -223,6 +223,56 @@ const plan: WizardPlan = {
             "Ruis zonder waarde, maar hij verhoogt de druk. Wie hierop handelt, laat zich " +
             "leiden door de buitenwereld in plaats van door eigen telemetrie.",
         },
+
+        // ── Rol-injects: de beslisvraag komt bij elke rol apart binnen ──
+        //
+        // Hiervoor kondigde één inject de beslisvraag aan, voor iedereen
+        // hetzelfde. In het echt belt niemand "het crisisteam": je wordt
+        // persoonlijk gebeld door iemand die iets van jou nodig heeft, en die
+        // vraag is per rol anders. `targetRoles` zorgt dat je alleen je eigen
+        // bericht ziet — de inject-feed filtert erop en routeert hem via de
+        // rolverdeling, dus een onbezette rol komt bij wie hem heeft
+        // overgenomen.
+        {
+          id: "eye-r1-r-ciso",
+          deliverySeconds: 20,
+          type: "executive",
+          urgency: "critical",
+          title: "De dienstdoende analist belt jou",
+          senderName: "SOC-analist nachtdienst",
+          targetRoles: ["ciso"],
+          content:
+            "Telefoon om 02:49. 'Ik bel jou omdat jij de enige bent die piket mag opschalen. " +
+            "Ik zie iets op het account dat agentbeleid uitrolt en ik durf het niet zelf " +
+            "incident te noemen. Ik heb nog niets gedaan en ik doe ook niets tot ik van jou " +
+            "hoor.' Hij wacht aan de lijn. Wat wordt het: ruis of incident, en wie van het " +
+            "crisisteam wek ik nu en wie laat ik slapen?",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d1-alarmeren",
+          facilitatorNote:
+            "Dit is de beslisvraag van de CISO, bij hem persoonlijk afgeleverd. Let op dat " +
+            "hij een mens aan de lijn heeft die wacht: dat maakt uitstellen voelbaar.",
+        },
+        {
+          id: "eye-r1-r-it",
+          deliverySeconds: 70,
+          type: "internal",
+          urgency: "high",
+          title: "De piketengineer vraagt jou om een keuze",
+          senderName: "Piketengineer platform",
+          targetRoles: ["it_manager"],
+          content:
+            "WhatsApp om 02:52: 'Ik kan twee dingen doen en niet beide snel. Of ik trek het " +
+            "certificaat van dat service-account nu in — dan stopt het, maar rollen er ook " +
+            "geen policies meer uit naar klanten. Of ik haal eerst de auditlogs eruit " +
+            "voordat er iets verandert. Wat doe ik eerst, en bel ik de CISO erbij of handel " +
+            "ik dit met jou af?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d1-alarmeren",
+          facilitatorNote:
+            "De technische variant van dezelfde ronde. De keuze tussen stoppen en bewijs " +
+            "bewaren is hier expliciet, en de tweede vraag gaat over mandaat.",
+        },
       ],
     },
 
@@ -346,6 +396,68 @@ const plan: WizardPlan = {
             "De zwakte die eerder is weggeklikt. Komt in ronde 5 terug als de verandering die " +
             "je vastlegt.",
         },
+        // ── Rol-injects: de beslisvraag komt bij elke rol apart binnen ──
+        {
+          id: "eye-r2-r-ciso",
+          deliverySeconds: 30,
+          type: "technical",
+          urgency: "critical",
+          title: "De IR-lead wil één lijn van jou",
+          senderName: "IR-lead — eigen forensiek",
+          targetRoles: ["ciso"],
+          content:
+            "'Ik heb elf tenants waar het beleid is aangepast en waar onze eigen telemetrie " +
+            "nu uit staat. Ik kan de wijzigingen per tenant terugdraaien en het account " +
+            "isoleren — dat kost mij handwerk maar de klant houdt zicht. Of we halen het " +
+            "hele beheerplatform eruit, dan ben ik zeker, en zijn 180 klanten op zaterdag " +
+            "blind. Ik heb vijf minuten nodig voor het antwoord, niet vijftig. Welke van " +
+            "de twee doe ik?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d2-eigen-of-klant",
+          facilitatorNote:
+            "De technische afweging bij de CISO, met een tijdsdruk erin. Let op of hij de " +
+            "klantgevolgen benoemt of alleen zijn eigen zekerheid.",
+        },
+        {
+          id: "eye-r2-r-ops",
+          deliverySeconds: 90,
+          type: "internal",
+          urgency: "high",
+          title: "Je dienstleiding vraagt hoe de dag eruitziet",
+          senderName: "Teamlead servicedesk",
+          targetRoles: ["ops_manager"],
+          content:
+            "'Over twee uur begint de zaterdagdienst en ik moet mijn mensen iets vertellen. " +
+            "Rijden we vandaag dezelfde dienst voor alle 180 klanten, of zet ik die elf " +
+            "apart met handmatige respons door analisten? Dat laatste kan, maar dan heb ik " +
+            "voor de rest minder capaciteit. Overal een beetje kan ik niet uitvoeren — dat " +
+            "wordt chaos aan de telefoon. Wat wordt het?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d2-eigen-of-klant",
+          facilitatorNote:
+            "Hetzelfde dilemma, maar vanuit de uitvoering. 'Overal een beetje' wordt hier " +
+            "door de uitvoerder zelf afgewezen; dat is een cadeautje voor de nabespreking.",
+        },
+        {
+          id: "eye-r2-r-ceo",
+          deliverySeconds: 150,
+          type: "executive",
+          urgency: "high",
+          title: "De commercieel directeur wil dekking van jou",
+          senderName: "Commercieel directeur",
+          targetRoles: ["ceo"],
+          content:
+            "'Er ligt een klant die binnen het uur antwoord eist en dat staat zo in zijn " +
+            "contract. Als wij techniek voor laten gaan, loopt die termijn af en dat kost " +
+            "ons geld en vertrouwen. Ik heb van jou één ding nodig: geef je mij zwart op " +
+            "wit dat de technische kant nu voorgaat en dat de rekening daarvan voor ons is, " +
+            "of houd ik de commerciële lijn aan?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d2-eigen-of-klant",
+          facilitatorNote:
+            "De bestuurlijke variant: niet 'wat doen we technisch' maar 'wie dekt dit'. " +
+            "Zonder dat besluit blijft het team naar de commerciële gevolgen kijken.",
+        },
       ],
     },
 
@@ -467,6 +579,68 @@ const plan: WizardPlan = {
             "Commerciële druk op het moment dat je hem het minst kunt gebruiken. Let op of het " +
             "team zich hierdoor laat afleiden van de elf die écht geraakt zijn.",
         },
+        // ── Rol-injects: de beslisvraag komt bij elke rol apart binnen ──
+        {
+          id: "eye-r3-r-legal",
+          deliverySeconds: 40,
+          type: "regulatory",
+          urgency: "critical",
+          title: "De functionaris gegevensbescherming legt het bij jou neer",
+          senderName: "Functionaris gegevensbescherming",
+          targetRoles: ["legal"],
+          content:
+            "'Twee dingen lopen door elkaar en ik wil dat jij ze scheidt. Wij zijn hier " +
+            "verwerker; de klant is verwerkingsverantwoordelijke en meldt zelf. Onze eigen " +
+            "plicht als aanbieder van beheerde diensten is een vroegtijdige waarschuwing, " +
+            "en die mag met een onvolledig beeld. Gaat die vandaag de deur uit, en leveren " +
+            "wij per getroffen klant een feitenrelaas waarmee hij zelf kan melden — of " +
+            "wachten we tot het beeld per tenant rond is?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d3-melden",
+          facilitatorNote:
+            "Hier zit het onderscheid dat teams verkeerd doen: wij melden niet namens de " +
+            "klant, wij stellen hem in staat te melden.",
+        },
+        {
+          id: "eye-r3-r-comms",
+          deliverySeconds: 100,
+          type: "media",
+          urgency: "critical",
+          title: "Je woordvoerder heeft een deadline en een fout",
+          senderName: "Woordvoerder",
+          targetRoles: ["head_of_comms"],
+          content:
+            "'De journalist publiceert om 17:00 en hij noemt een klantnaam die níet op onze " +
+            "lijst van elf staat. Verder circuleert er intern een concept waarin staat dat " +
+            "er geen aanwijzingen zijn dat klantgegevens zijn geraakt; forensiek heeft dat " +
+            "niet gezegd. Ik heb een besluit nodig: sturen we één bericht naar alle 180, of " +
+            "twee — één met details voor de elf en één korter voor de rest?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d3-melden",
+          facilitatorNote:
+            "Drie vallen in één bericht: de deadline, de onjuiste klantnaam, en de aanname " +
+            "die als feit naar buiten dreigt te gaan.",
+        },
+        {
+          id: "eye-r3-r-ceo",
+          deliverySeconds: 170,
+          type: "executive",
+          urgency: "high",
+          title: "De bestuurssecretaris vraagt wie er spreekt",
+          senderName: "Bestuurssecretaris",
+          targetRoles: ["ceo"],
+          content:
+            "'Er is op dit moment geen formele woordvoering en dat gaat vanmiddag opvallen. " +
+            "De elf getroffen klanten verwachten op dit niveau jou aan de lijn, niet een " +
+            "accountmanager. Tegelijk kan ik je agenda niet twee keer vullen. Neem jij de " +
+            "woordvoering zelf en bel je die elf persoonlijk, of leg ik het bij " +
+            "Communicatie met jou achter de hand?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d3-melden",
+          facilitatorNote:
+            "Vraag het team of de zwaarst geraakte klant in de top-10 zit. Dat is namelijk " +
+            "niet hetzelfde, en daar gaat deze keuze over.",
+        },
       ],
     },
 
@@ -585,6 +759,68 @@ const plan: WizardPlan = {
             "Ruis die commercieel pijn doet en operationeel niets betekent. Let op of iemand er " +
             "tijd in wil stoppen.",
         },
+        // ── Rol-injects: de beslisvraag komt bij elke rol apart binnen ──
+        {
+          id: "eye-r4-r-ciso",
+          deliverySeconds: 35,
+          type: "technical",
+          urgency: "critical",
+          title: "De IR-lead moet weten waar zijn mensen heen gaan",
+          senderName: "IR-lead — eigen forensiek",
+          targetRoles: ["ciso"],
+          content:
+            "'Bij die zorginstelling is het geen policy-wijziging meer; er is beweging naar " +
+            "twee servers met patiëntgegevens en zij weten het nog niet. Ik kan mijn twee " +
+            "beste onderzoekers daar volledig op zetten, of ze op de portefeuille houden " +
+            "zodat de dienst voor de andere klanten op niveau blijft. Met de mensen die er " +
+            "zijn kan niet beide. Waar zet ik ze in?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d4-prioriteit",
+          facilitatorNote:
+            "Benoem dat onze toegang de weg naar binnen was. Dat maakt dit geen gunst maar " +
+            "een plicht, en dat verandert de weging.",
+        },
+        {
+          id: "eye-r4-r-cfo",
+          deliverySeconds: 95,
+          type: "executive",
+          urgency: "high",
+          title: "De risicomanager wijst je op een klok die al loopt",
+          senderName: "Risicomanager",
+          targetRoles: ["cfo"],
+          content:
+            "'Onze cyberpolis dekt aansprakelijkheid richting klanten, maar eist melding " +
+            "binnen 24 uur na bekendwording én bewaring van forensisch bewijs. Die klok " +
+            "loopt sinds zaterdagnacht en niemand hier kan mij vertellen of de melding is " +
+            "gedaan. Daarnaast vraagt de zorginstelling of wij het herstel betalen. Wat " +
+            "doen we: polis vandaag melden en herstel toezeggen, of eerst uitzoeken wat " +
+            "gedekt is?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d4-prioriteit",
+          facilitatorNote:
+            "De termijn loopt tijdens het uitzoeken af. Vraag wanneer die 24 uur precies " +
+            "begon — dat weet doorgaans niemand.",
+        },
+        {
+          id: "eye-r4-r-ops",
+          deliverySeconds: 155,
+          type: "internal",
+          urgency: "high",
+          title: "Je teamlead meldt een fout en vraagt om een besluit",
+          senderName: "Teamlead SOC",
+          targetRoles: ["ops_manager"],
+          content:
+            "'De twee die dit vannacht hebben opgepakt werken sinds zaterdag 02:00 door met " +
+            "twee uur slaap. Een van hen heeft net een verkeerde tenant-id in een ticket " +
+            "gezet — bij ons raakt zo'n fout meteen een klantomgeving. Zij willen zelf " +
+            "doorgaan omdat ze de context hebben. Zet ik een ploegenrooster op en haal ik " +
+            "ze eruit, of houd ik ze aan boord met iemand die meekijkt?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d4-prioriteit",
+          facilitatorNote:
+            "De fout in dat ticket is het signaal, niet de vermoeidheid. Let op of iemand " +
+            "het verschil ziet.",
+        },
       ],
     },
 
@@ -699,6 +935,68 @@ const plan: WizardPlan = {
           facilitatorNote:
             "Geeft de kostenas een getal. Handig in de nabespreking als iemand zegt dat " +
             "opschalen te duur was.",
+        },
+        // ── Rol-injects: de beslisvraag komt bij elke rol apart binnen ──
+        {
+          id: "eye-r5-r-ceo",
+          deliverySeconds: 25,
+          type: "executive",
+          urgency: "high",
+          title: "De bestuurssecretaris wil één regel met een naam erbij",
+          senderName: "Bestuurssecretaris",
+          targetRoles: ["ceo"],
+          content:
+            "'De zorginstelling wil voor 1 december schriftelijk zien wat er bij ons " +
+            "verandert en wie daarvoor verantwoordelijk is; hun eigen toezichthouder zal " +
+            "erom vragen. Ik kan drie verbeterpunten opschrijven of één. Mijn ervaring is " +
+            "dat drie er in maart nul worden. Welke verandering leg ik vast, met wiens naam " +
+            "en met welke datum?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d5-vastleggen",
+          facilitatorNote:
+            "Externe druk op eigenaarschap. Dit is wat 'vastleggen' concreet maakt: een " +
+            "naam en een datum, niet een intentie.",
+        },
+        {
+          id: "eye-r5-r-ciso",
+          deliverySeconds: 85,
+          type: "technical",
+          urgency: "high",
+          title: "De platformarchitect ziet het account terug",
+          senderName: "Platformarchitect",
+          targetRoles: ["ciso"],
+          content:
+            "'Ik moet je iets melden over de nieuwe omgeving: hetzelfde " +
+            "service-account staat er weer in, met dezelfde schrijfrechten in 180 tenants " +
+            "en nog steeds zonder afdwingbare MFA. Ik kan het achter een kluis met " +
+            "kortlevende certificaten zetten, of ik pas eerst de triage aan zodat een " +
+            "geblokkeerde poging op zo'n account altijd onderzoek wordt. Beide kost tijd " +
+            "die ik niet twee keer heb. Wat eerst?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d5-vastleggen",
+          facilitatorNote:
+            "Herbouwen met dezelfde rechten herbouwt het risico. De keuze is: niet meer " +
+            "binnen kunnen komen, of het eerder zien.",
+        },
+        {
+          id: "eye-r5-r-hr",
+          deliverySeconds: 145,
+          type: "internal",
+          urgency: "medium",
+          title: "De teamlead vraagt wat er met zijn mensen gebeurt",
+          senderName: "Teamlead SOC",
+          targetRoles: ["hr_lead"],
+          content:
+            "'Mijn twee mensen hebben een incident bij hun eigen werkgever gedraaid, niet " +
+            "bij een klant. Dat is iets anders en dat merk ik aan ze. Er is geen afspraak " +
+            "over wie aflost als zoiets langer dan een dienst duurt, en er is ook geen " +
+            "nazorg geregeld. Leggen we een rooster én begeleiding formeel vast, of vang " +
+            "ik dit met ze op zoals we altijd doen?'",
+          classification: "feit",
+          setsUpDecisionNodeId: "eye-d5-vastleggen",
+          facilitatorNote:
+            "Het personele punt dat uit elk verbeterplan valt. 'Zoals we altijd doen' " +
+            "werkt tot degene die het moet doen zelf moe is.",
         },
       ],
     },

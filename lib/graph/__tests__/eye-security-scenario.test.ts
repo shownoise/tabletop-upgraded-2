@@ -45,7 +45,7 @@ describe("Eye Security — interne oefening", () => {
     expect(errors, JSON.stringify(errors, null, 2)).toEqual([])
   })
 
-  it("haalt alle zestien framework-regels", () => {
+  it("haalt alle zeventien framework-regels", () => {
     const res = validateFramework(graph, CONFIG)
     expect(res.failures.map(f => f.ruleId), JSON.stringify(res.failures, null, 2)).toEqual([])
   })
@@ -123,15 +123,35 @@ describe("Eye Security — interne oefening", () => {
       .map(n => n.data as InjectNodeData)
       .filter(d => !!d.setsUpDecisionNodeId)
 
-    // Eén setup-inject per beslispunt, en elk beslispunt heeft er een.
-    expect(alleSetups).toHaveLength(5)
-    const gekoppeld = new Set(alleSetups.map(s => s.setsUpDecisionNodeId))
-    expect(gekoppeld.size).toBe(5)
+    // Twee soorten. De gedeelde setup brengt de gebeurtenis en eindigt op de
+    // vraag; daarnaast krijgt elke gemandateerde rol zijn eigen bericht met
+    // zijn eigen vraag, van een afzender die bij die rol hoort. In het echt
+    // belt niemand "het crisisteam" — je wordt persoonlijk gebeld.
+    const gedeeld = alleSetups.filter(s => !s.targetRoles?.length)
+    const perRol = alleSetups.filter(s => s.targetRoles?.length === 1)
+    expect(gedeeld).toHaveLength(5)
+    expect(new Set(gedeeld.map(s => s.setsUpDecisionNodeId)).size).toBe(5)
+    expect(perRol.length).toBe(alleSetups.length - gedeeld.length)
 
-    // En hij eindigt op de vraag, niet op een mededeling: dat is wat hem tot
-    // voorbereiding maakt in plaats van tot achtergrond.
+    // Elke rol met een optie in een beslispunt heeft daar ook een eigen inject,
+    // en omgekeerd: geen rol-inject voor een rol die daar niets te kiezen heeft.
+    for (const { id, data } of beslispunten()) {
+      const metOptie = [...new Set(
+        data.options.filter(o => !o.implicit && o.allowedRole).map(o => o.allowedRole as Role),
+      )].sort()
+      const aangeschreven = [...new Set(
+        perRol.filter(s => s.setsUpDecisionNodeId === id).map(s => s.targetRoles![0]),
+      )].sort()
+      expect(aangeschreven, `${id}: rollen met een eigen inject`).toEqual(metOptie)
+    }
+
+    // Alle setups eindigen op de vraag, niet op een mededeling: dat is wat ze
+    // tot voorbereiding maakt in plaats van tot achtergrond. Een afsluitend
+    // aanhalingsteken mag erachter staan — de rol-injects zijn citaten van
+    // iemand die je aan de lijn hebt, en dat leest beter dan een losse vraag.
     for (const s of alleSetups) {
-      expect(s.content.trim().endsWith("?"), `${s.title} eindigt niet op een vraag`).toBe(true)
+      const staart = s.content.trim().slice(-3)
+      expect(staart.includes("?"), `${s.title} eindigt niet op een vraag`).toBe(true)
     }
   })
 
