@@ -1,3 +1,4 @@
+import { computeRoundPhaseDurations } from "@/lib/engine/round-phases"
 import type { WizardConfig } from "./config"
 import { specialConditionById } from "./config"
 import type {
@@ -588,14 +589,21 @@ const TIMER_MINUTEN = 15
 //
 // Hiervoor stond er niets, en dus kwamen alle injects van een ronde op het
 // startsignaal tegelijk binnen: vier berichten in één klap, en daarna stilte.
-// Dat is niet hoe een incident voelt. De eerste komt direct — dat is de
-// setup-inject die de beslisvraag aankondigt, daar begint het overleg mee — en
-// de rest schuift in tot tweederde van de ronde, zodat er na het laatste
-// bericht nog tijd is om te wegen en te kiezen.
+// Dat is niet hoe een incident voelt.
+//
+// De spreiding loopt over de inject-fase, niet over de hele ronde. Dat was
+// eerst tweederde van de rondetijd, en dat was fout: bij een ronde van vijftien
+// minuten is de inject-fase maar 96 seconden (gewicht 0,10 in
+// ROUND_PHASE_TIMINGS), dus berichten die op 9:54 landden kwamen tijdens de
+// discussie of zelfs tijdens het kiezen binnen. De berichten horen te vallen
+// terwijl het team nog aan het lezen is.
+//
+// 85% van de fase, zodat het laatste bericht er is vóórdat de fase omslaat.
 function aflevermoment(slot: number, aantal: number, minuten: number): number {
   if (slot === 0 || aantal <= 1) return 0
-  const laatste = Math.round(minuten * 60 * 0.66)
-  return Math.round((laatste * slot) / (aantal - 1))
+  const injectFase = computeRoundPhaseDurations(minuten * 60).inject
+  const venster = Math.round(injectFase * 0.85)
+  return Math.round((venster * slot) / (aantal - 1))
 }
 
 // Verdeelt `feit` en `aanname` over alle injects zodat het aandeel feiten zo
