@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { Plus, Search } from "lucide-react"
+import { Building2, Loader2, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { AdminClient } from "@/lib/admin/clients"
+import { EIGEN_ORGANISATIE_SEED, EYE_SECURITY_CLIENT_ID } from "@/lib/admin/seed-clients"
 import { ROLE_META } from "@/lib/types"
 
 async function fetchClients(): Promise<AdminClient[]> {
@@ -20,6 +21,7 @@ export function ClientsList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
+  const [bezig, setBezig] = useState(false)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -35,6 +37,26 @@ export function ClientsList() {
   }, [])
 
   useEffect(() => { void reload() }, [reload])
+
+  // Seed-endpoint, niet het gewone aanmaken: dat slaat bestaande id's over,
+  // dus twee keer klikken maakt geen tweede Eye Security.
+  async function maakEigenOrganisatie() {
+    setBezig(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/admin/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seed: EIGEN_ORGANISATIE_SEED }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      await reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBezig(false)
+    }
+  }
 
   const realClients = clients.filter(c => !c.isTestClient)
   const filtered = realClients.filter(c => {
@@ -52,11 +74,28 @@ export function ClientsList() {
             {realClients.length} klant{realClients.length === 1 ? "" : "en"}
           </p>
         </div>
-        <Link href="/admin/clients/new">
-          <Button size="sm" className="gap-1.5">
-            <Plus className="size-3.5" /> Nieuwe klant
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* De eigen organisatie met één klik, want de gegevens zijn bekend en
+              het Eye Security-scenario hangt aan dit klant-id. Verschijnt alleen
+              zolang hij er niet staat. */}
+          {!loading && !clients.some(c => c.id === EYE_SECURITY_CLIENT_ID) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={bezig}
+              onClick={() => void maakEigenOrganisatie()}
+            >
+              {bezig ? <Loader2 className="size-3.5 animate-spin" /> : <Building2 className="size-3.5" />}
+              Eye Security aanmaken
+            </Button>
+          )}
+          <Link href="/admin/clients/new">
+            <Button size="sm" className="gap-1.5">
+              <Plus className="size-3.5" /> Nieuwe klant
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {realClients.length > 0 && (
