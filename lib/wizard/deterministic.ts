@@ -672,19 +672,30 @@ const TIMER_MINUTEN = 15
 // startsignaal tegelijk binnen: vier berichten in één klap, en daarna stilte.
 // Dat is niet hoe een incident voelt.
 //
-// De spreiding loopt over de inject-fase, niet over de hele ronde. Dat was
-// eerst tweederde van de rondetijd, en dat was fout: bij een ronde van vijftien
-// minuten is de inject-fase maar 96 seconden (gewicht 0,10 in
-// ROUND_PHASE_TIMINGS), dus berichten die op 9:54 landden kwamen tijdens de
-// discussie of zelfs tijdens het kiezen binnen. De berichten horen te vallen
-// terwijl het team nog aan het lezen is.
+// Het venster is twee keer eerder fout gekozen en beide keren om een andere
+// reden. Eerst tweederde van de rondetijd: dan landde een bericht om 9:54,
+// midden in het kiezen. Daarna de inject-fase alleen, en dat was erger — die
+// fase is bij vijftien minuten maar 96 seconden (gewicht 0,10 in
+// ROUND_PHASE_TIMINGS), dus acht berichten kwamen met gaten van elf seconden
+// binnen. Dat is van de bank af niet te onderscheiden van allemaal tegelijk,
+// en zo kwam de klacht ook terug.
 //
-// 85% van de fase, zodat het laatste bericht er is vóórdat de fase omslaat.
+// Nu: de inject-fase plus de discussie, want dat is het deel van de ronde
+// waarin het team met déze stof bezig is. Bij vijftien minuten is dat 520
+// seconden met gaten van ruim een minuut — je voelt er een bericht bijkomen.
+// Het stopt vóór de beslisfase: terwijl ze kiezen hoort er niets nieuws meer
+// binnen te vallen, want dan weegt de helft van de zaal iets anders dan de
+// andere helft.
 function aflevermoment(slot: number, aantal: number, minuten: number): number {
   if (slot === 0 || aantal <= 1) return 0
-  const injectFase = computeRoundPhaseDurations(minuten * 60).inject
-  const venster = Math.round(injectFase * 0.85)
-  return Math.round((venster * slot) / (aantal - 1))
+  return Math.round((spreidVenster(minuten) * slot) / (aantal - 1))
+}
+
+// Het deel van de ronde waarin berichten mogen landen: inject plus discussie,
+// op 85% zodat het laatste bericht even kan bezinken voor de beslisfase.
+export function spreidVenster(minuten: number): number {
+  const fasen = computeRoundPhaseDurations(minuten * 60)
+  return Math.round((fasen.inject + fasen.discussion) * 0.85)
 }
 
 // Verdeelt `feit` en `aanname` over alle injects zodat het aandeel feiten zo

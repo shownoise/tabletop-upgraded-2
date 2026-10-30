@@ -278,13 +278,21 @@ export function ruleEnoughExplanation(graph: ScenarioGraph): RuleResult {
 // berichten in één klap binnen en daarna was het stil. Zo voelt een incident
 // niet, en het haalt de druk weg die de ronde juist moet opbouwen.
 //
-// Twee eisen, want één bleek te zwak. Eerst: bij twee of meer injects komt er
-// minstens één later binnen. En daarnaast: niet twee berichten op dezelfde
-// seconde, want dan is het alsnog een stapel — alleen een kleinere. De
-// uitzondering is seconde 0: dáár mogen meerdere staan, omdat de gedeelde
-// setup-inject en het rol-bericht van wie meteen aan zet is samen de ronde
-// openen. Alles daarna hoort zijn eigen moment te hebben.
+// Drie eisen, want elke losse eis bleek te zwak. Eerst: bij twee of meer
+// injects komt er minstens één later binnen. Daarnaast: niet twee berichten op
+// dezelfde seconde. De uitzondering is seconde 0 — dáár mogen meerdere staan,
+// omdat de gedeelde setup-inject en het rol-bericht van wie meteen aan zet is
+// samen de ronde openen.
+//
+// En als derde een minimale afstand van een halve minuut. Die eis is er omdat
+// de eerste twee gehaald werden door acht berichten op 0, 12, 23, 35, 47, 59,
+// 70 en 82 seconden: allemaal uniek, allemaal "gespreid", en in de zaal niet
+// te onderscheiden van allemaal tegelijk. Uniek is niet hetzelfde als merkbaar.
 // ───────────────────────────────────────────────────────────────────────────
+
+// Onder deze afstand leest een volgend bericht als onderdeel van het vorige.
+const MIN_GAT_SECONDEN = 30
+
 export function ruleInjectsStaggered(graph: ScenarioGraph): RuleResult {
   const problems: string[] = []
 
@@ -309,6 +317,16 @@ export function ruleInjectsStaggered(graph: ScenarioGraph): RuleResult {
         `ronde ${roundNumber}: ${botsingen.map(([s, n]) => `${n} injects op seconde ${s}`).join(', ')}`,
       )
     }
+
+    const naOpening = [...new Set(momenten.filter(s => s > 0))].sort((a, b) => a - b)
+    const teKort: string[] = []
+    for (let i = 1; i < naOpening.length; i++) {
+      const gat = naOpening[i] - naOpening[i - 1]
+      if (gat < MIN_GAT_SECONDEN) teKort.push(`${naOpening[i - 1]}s→${naOpening[i]}s (${gat}s)`)
+    }
+    if (teKort.length > 0) {
+      problems.push(`ronde ${roundNumber}: te kort op elkaar — ${teKort.join(', ')}`)
+    }
   }
   if (problems.length === 0) return { ok: true }
   return {
@@ -316,11 +334,12 @@ export function ruleInjectsStaggered(graph: ScenarioGraph): RuleResult {
     violation: `Injects komen niet gespreid binnen: ${problems.join('; ')}`,
     hint:
       'Zet `deliverySeconds` op de injects van een ronde zodat ze tijdens de ronde ' +
-      'binnendruppelen, elk op zijn eigen moment. Op seconde 0 mogen meerdere staan — de ' +
-      'gedeelde setup-inject met de beslisvraag en het rol-bericht van wie meteen aan zet ' +
-      'is openen samen de ronde. Verdeel de rest over de inject-fase: dat is het eerste ' +
-      'tiende deel van de rondetijd (bij vijftien minuten ongeveer 96 seconden), want ' +
-      'daarna gaat het scherm naar de discussie en komt een bericht als verrassing.',
+      'binnendruppelen, met minstens een halve minuut tussen twee berichten. Op seconde 0 ' +
+      'mogen meerdere staan — de gedeelde setup-inject met de beslisvraag en het rol-bericht ' +
+      'van wie meteen aan zet is openen samen de ronde. Verdeel de rest over de inject-fase ' +
+      'plus de discussie: bij vijftien minuten is dat de eerste ruim acht minuten. Niet over ' +
+      'de inject-fase alleen — die is maar 96 seconden, en dan komt alles alsnog in één klap. ' +
+      'En niet daarna: terwijl het team kiest hoort er niets nieuws binnen te vallen.',
   }
 }
 
