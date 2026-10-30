@@ -127,6 +127,14 @@ export type SpecDomain =
 export interface DecisionNodeData {
   kind: "decision"
   prompt: string
+  // Extra uitleg bij de vraag, zichtbaar voor de deelnemer. De prompt alleen
+  // was vaak te kort om de context eruit te halen: wat is er al bekend, wat
+  // staat er op het spel, waar gaat deze keuze níet over.
+  context?: string
+  // Waarom de beste optie beter is dan de tweede. Alleen voor de facilitator,
+  // en bewust op het beslispunt in plaats van per optie: het verschil tússen
+  // twee opties is precies wat je in de nabespreking uitlegt.
+  facilitatorRationale?: string
   measuredBy: "participant_choice" | "facilitator_trigger"
   triggerRole?: Role
   // Deel A §4.2a — operationeel domein van dit beslispunt. Bepaalt effectiveOwner
@@ -140,6 +148,10 @@ export interface DecisionNodeData {
   options: Array<{
     id: string
     label: string
+    // Wat deze optie concreet betekent, zichtbaar voor de deelnemer. Het label
+    // is één regel in een rijtje van vier; zonder deze toelichting koos men op
+    // toon in plaats van op inhoud.
+    description?: string
     roleActionId?: string
     // Only participants with this role see this option as selectable. Undefined =
     // any role. If the role is not present, distributeRoles() reassigns; the option

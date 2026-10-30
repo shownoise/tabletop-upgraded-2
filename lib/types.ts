@@ -774,6 +774,9 @@ export interface FiledMelding {
 export interface ActiveDecisionPending {
   optionId: string
   optionLabel: string
+  // Wat deze optie concreet betekent. Mag vóór de keuze mee: het legt uit wat
+  // je doet, niet wat het oplevert. Dat laatste blijft achter de review-poort.
+  optionDescription?: string
   allowedRole?: Role
   // Alleen ingevuld in review-fase — de reveal.
   qualityRank?: ChoiceQuality
@@ -805,6 +808,12 @@ export interface ActiveDecisionParticipantPending {
 export interface ActiveDecisionState {
   nodeId: string
   prompt: string
+  // Extra uitleg bij de vraag, voor de deelnemer.
+  context?: string
+  // Waarom de beste optie beter is dan de tweede. Alleen voor de facilitator,
+  // dus pas in de review-fase geprojecteerd — vóór de keuze zou dit het
+  // antwoord weggeven.
+  facilitatorRationale?: string
   perRole: boolean
   // Full visible option set (as today, needed for facilitator view + backwards).
   options: ActiveDecisionPending[]

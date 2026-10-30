@@ -110,12 +110,18 @@ export interface WizardPlanRound {
 export interface WizardPlanDecision {
   afterRoundIndex: number
   prompt: string
+  // Extra uitleg bij de vraag, voor de deelnemer. Zie DecisionNodeData.context.
+  context?: string
+  // Waarom de beste optie beter is dan de tweede, voor de facilitator.
+  facilitatorRationale?: string
   perRole?: boolean
   // Phase 9 — stable author-id so injects can link to this decision via
   // setsUpDecisionNodeId. Optional — falls back to auto-generated id.
   authorId?: string
   options: Array<{
     label: string
+    // Wat deze optie concreet betekent, voor de deelnemer.
+    description?: string
     linksToRoleActionId?: string
     // "round:<index>" | "outcome:<key>". If omitted, defaults to the next round
     // in sequence (or the first outcome if there is no next round). Useful when
@@ -359,6 +365,7 @@ export function planToGraph(plan: WizardPlan, options: PlanToGraphOptions = {}):
       const options = decision.options.map(opt => ({
         id: nid("opt"),
         label: opt.label,
+        description: opt.description,
         roleActionId: opt.linksToRoleActionId,
         allowedRole: opt.allowedRole,
         outcomeVector: opt.outcomeVector,
@@ -373,6 +380,8 @@ export function planToGraph(plan: WizardPlan, options: PlanToGraphOptions = {}):
       const data: DecisionNodeData = {
         kind: "decision",
         prompt: decision.prompt,
+        context: decision.context,
+        facilitatorRationale: decision.facilitatorRationale,
         measuredBy: "participant_choice",
         perRole: decision.perRole ?? true,
         options,

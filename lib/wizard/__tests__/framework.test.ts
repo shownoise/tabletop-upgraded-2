@@ -73,28 +73,40 @@ function baseGraph(): ScenarioGraph {
     facilitatorNotes: { discussionGoal: 'Bespreek de vervolgstappen.', keyQuestions: [], hints: [], expectedDecisions: [], redFlags: [] },
   }
 
+  // De velden voor rule14 (kwaliteitsverdeling) en rule15 (genoeg toelichting)
+  // staan hier expliciet in: met twee opties per rol hoort er precies één
+  // `best` te zijn en geen `good`.
+  const TOELICHTING = 'Wat je bij deze optie concreet doet, en wat je daarmee bewust laat liggen voor deze ronde.'
+  const COMMENTAAR = 'Vraag het team welk verlies zij hiermee bewust accepteren, en wie dat besluit neemt.'
+  const CONTEXT = "Wat er nu ligt is nog niet rond en de klok loopt al. Deze keuze gaat over de eerste stap, niet over het herstel daarna."
+  const RATIONALE = 'De beste optie pakt de besmetting aan terwijl de klok loopt; de andere koopt rust die je later betaalt.'
+
   const decision1: DecisionNodeData = {
     kind: 'decision',
-    prompt: 'Wat doen we?',
+    prompt: 'Classificeren we dit signaal als incident, en wie legt dat besluit nu vast?',
+    context: CONTEXT,
+    facilitatorRationale: RATIONALE,
     measuredBy: 'participant_choice',
     perRole: true,
     options: [
-      { id: 'o1', label: 'Isoleer verdacht segment', allowedRole: 'ciso', outcomeVector: vec('CONT', 2) },
-      { id: 'o2', label: 'Wacht af',                allowedRole: 'ciso', outcomeVector: { CONT: -1, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: 0 } },
-      { id: 'o3', label: 'Roep crisisstaat uit',    allowedRole: 'ceo',  outcomeVector: vec('VER', 2) },
-      { id: 'o4', label: 'Wacht op meer info',      allowedRole: 'ceo',  outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: -1, KOS: 0 } },
+      { id: 'o1', label: 'Isoleer verdacht segment', allowedRole: 'ciso', outcomeVector: vec('CONT', 2), qualityRank: 'best',  description: TOELICHTING, facilitatorCommentary: COMMENTAAR },
+      { id: 'o2', label: 'Wacht af',                allowedRole: 'ciso', outcomeVector: { CONT: -1, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: 0 }, qualityRank: 'wrong', description: TOELICHTING, facilitatorCommentary: COMMENTAAR },
+      { id: 'o3', label: 'Roep crisisstaat uit',    allowedRole: 'ceo',  outcomeVector: vec('VER', 2), qualityRank: 'best',  description: TOELICHTING, facilitatorCommentary: COMMENTAAR },
+      { id: 'o4', label: 'Wacht op meer info',      allowedRole: 'ceo',  outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: -1, KOS: 0 }, qualityRank: 'wrong', description: TOELICHTING, facilitatorCommentary: COMMENTAAR },
     ],
   }
   const decision2: DecisionNodeData = {
     kind: 'decision',
-    prompt: 'Vervolgstappen?',
+    prompt: 'Welke vervolgstap zetten we nu, en welk spoor laten we daarmee liggen?',
+    context: CONTEXT,
+    facilitatorRationale: RATIONALE,
     measuredBy: 'participant_choice',
     perRole: true,
     options: [
-      { id: 'p1', label: 'Betrek juristen', allowedRole: 'ciso', outcomeVector: vec('JUR', 2) },
-      { id: 'p2', label: 'Ga zelfstandig verder', allowedRole: 'ciso', outcomeVector: { CONT: 1, FOR: 0, BC: 0, JUR: -1, VER: 0, KOS: 0 } },
-      { id: 'p3', label: 'Informeer board',  allowedRole: 'ceo', outcomeVector: vec('VER', 1) },
-      { id: 'p4', label: 'Wacht op advies',  allowedRole: 'ceo', outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: -1, KOS: 0 } },
+      { id: 'p1', label: 'Betrek juristen', allowedRole: 'ciso', outcomeVector: vec('JUR', 2), qualityRank: 'best',  description: TOELICHTING, facilitatorCommentary: COMMENTAAR },
+      { id: 'p2', label: 'Ga zelfstandig verder', allowedRole: 'ciso', outcomeVector: { CONT: 1, FOR: 0, BC: 0, JUR: -1, VER: 0, KOS: 0 }, qualityRank: 'wrong', description: TOELICHTING, facilitatorCommentary: COMMENTAAR },
+      { id: 'p3', label: 'Informeer board',  allowedRole: 'ceo', outcomeVector: vec('VER', 1), qualityRank: 'best',  description: TOELICHTING, facilitatorCommentary: COMMENTAAR },
+      { id: 'p4', label: 'Wacht op advies',  allowedRole: 'ceo', outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: -1, KOS: 0 }, qualityRank: 'wrong', description: TOELICHTING, facilitatorCommentary: COMMENTAAR },
     ],
   }
 
@@ -166,7 +178,7 @@ function baseGraph(): ScenarioGraph {
 }
 
 describe("wizard framework — passing baseline", () => {
-  it("baseGraph + baseConfig passes all 14 rules", () => {
+  it("baseGraph + baseConfig passes all 16 rules", () => {
     const graph = baseGraph()
     const config = baseConfig()
     const result = validateFramework(graph, config)
@@ -174,7 +186,7 @@ describe("wizard framework — passing baseline", () => {
       throw new Error(`baseline expected to pass but got: ${result.failures.map(f => f.ruleId + ': ' + f.violation).join(' | ')}`)
     }
     expect(result.ok).toBe(true)
-    expect(FRAMEWORK_RULE_IDS.length).toBe(14)
+    expect(FRAMEWORK_RULE_IDS.length).toBe(16)
   })
 })
 

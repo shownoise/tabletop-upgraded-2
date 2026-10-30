@@ -320,6 +320,13 @@ export function StepChoice({
                       </span>
                     )}
                   </span>
+                  {/* Wat je concreet doet. Zonder deze regel lazen vier labels
+                      als vier varianten van hetzelfde en koos men op toon. */}
+                  {opt.optionDescription && (
+                    <span className="text-xs leading-relaxed text-muted-foreground">
+                      {opt.optionDescription}
+                    </span>
+                  )}
                   {opt.outcomeVector ? <DimensionDirections vector={opt.outcomeVector} /> : null}
                   {!canSubmit && !done && (
                     <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

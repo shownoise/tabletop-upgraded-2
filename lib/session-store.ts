@@ -414,6 +414,8 @@ function projectActiveDecision(session: SessionState): import("./types").ActiveD
   const projectedOptions: import("./types").ActiveDecisionPending[] = visibleOptions.map(o => ({
     optionId: o.id,
     optionLabel: o.label,
+    // Mag vóór de keuze mee: zegt wat je doet, niet wat het oplevert.
+    optionDescription: o.description,
     allowedRole: o.allowedRole,
     ...(isReview
       ? {
@@ -471,6 +473,11 @@ function projectActiveDecision(session: SessionState): import("./types").ActiveD
   return {
     nodeId: dnode.id,
     prompt: dd.prompt,
+    context: dd.context,
+    // De vergelijking tussen beste en tweede optie is facilitator-materiaal.
+    // Vóór de review zou hij het antwoord weggeven, dus hij hangt achter
+    // dezelfde poort als het commentaar en de vectoren.
+    ...(isReview ? { facilitatorRationale: dd.facilitatorRationale } : {}),
     perRole: true,
     options: projectedOptions,
     ...(Object.keys(pendingByParticipant).length > 0 ? { pendingByParticipant } : {}),

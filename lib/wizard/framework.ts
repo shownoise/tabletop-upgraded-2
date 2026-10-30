@@ -151,6 +151,125 @@ export function ruleOptionsPerRoleMatchConfig(graph: ScenarioGraph, config: Wiza
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Rule 14 — kwaliteitsverdeling per rol: één beste, één tweede, rest slecht
+//
+// Waarom dit een regel moet zijn: er stond niets dat dit afdwong. De
+// deterministische bouwer roteerde de middelste opties, dus je kreeg per ronde
+// soms twee keer `good` en soms geen enkele — en de LLM-wizard had alleen
+// prozaregels. Voor de nabespreking is dit de kern: je kunt alleen uitleggen
+// waarom één antwoord beter is als er precies één beste antwoord is.
+//
+// De verdeling, per rol per beslispunt:
+//   2 opties  → 1× best, 1× poor|wrong
+//   3 opties  → 1× best, 1× good, rest poor|wrong
+//   4 of meer → 1× best, 1× good, rest poor|wrong (minstens één `wrong`)
+// Impliciete opties ("geen besluit") tellen niet mee: die horen bij elke rol.
+// ───────────────────────────────────────────────────────────────────────────
+export function ruleQualityRanking(graph: ScenarioGraph): RuleResult {
+  const problems: string[] = []
+  for (const d of decisionNodes(graph)) {
+    if (!d.data.perRole) continue
+    const byRole = new Map<Role, DecisionNodeData['options']>()
+    for (const opt of d.data.options) {
+      if (opt.implicit || !opt.allowedRole) continue
+      const rij = byRole.get(opt.allowedRole) ?? []
+      rij.push(opt)
+      byRole.set(opt.allowedRole, rij)
+    }
+    for (const [role, opties] of byRole) {
+      const telling = { best: 0, good: 0, poor: 0, wrong: 0, leeg: 0 }
+      for (const o of opties) {
+        if (!o.qualityRank) telling.leeg++
+        else telling[o.qualityRank]++
+      }
+      const waar = `${d.id} ${role}`
+      if (telling.leeg > 0) {
+        problems.push(`${waar}: ${telling.leeg} optie(s) zonder qualityRank`)
+        continue
+      }
+      if (telling.best !== 1) {
+        problems.push(`${waar}: ${telling.best}× best (hoort 1 te zijn)`)
+      }
+      const verwachtGood = opties.length >= 3 ? 1 : 0
+      if (telling.good !== verwachtGood) {
+        problems.push(`${waar}: ${telling.good}× good (hoort ${verwachtGood} te zijn bij ${opties.length} opties)`)
+      }
+      if (opties.length >= 4 && telling.wrong < 1) {
+        problems.push(`${waar}: geen enkele optie met wrong, bij ${opties.length} opties`)
+      }
+    }
+  }
+  if (problems.length === 0) return { ok: true }
+  return {
+    ok: false,
+    violation: `Kwaliteitsverdeling klopt niet: ${problems.join('; ')}`,
+    hint:
+      'Geef elke rol per beslispunt precies één optie met qualityRank="best" en ' +
+      '(bij 3 of meer opties) precies één met "good". Alle overige opties zijn ' +
+      '"poor" of "wrong", en bij 4 of meer opties is er minstens één "wrong". ' +
+      'De impliciete "geen besluit"-optie heeft geen qualityRank nodig.',
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Rule 15 — er staat genoeg tekst om een keuze te kunnen wegen
+//
+// Live bleek dat je uit een optielabel van vijf woorden de context niet kon
+// halen, en dat de facilitator geen materiaal had om uit te leggen waarom het
+// ene antwoord beter was dan het andere. Deze regel eist dat die velden er
+// zijn én dat ze iets zeggen — een lengtedrempel, want een leeg veld en een
+// veld met "nvt" zijn hetzelfde probleem.
+// ───────────────────────────────────────────────────────────────────────────
+const MIN_PROMPT = 60
+const MIN_CONTEXT = 80
+// Label en description samen, niet de description apart: een label van vijf
+// woorden vraagt om een toelichting, maar "Eye Security-retainer nu al
+// activeren — vóór bevestiging" zegt het al. De eis is dat de deelnemer de
+// keuze kan wégen, niet dat er een veld gevuld is.
+const MIN_OPTIE_TOTAAL = 80
+const MIN_COMMENTAAR = 40
+
+export function ruleEnoughExplanation(graph: ScenarioGraph): RuleResult {
+  const problems: string[] = []
+  const kort = (s: string | undefined, min: number) => (s ?? '').trim().length < min
+
+  for (const d of decisionNodes(graph)) {
+    if (kort(d.data.prompt, MIN_PROMPT)) {
+      problems.push(`${d.id}: beslisvraag korter dan ${MIN_PROMPT} tekens`)
+    }
+    if (kort(d.data.context, MIN_CONTEXT)) {
+      problems.push(`${d.id}: geen context bij de vraag (wat ligt er, waar knelt het, waar gaat dit niet over)`)
+    }
+    // De vergelijking tussen beste en tweede optie — het materiaal voor de
+    // nabespreking. Alleen vereist als er iets te vergelijken valt.
+    const echteOpties = d.data.options.filter(o => !o.implicit)
+    if (echteOpties.length >= 3 && kort(d.data.facilitatorRationale, MIN_COMMENTAAR)) {
+      problems.push(`${d.id}: geen facilitatorRationale (waarom is de beste optie beter dan de tweede)`)
+    }
+    for (const o of echteOpties) {
+      const samen = `${o.label ?? ''} ${o.description ?? ''}`.trim()
+      if (samen.length < MIN_OPTIE_TOTAAL) {
+        problems.push(`${d.id}/${o.id}: label + description samen korter dan ${MIN_OPTIE_TOTAAL} tekens`)
+      }
+      if (kort(o.facilitatorCommentary, MIN_COMMENTAAR)) {
+        problems.push(`${d.id}/${o.id}: optie zonder facilitatorCommentary`)
+      }
+    }
+  }
+  if (problems.length === 0) return { ok: true }
+  return {
+    ok: false,
+    violation: `Te weinig toelichting: ${problems.slice(0, 12).join('; ')}${problems.length > 12 ? ` (+${problems.length - 12} meer)` : ''}`,
+    hint:
+      `Elke beslisvraag heeft een prompt van minstens ${MIN_PROMPT} tekens en een context van ` +
+      `minstens ${MIN_CONTEXT} tekens (wat ligt er, waar knelt het, waar gaat deze keuze niet over). ` +
+      `Elke optie heeft label + description die samen minstens ${MIN_OPTIE_TOTAAL} tekens zijn en ` +
+      `zeggen wat je concreet doet, plus een facilitatorCommentary van minstens ${MIN_COMMENTAAR} ` +
+      `tekens. Per beslispunt staat in facilitatorRationale waarom de beste optie beter is dan de tweede.`,
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Rule 3 — no strictly-dominating option per decision
 // ───────────────────────────────────────────────────────────────────────────
 export function ruleNoDominantOption(graph: ScenarioGraph): RuleResult {
@@ -721,6 +840,8 @@ const RULES: readonly FrameworkRule[] = [
   { id: 'rule11_hidden_weakness',       description: 'Minstens één rol heeft roleBriefings.<role>.playbookGaps non-empty.',                            fn: (g)     => ruleHiddenWeaknessAuthored(g) },
   { id: 'rule12_language_consistency',  description: 'Geen typische Engelse UI-woorden in NL-vrije-teksten.',                                          fn: (g)     => ruleLanguageConsistency(g) },
   { id: 'rule13_situation_no_spoiler',  description: 'De situatieschets van een ronde verklapt de injects van die ronde niet.',                        fn: (g)     => ruleSituationDoesNotRevealInjects(g) },
+  { id: 'rule14_quality_ranking',       description: 'Per rol per beslispunt: precies één beste optie, één tweede-beste, rest slecht.',               fn: (g)     => ruleQualityRanking(g) },
+  { id: 'rule15_enough_explanation',    description: 'Beslisvraag, opties en facilitator-motivatie hebben genoeg tekst om een keuze te wegen.',        fn: (g)     => ruleEnoughExplanation(g) },
 ]
 
 export function validateFramework(graph: ScenarioGraph, config: WizardConfig): FrameworkResult {
