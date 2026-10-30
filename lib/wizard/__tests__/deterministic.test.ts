@@ -123,10 +123,10 @@ describe('buildDraftGraph — framework', () => {
     }
   })
 
-  it('toetst werkelijk alle zestien regels', () => {
+  it('toetst werkelijk alle zeventien regels', () => {
     // Vangt af dat een regel stilletjes uit de set verdwijnt en de test
     // daarmee niets meer zegt.
-    expect(FRAMEWORK_RULE_IDS).toHaveLength(16)
+    expect(FRAMEWORK_RULE_IDS).toHaveLength(17)
   })
 
   it('levert een graph zonder blokkerende structuurfouten', () => {

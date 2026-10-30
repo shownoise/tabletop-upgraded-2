@@ -98,6 +98,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r1-msp-alert",
+          deliverySeconds: 198,
           type: "alert", channel: "siem", urgency: "high",
           title: "WestNet MSP-dashboard — Ongebruikelijke schrijfactiviteit FS-01 (AVG/NIS2-relevant)",
           content:
@@ -115,6 +116,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r1-parent-sms",
+          deliverySeconds: 396,
           type: "social", channel: "sms", urgency: "low",
           title: "Ouders melden vreemde SMS over wachtwoord-reset",
           content:
@@ -255,6 +257,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r2-westnet-technical",
+          deliverySeconds: 198,
           type: "technical", channel: "email", urgency: "high",
           title: "WestNet — Voorlopig technisch beeld",
           content:
@@ -276,6 +279,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r2-magister-notify",
+          deliverySeconds: 396,
           type: "regulatory", channel: "email", urgency: "high",
           title: "Reminder: Magister-contract kent 48u breach-notification. De verzekeringspolis eist parallel activatie.",
           content:
@@ -291,6 +295,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r2-teacher-panic",
+          deliverySeconds: 594,
           type: "internal", channel: "whatsapp", urgency: "medium",
           title: "Docentengroep op WhatsApp — paniek + roddel",
           content:
@@ -436,6 +441,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r3-parent-facebook",
+          deliverySeconds: 149,
           type: "social", channel: "raw", urgency: "medium",
           title: "Screenshots uit ouders-Facebookgroep",
           content:
@@ -447,6 +453,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r3-ap-guidance",
+          deliverySeconds: 297,
           type: "regulatory", channel: "email", urgency: "high",
           title: "AP-portaal — Ontvangstbevestiging + aanvullende vragen (AVG art. 33)",
           content:
@@ -491,6 +498,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           // over rooster, toetsweek en docentenlijn zonder dat iemand hen in deze
           // ronde iets heeft verteld — hun opties stonden er wel, de aanleiding niet.
           id: "r3-locatiedirecteuren",
+          deliverySeconds: 594,
           type: "internal", channel: "email", urgency: "high",
           title: "Locatiedirecteuren — hoe lang houdt papier het, en wat zeggen docenten bij de poort?",
           content:
@@ -649,6 +657,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r4-univé-scope",
+          deliverySeconds: 198,
           type: "executive", channel: "email", urgency: "high",
           title: "Univé Zakelijk — Vereiste incident-scope",
           content:
@@ -668,6 +677,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r4-parent-ap-complaint",
+          deliverySeconds: 396,
           type: "regulatory", channel: "email", urgency: "medium",
           title: "AP — ontvangst klacht van betrokkene",
           content:
@@ -683,6 +693,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           // Die rol had dus geen eigen aanleiding. De onderhandelaar vraagt hier
           // niet om een voorkeur maar om een criterium — dat is de beslisvraag.
           id: "r4-onderhandelaar-status",
+          deliverySeconds: 594,
           type: "executive", channel: "phone", urgency: "critical",
           title: "Onderhandelaar: 'geef mij het criterium, niet een voorkeur'",
           content:
@@ -823,6 +834,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r5-aob-statement",
+          deliverySeconds: 198,
           type: "media", channel: "news", urgency: "medium",
           title: "AOb-statement noemt Onderwijsvereniging Noord-Oost",
           content:
@@ -835,6 +847,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r5-teacher-refuse",
+          deliverySeconds: 396,
           type: "internal", channel: "email", urgency: "medium",
           title: "PMR vraagt of cijfer-herinvoer overuren zijn",
           content:
@@ -851,6 +864,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           // worden volgehouden, maar geen enkele inject bracht bedrijfsvoering
           // iets om dat op te baseren. Dit is zijn eigen signaal.
           id: "r5-noodproces-kraakt",
+          deliverySeconds: 594,
           type: "internal", channel: "email", urgency: "high",
           title: "Bedrijfsvoering — het noodproces kraakt, ik heb een einddatum nodig",
           content:
@@ -985,6 +999,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r6-rvt-agenda",
+          deliverySeconds: 198,
           type: "executive", channel: "email", urgency: "medium",
           title: "RvT vraagt post-mortem + governance-agenda",
           content:
@@ -1000,6 +1015,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           id: "r6-univé-claim-deadline",
+          deliverySeconds: 396,
           type: "executive", channel: "email", urgency: "medium",
           title: "Univé — Final claim deadline 3 weken",
           content:
@@ -1015,6 +1031,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
           // dat onderwerp alleen als subpunt in de brief van de RvT. De
           // stilzwijgende verlenging geeft die keuze een eigen harde datum.
           id: "r6-westnet-verlenging",
+          deliverySeconds: 594,
           type: "executive", channel: "email", urgency: "high",
           title: "WestNet ICT — verlenging per 1 januari, opzegtermijn verstrijkt 1 december",
           content:

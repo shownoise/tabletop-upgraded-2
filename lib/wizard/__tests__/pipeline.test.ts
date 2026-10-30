@@ -114,7 +114,7 @@ function passingPlan(): WizardPlan {
           {
             id: 'i2', type: 'social', urgency: 'medium', title: 'WhatsApp gerucht',
             content: 'Iemand claimt insider — bron onbekend.',
-            classification: 'aanname',
+            classification: 'aanname', deliverySeconds: 240,
             setsUpDecisionNodeId: 'd2',
           },
         ],
@@ -132,7 +132,7 @@ function passingPlan(): WizardPlan {
           {
             id: 'i4', type: 'internal', urgency: 'low', title: 'Roddel',
             content: 'Onbevestigd gerucht.',
-            classification: 'aanname',
+            classification: 'aanname', deliverySeconds: 240,
           },
         ],
       },
