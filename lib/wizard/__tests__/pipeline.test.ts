@@ -114,7 +114,7 @@ function passingPlan(): WizardPlan {
           {
             id: 'i2', type: 'social', urgency: 'medium', title: 'WhatsApp gerucht',
             content: 'Iemand claimt insider — bron onbekend.',
-            classification: 'aanname', deliverySeconds: 24,
+            classification: 'aanname', deliverySeconds: 120,
             setsUpDecisionNodeId: 'd2',
           },
           // Rol-injects (regel 17): elke rol met mandaat krijgt zijn vraag als
@@ -122,13 +122,13 @@ function passingPlan(): WizardPlan {
           {
             id: 'i1-ciso', type: 'internal', urgency: 'high', title: 'Analist belt jou',
             content: 'De dienstdoende analist aan de lijn. Noem jij dit een incident?',
-            classification: 'feit', deliverySeconds: 48,
+            classification: 'feit', deliverySeconds: 240,
             targetRoles: ['ciso'], setsUpDecisionNodeId: 'd1',
           },
           {
             id: 'i1-ceo', type: 'internal', urgency: 'high', title: 'Secretaris belt jou',
             content: 'De directiesecretaris aan de lijn. Wat autoriseer jij nu?',
-            classification: 'aanname', deliverySeconds: 72,
+            classification: 'aanname', deliverySeconds: 360,
             targetRoles: ['ceo'], setsUpDecisionNodeId: 'd1',
           },
         ],
@@ -146,18 +146,18 @@ function passingPlan(): WizardPlan {
           {
             id: 'i4', type: 'internal', urgency: 'low', title: 'Roddel',
             content: 'Onbevestigd gerucht.',
-            classification: 'aanname', deliverySeconds: 24,
+            classification: 'aanname', deliverySeconds: 120,
           },
           {
             id: 'i2-ciso', type: 'internal', urgency: 'high', title: 'Beheerder belt jou',
             content: 'De beheerder kan twee dingen en niet beide snel. Welke stap zet ik eerst?',
-            classification: 'feit', deliverySeconds: 48,
+            classification: 'feit', deliverySeconds: 240,
             targetRoles: ['ciso'], setsUpDecisionNodeId: 'd2',
           },
           {
             id: 'i2-ceo', type: 'internal', urgency: 'high', title: 'Secretaris belt jou',
             content: 'De directiesecretaris aan de lijn. Wat houd je nu nog tegen?',
-            classification: 'aanname', deliverySeconds: 72,
+            classification: 'aanname', deliverySeconds: 360,
             targetRoles: ['ceo'], setsUpDecisionNodeId: 'd2',
           },
         ],

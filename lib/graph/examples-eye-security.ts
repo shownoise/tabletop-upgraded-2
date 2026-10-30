@@ -173,7 +173,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r1-i2",
-          deliverySeconds: 16,
+          deliverySeconds: 104,
           type: "internal",
           urgency: "medium",
           title: "Piketengineer: 'ik denk dat het de certificaatrotatie is'",
@@ -191,7 +191,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r1-i3",
-          deliverySeconds: 33,
+          deliverySeconds: 208,
           type: "internal",
           urgency: "low",
           title: "Twee klanten melden trage agents",
@@ -208,7 +208,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r1-i4",
-          deliverySeconds: 49,
+          deliverySeconds: 312,
           type: "social",
           urgency: "low",
           title: "Mastodon-post over 'een Nederlandse MDR'",
@@ -234,7 +234,7 @@ const plan: WizardPlan = {
         // overgenomen.
         {
           id: "eye-r1-r-ciso",
-          deliverySeconds: 66,
+          deliverySeconds: 416,
           type: "executive",
           urgency: "critical",
           title: "De dienstdoende analist belt jou",
@@ -254,7 +254,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r1-r-it",
-          deliverySeconds: 82,
+          deliverySeconds: 520,
           type: "internal",
           urgency: "high",
           title: "De piketengineer vraagt jou om een keuze",
@@ -344,7 +344,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r2-i2",
-          deliverySeconds: 18,
+          deliverySeconds: 117,
           type: "executive",
           urgency: "high",
           title: "Klant vraagt of zijn omgeving veilig is",
@@ -362,7 +362,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r2-i3",
-          deliverySeconds: 36,
+          deliverySeconds: 233,
           type: "internal",
           urgency: "medium",
           title: "Accountmanagement: 'niet melden tot we zeker zijn'",
@@ -379,7 +379,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r2-i4",
-          deliverySeconds: 54,
+          deliverySeconds: 350,
           type: "internal",
           urgency: "low",
           title: "Analist meldt oude verkenning in de logs",
@@ -397,7 +397,7 @@ const plan: WizardPlan = {
         // ── Rol-injects: de beslisvraag komt bij elke rol apart binnen ──
         {
           id: "eye-r2-r-ciso",
-          deliverySeconds: 71,
+          deliverySeconds: 466,
           type: "technical",
           urgency: "critical",
           title: "De IR-lead wil één lijn van jou",
@@ -418,7 +418,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r2-r-ops",
-          deliverySeconds: 89,
+          deliverySeconds: 583,
           type: "internal",
           urgency: "high",
           title: "Je dienstleiding vraagt hoe de dag eruitziet",
@@ -438,7 +438,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r2-r-ceo",
-          deliverySeconds: 107,
+          deliverySeconds: 699,
           type: "executive",
           urgency: "high",
           title: "De commercieel directeur wil dekking van jou",
@@ -528,7 +528,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r3-i2",
-          deliverySeconds: 18,
+          deliverySeconds: 117,
           type: "media",
           urgency: "high",
           title: "Vakjournalist heeft het verhaal",
@@ -545,7 +545,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r3-i3",
-          deliverySeconds: 36,
+          deliverySeconds: 233,
           type: "internal",
           urgency: "medium",
           title: "Concept-klantbericht gaat rond",
@@ -562,7 +562,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r3-i4",
-          deliverySeconds: 54,
+          deliverySeconds: 350,
           type: "executive",
           urgency: "medium",
           title: "Klant dreigt met opzegging",
@@ -579,7 +579,7 @@ const plan: WizardPlan = {
         // ── Rol-injects: de beslisvraag komt bij elke rol apart binnen ──
         {
           id: "eye-r3-r-legal",
-          deliverySeconds: 71,
+          deliverySeconds: 466,
           type: "regulatory",
           urgency: "critical",
           title: "De functionaris gegevensbescherming legt het bij jou neer",
@@ -600,7 +600,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r3-r-comms",
-          deliverySeconds: 89,
+          deliverySeconds: 583,
           type: "media",
           urgency: "critical",
           title: "Je woordvoerder heeft een deadline en een fout",
@@ -620,7 +620,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r3-r-ceo",
-          deliverySeconds: 107,
+          deliverySeconds: 699,
           type: "executive",
           urgency: "high",
           title: "De bestuurssecretaris vraagt wie er spreekt",
@@ -708,7 +708,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r4-i2",
-          deliverySeconds: 18,
+          deliverySeconds: 117,
           type: "internal",
           urgency: "high",
           title: "Verzekeraar vraagt om het dossier",
@@ -724,7 +724,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r4-i3",
-          deliverySeconds: 36,
+          deliverySeconds: 233,
           type: "internal",
           urgency: "high",
           title: "Twee analisten zijn 30 uur op",
@@ -741,7 +741,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r4-i4",
-          deliverySeconds: 54,
+          deliverySeconds: 350,
           type: "social",
           urgency: "low",
           title: "Concurrent gebruikt het verhaal",
@@ -758,7 +758,7 @@ const plan: WizardPlan = {
         // ── Rol-injects: de beslisvraag komt bij elke rol apart binnen ──
         {
           id: "eye-r4-r-ciso",
-          deliverySeconds: 71,
+          deliverySeconds: 466,
           type: "technical",
           urgency: "critical",
           title: "De IR-lead moet weten waar zijn mensen heen gaan",
@@ -778,7 +778,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r4-r-cfo",
-          deliverySeconds: 89,
+          deliverySeconds: 583,
           type: "executive",
           urgency: "high",
           title: "De risicomanager wijst je op een klok die al loopt",
@@ -799,7 +799,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r4-r-ops",
-          deliverySeconds: 107,
+          deliverySeconds: 699,
           type: "internal",
           urgency: "high",
           title: "Je teamlead meldt een fout en vraagt om een besluit",
@@ -886,7 +886,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r5-i2",
-          deliverySeconds: 14,
+          deliverySeconds: 87,
           type: "executive",
           urgency: "medium",
           title: "Geraakte klant wil een verbeterplan zien",
@@ -901,7 +901,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r5-i3",
-          deliverySeconds: 27,
+          deliverySeconds: 173,
           type: "internal",
           urgency: "low",
           title: "Voorstel: securityweek organiseren",
@@ -916,7 +916,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r5-i4",
-          deliverySeconds: 41,
+          deliverySeconds: 260,
           type: "internal",
           urgency: "medium",
           title: "Kosten tot nu toe",
@@ -934,7 +934,7 @@ const plan: WizardPlan = {
         // ── Rol-injects: de beslisvraag komt bij elke rol apart binnen ──
         {
           id: "eye-r5-r-ceo",
-          deliverySeconds: 55,
+          deliverySeconds: 347,
           type: "executive",
           urgency: "high",
           title: "De bestuurssecretaris wil één regel met een naam erbij",
@@ -954,7 +954,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r5-r-ciso",
-          deliverySeconds: 68,
+          deliverySeconds: 433,
           type: "technical",
           urgency: "high",
           title: "De platformarchitect ziet het account terug",
@@ -975,7 +975,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r5-r-hr",
-          deliverySeconds: 82,
+          deliverySeconds: 520,
           type: "internal",
           urgency: "medium",
           title: "De teamlead vraagt wat er met zijn mensen gebeurt",

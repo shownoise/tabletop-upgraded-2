@@ -12,6 +12,7 @@ import { randomBytes } from "crypto"
 import { resolveRoles } from "./scoring/role-resolution"
 import { toSpecRole } from "./graph/role-adapter"
 import { analyzeGraph } from "./graph/analyze"
+import { spreidInjectsIndienNodig } from "./graph/inject-spreiding"
 import { evaluateChasersOnRoundStart, stepFromNode, type EngineTrigger, type StepResult } from "./graph/engine"
 import { cumulativeScore, selectOutcomeByScore } from "./graph/outcome-selector"
 import type { DecisionNodeData } from "./graph/types"
@@ -552,8 +553,13 @@ export async function createSession(
 ): Promise<SessionState> {
   if (!scenario) throw new Error("createSession requires a scenario — legacy generator is removed")
   const resolvedScenario = migrateScenarioRoles(scenario)
-  const startNodeId = graph?.nodes.find(n => n.type === "start")?.id
-  const client = graph?.clientId ? await getClient(graph.clientId) : null
+  // Een scenario dat in de bibliotheek staat is een kopie van het moment dat
+  // iemand op "Gebruiken" klikte; latere hertiming raakt die kopie niet. Bij
+  // het starten van een oefening repareren we daarom rondes zonder merkbare
+  // spreiding, zodat ook een oud scenario de berichten laat binnendruppelen.
+  const resolvedGraph = graph ? spreidInjectsIndienNodig(graph) : undefined
+  const startNodeId = resolvedGraph?.nodes.find(n => n.type === "start")?.id
+  const client = resolvedGraph?.clientId ? await getClient(resolvedGraph.clientId) : null
   const resolvedConfig: ExerciseConfig = client
     ? { ...config, adminClientId: client.id, adminClientName: client.name }
     : config
@@ -578,8 +584,8 @@ export async function createSession(
     submittedDecisions: [],
     governanceFlags: [],
     documents: documents ?? [],
-    graph,
-    graphState: graph && startNodeId
+    graph: resolvedGraph,
+    graphState: resolvedGraph && startNodeId
       ? { currentNodeId: startNodeId, pathHistory: [startNodeId], branchLog: [] }
       : undefined,
     // De klant bepaalt het regime; zonder klant of bij een onbekend regimeId
