@@ -279,6 +279,10 @@ Framework-regels die de code toetst:
     - decision.context: 2 à 3 zinnen voor de deelnemer — wat er nu ligt, waar het knelt, en waar deze keuze NIET over gaat. Geen nieuwe feiten die uit een inject moeten komen.
     - decision.facilitatorRationale: minstens 40 tekens, alleen voor de facilitator — waarom de "best"-optie beter is dan de "good"-optie. Benoem de twee concreet tegen elkaar.
     - per optie: label (één regel), description (minstens 40 tekens: wat je concreet DOET, niet wat het oplevert), facilitatorCommentary (minstens 40 tekens: waarom deze keuze zo uitpakt en welke vraag je het team erover stelt), lessonLearned.
+16. Injects komen gespreid binnen: zet deliverySeconds per inject. Op seconde 0 mogen de gedeelde setup-inject en het rol-bericht samen staan; alle latere momenten zijn uniek. Verdeel binnen de inject-fase, dat is het eerste tiende van de rondetijd (bij 15 minuten ongeveer 96 seconden).
+17. Elke rol die bij een decision een optie bezit krijgt daarnaast een EIGEN inject met targetRoles: [die rol], setsUpDecisionNodeId van die decision, een afzender die bij die rol past, en als laatste zin de vraag zoals die persoon hem aan díe rol zou stellen.
+    De gedeelde setup-inject staat in de wij-vorm en noemt de teamvraag. Dat is niet genoeg: dan leest een deelnemer de beslisvraag als een mededeling aan de zaal en moet hij zelf bedenken dat hij degene is die moet antwoorden. In een echt incident bélt iemand je, met jouw vraag, omdat jij er iets mee mag.
+    Herhaal de teamvraag dus niet: de CISO wordt gebeld door de dienstdoende analist, de woordvoerder door een journalist die al drie keer heeft gebeld, de IT-manager door een beheerder die twee dingen kan en niet beide snel. Elk bericht eindigt op een vraagteken.
 
 Geef ALLEEN geldige JSON terug volgens het WizardPlan schema, geen markdown, geen uitleg.`
 }
@@ -303,7 +307,9 @@ Consistentie: hou rekening met de outline van vorige én latere rondes zodat het
 
 Rondeheader (richtlijn E, regel 13): "situation" is een korte algemene introductie van maximaal 3 à 4 zinnen plus de beslisvraag van deze ronde. Geen namen, afzenders, bedragen, tijdstempels of bevindingen die een inject van DEZE ronde nog moet brengen — die staan alleen in de inject zelf. Zet dezelfde beslisvraag als vraag met vraagteken in decision.prompt.
 
-Geef als JSON: { "round": WizardPlanRound, "decision": WizardPlanDecision } — decision is VERPLICHT, nooit null. De decision hoort bij deze ronde (afterRoundIndex=${roundIdx}) en heeft perRole=true, een "context" van 2 à 3 zinnen voor de deelnemer en een "facilitatorRationale" die de beste optie tegen de tweede afzet. Kies de rol(len) uit ${config.rolesIncluded.join(', ')} die hier mandaat hebben; alleen die rollen krijgen elk precies ${config.optionsPerRolePerRound} opties. Elke optie heeft allowedRole, een expliciete outcomeVector met de zes numerieke assen CONT/FOR/BC/JUR/VER/KOS (0 betekent geen effect op die as), een "description" van minstens 40 tekens die zegt wat je concreet doet, een "facilitatorCommentary" van minstens 40 tekens, en een qualityRank. Per rol: precies één "best", precies één "good", de rest "poor" of "wrong" — bij vier of meer opties minstens één "wrong". Gebruik author-id's zoals "r${roundIdx + 1}-d1" voor decision en "r${roundIdx + 1}-i1", "r${roundIdx + 1}-i2" voor injects. Elke inject die een decision opzet, zet setsUpDecisionNodeId op de decision's author-id.`
+Geef als JSON: { "round": WizardPlanRound, "decision": WizardPlanDecision } — decision is VERPLICHT, nooit null. De decision hoort bij deze ronde (afterRoundIndex=${roundIdx}) en heeft perRole=true, een "context" van 2 à 3 zinnen voor de deelnemer en een "facilitatorRationale" die de beste optie tegen de tweede afzet. Kies de rol(len) uit ${config.rolesIncluded.join(', ')} die hier mandaat hebben; alleen die rollen krijgen elk precies ${config.optionsPerRolePerRound} opties. Elke optie heeft allowedRole, een expliciete outcomeVector met de zes numerieke assen CONT/FOR/BC/JUR/VER/KOS (0 betekent geen effect op die as), een "description" van minstens 40 tekens die zegt wat je concreet doet, een "facilitatorCommentary" van minstens 40 tekens, en een qualityRank. Per rol: precies één "best", precies één "good", de rest "poor" of "wrong" — bij vier of meer opties minstens één "wrong". Gebruik author-id's zoals "r${roundIdx + 1}-d1" voor decision en "r${roundIdx + 1}-i1", "r${roundIdx + 1}-i2" voor injects. Elke inject die een decision opzet, zet setsUpDecisionNodeId op de decision's author-id.
+
+Verplicht per gemandateerde rol één EIGEN inject naast het gedeelde beeld (regel 17): targetRoles: [die rol], setsUpDecisionNodeId van de decision, een afzender die bij die rol hoort (analist belt de CISO, journalist belt de woordvoerder, beheerder belt de IT-manager), en als laatste zin de vraag zoals díe persoon hem aan díe rol stelt — niet de teamvraag herhaald. Zet deliverySeconds op elke inject: de gedeelde aankondiging op 0, de rolberichten en de rest elk op hun eigen seconde binnen de eerste 96 seconden van de ronde (regel 16).`
 }
 
 function buildDecisionRetryPrompt(config: WizardConfig, roundIdx: number, round: WizardPlan['rounds'][number]): string {
@@ -464,6 +470,17 @@ export async function runWizardPipeline(config: WizardConfig, opts: PipelineOpti
             block.decision = retry.decision!
             const setup = block.round.injects?.find(inject => inject.id === retry.setupInjectId)
             if (setup) setup.setsUpDecisionNodeId = block.decision.authorId
+            // De losse herkansing geeft de decision een nieuw author-id. De
+            // rol-injects van deze ronde verwijzen dan naar een id dat niet
+            // meer bestaat — of, als de LLM ze zonder link gaf, naar niets.
+            // Beide keren verliest elke rol zijn eigen beslisvraag (rule17)
+            // terwijl de tekst er wél staat. Een bericht aan één rol hoort bij
+            // de decision van zijn eigen ronde, dus hier meeverhuizen.
+            for (const inject of block.round.injects ?? []) {
+              if (inject.targetRoles?.length === 1) {
+                inject.setsUpDecisionNodeId = block.decision.authorId
+              }
+            }
           } else {
             block.decision = null
           }
