@@ -22,11 +22,16 @@ export function decisionDataFromProjection(ad: ActiveDecisionState): DecisionNod
   return {
     kind: 'decision',
     prompt: ad.prompt,
+    // `context` en `description` liepen hier dood: de projectie stuurt ze mee,
+    // maar deze omzetter nam alleen prompt en label over. Daardoor zag de
+    // deelnemer de extra uitleg niet, hoe goed hij ook was geschreven.
+    context: ad.context,
     measuredBy: 'participant_choice',
     perRole: ad.perRole,
     options: ad.options.map(o => ({
       id: o.optionId,
       label: o.optionLabel,
+      description: o.optionDescription,
       allowedRole: o.allowedRole,
     })),
   }
@@ -37,6 +42,11 @@ export interface MandateView {
   mandate: DecisionMandate
   coverage: RoleCoverage[]
   mine: ParticipantRoles | null
+  /** Rollen die in deze oefening meedoen maar in dít beslispunt geen optie
+   *  hebben. Niet uit `coverage` te halen: dat universum bevat juist alleen de
+   *  rollen van dit beslispunt. Komt daarom uit de rolverdeling van de sessie,
+   *  die op de server met de hele graaf is berekend. */
+  nietAanZet: Role[]
 }
 
 // De gestripte graph (`nodes: []`) zou het rollen-universum leegmaken, dus we
@@ -77,11 +87,24 @@ export function mandateView(
     ...new Set(decision.options.map(o => o.allowedRole).filter((r): r is Role => !!r)),
   ]
   const universe = universeFor(session, optionRoles)
+
+  // Alle rollen die in deze oefening meedoen, uit de rolverdeling: die is op de
+  // server berekend met de hele graaf, terwijl de deelnemer een gestripte
+  // versie krijgt. Zonder deze bron zou "niet aan zet" altijd leeg zijn.
+  const inSpel = new Set<Role>()
+  for (const e of session.roleDistribution?.entries ?? []) {
+    inSpel.add(e.primaryRole)
+    for (const r of e.inheritedRoles) inSpel.add(r)
+  }
+  for (const r of session.roleDistribution?.unassignedRoles ?? []) inSpel.add(r)
+  const metOptie = new Set(optionRoles)
+
   return {
     decision,
     mandate: decisionMandate(universe, decision, participantId),
     coverage: roleCoverage(universe),
     mine: rolesForParticipant(session, participantId),
+    nietAanZet: [...inSpel].filter(r => !metOptie.has(r)),
   }
 }
 

@@ -75,7 +75,10 @@ export const t = {
     participants: "Participants",
     startSession: "Start session",
     nextRound: "Next round",
-    prevRound: "Prev",
+    // Was "Prev". Op de actieve ronde staat deze knop naast "Previous phase";
+    // met alleen "Prev" waren dat twee bijna gelijke labels voor twee heel
+    // verschillende acties — een hele ronde terug, of één fase.
+    prevRound: "Prev round",
     endSession: "End session",
     resetSession: "Reset & new exercise",
     destroySession: "Destroy session",
@@ -321,7 +324,9 @@ export const t = {
     participants: "Deelnemers",
     startSession: "Start sessie",
     nextRound: "Volgende ronde",
-    prevRound: "Vorige",
+    // Zie de Engelse kant: "Vorige" stond naast "Vorige fase" en dat las als
+    // hetzelfde. Een hele ronde terug is iets anders dan één fase terug.
+    prevRound: "Vorige ronde",
     endSession: "Sessie beëindigen",
     resetSession: "Resetten & nieuwe oefening",
     destroySession: "Sessie verwijderen",

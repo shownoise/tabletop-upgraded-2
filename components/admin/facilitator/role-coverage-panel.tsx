@@ -39,11 +39,15 @@ export function RoleCoveragePanel({
 
   const body = (
     <>
+      {/* Eén string in plaats van tekst om de expressies heen: in een doorloop
+          las deze regel als "Die keuzeshoudt de ronde niet tegen", en met losse
+          tekstknopen om een ternary heen is dat lastig te zien. Zo kan het niet
+          meer gebeuren. */}
       {counts.onbezet > 0 && (
         <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-400">
-          {counts.onbezet} {counts.onbezet === 1 ? "rol is" : "rollen zijn"} door niemand gedekt.
-          Die {counts.onbezet === 1 ? "keuze" : "keuzes"} houdt de ronde niet tegen, maar komt in de
-          review terug als &quot;geen besluit binnen de tijd&quot;.
+          {counts.onbezet === 1
+            ? "1 rol is door niemand gedekt. Die keuze houdt de ronde niet tegen, maar komt in de review terug als “geen besluit binnen de tijd”."
+            : `${counts.onbezet} rollen zijn door niemand gedekt. Die keuzes houden de ronde niet tegen, maar komen in de review terug als “geen besluit binnen de tijd”.`}
         </p>
       )}
       <ul className="flex flex-wrap gap-1.5">
