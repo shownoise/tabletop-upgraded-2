@@ -1147,6 +1147,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CISO — cross-role driver: activeert retainer, ontsluit forensiek in R3
         {
           label: "Eye Security-retainer nu al activeren — vóór bevestiging",
+          description: "Bel de IR-retainer van Eye Security met alleen het MSP-signaal van 08:42 als onderbouwing en vraag om een forensisch lead.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 1, FOR: 2, BC: 0, JUR: 1, VER: 1, KOS: -2 },
           qualityRank: "best",
@@ -1157,6 +1158,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "WestNet formeel opschalen — engineer nu op de zaak",
+          description: "Bel het piketnummer van WestNet en laat de notificatie van 08:42 opwaarderen tot een ticket met een engineer erop.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 2, FOR: 1, BC: -1, JUR: 0, VER: 0, KOS: -1 },
           qualityRank: "good",
@@ -1165,6 +1167,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Zelf FS-01 uitzetten via de switch (stekker)",
+          description: "Laat iemand op locatie de fileserver direct uitzetten en meld daarna aan WestNet dat FS-01 van het net is.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 2, FOR: -2, BC: -2, JUR: 0, VER: 0, KOS: 1 },
           qualityRank: "poor",
@@ -1173,6 +1176,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Alleen monitoren, geen actie tot Rob terug is",
+          description: "Houd het MSP-dashboard in de gaten en stem af met Rob, die vanaf 12:00 NL-tijd beter bereikbaar is.",
           allowedRole: "ciso",
           outcomeVector: { CONT: -2, FOR: -1, BC: 1, JUR: -1, VER: 0, KOS: 0 },
           qualityRank: "wrong",
@@ -1182,6 +1186,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CEO — cross-role driver
         {
           label: "Bestuurssecretaris crisismandaat geven — 72 uur, tekenbevoegd",
+          description: "Leg schriftelijk vast dat Marijke Vlietstra 72 uur namens het bestuur mag handelen richting WestNet en verzekeraar.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 1, FOR: 0, BC: 1, JUR: 2, VER: 1, KOS: 0 },
           qualityRank: "best",
@@ -1191,6 +1196,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Zelf alles blijven aansturen tot beeld helder is",
+          description: "Houd elk besluit richting WestNet, Univé en de locaties bij jezelf en laat alles via jouw lijn lopen.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 0, FOR: -1, BC: -1, JUR: -1, VER: 1, KOS: 1 },
           qualityRank: "poor",
@@ -1199,6 +1205,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Bel eerst RvT-voorzitter voor persoonlijk advies",
+          description: "Bel mr. J. de Boer en leg hem de losse meldingen voor voordat je iets richting WestNet in gang zet.",
           allowedRole: "ceo",
           outcomeVector: { CONT: -1, FOR: 0, BC: 0, JUR: 0, VER: 1, KOS: 1 },
           qualityRank: "good",
@@ -1207,6 +1214,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Wacht op Rob's terugkeer voordat je iets tekent",
+          description: "Laat de melding bij WestNet en de verzekeraar staan tot de ICT-coordinator weer op school is.",
           allowedRole: "ceo",
           outcomeVector: { CONT: -2, FOR: 1, BC: -1, JUR: -2, VER: 0, KOS: 1 },
           qualityRank: "wrong",
@@ -1216,6 +1224,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // Legal
         {
           label: "Meldingsklok formeel starten op 08:42 en logboek openen",
+          description: "Zet 08:42 vast als eerste indicatiemoment en open een logboek waarin elk besluit met tijdstip wordt bijgehouden.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 1, BC: 0, JUR: 2, VER: 1, KOS: 0 },
           qualityRank: "best",
@@ -1224,6 +1233,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Wacht met klok starten tot bevestiging ransomware",
+          description: "Houd de meldingskalender leeg tot WestNet schriftelijk bevestigt wat er op FS-01 is gebeurd.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -1, KOS: 1 },
           qualityRank: "poor",
@@ -1232,6 +1242,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Contract-check Magister (48u) én Univé (24u) klaarleggen",
+          description: "Haal art. 14.3 van het Magister-contract en de polisvoorwaarden van Univé erbij en leg de twee termijnen naast elkaar.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 2, VER: 0, KOS: 0 },
           qualityRank: "good",
@@ -1240,6 +1251,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Legal-workstream pauzeren tot IT bevestigt",
+          description: "Zet het juridische spoor stil en wacht op het technische beeld van WestNet voordat je iets voorbereidt.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: -1, BC: 0, JUR: -1, VER: -1, KOS: 1 },
           qualityRank: "wrong",
@@ -1249,6 +1261,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // IT-manager
         {
           label: "Netwerk-isolatie FS-01/02 aanvragen bij WestNet",
+          description: "Vraag WestNet om de twee fileservers via de switch van het netwerk te halen met de machines aan.",
           allowedRole: "it_manager",
           outcomeVector: { CONT: 2, FOR: 1, BC: -1, JUR: 0, VER: 0, KOS: -1 },
           qualityRank: "best",
@@ -1257,6 +1270,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Alle 350 accounts een password-reset forceren",
+          description: "Zet de domein-brede reset-scripts in gang, zodat elke medewerker bij de eerstvolgende inlog een nieuw wachtwoord moet zetten.",
           allowedRole: "it_manager",
           outcomeVector: { CONT: 1, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: 1 },
           qualityRank: "good",
@@ -1265,6 +1279,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Volledig herstellen uit backup, nu direct",
+          description: "Start de Veeam-restore vanaf de Wasabi cold storage terug over de shares op FS-01 en FS-02.",
           allowedRole: "it_manager",
           outcomeVector: { CONT: 0, FOR: -2, BC: -2, JUR: -1, VER: 1, KOS: -2 },
           qualityRank: "wrong",
@@ -1273,6 +1288,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Rob terugvliegen van vakantie",
+          description: "Boek een vlucht terug uit Faro en laat de ICT-coordinator morgen weer op het bestuurskantoor zitten.",
           allowedRole: "it_manager",
           outcomeVector: { CONT: -1, FOR: 0, BC: -1, JUR: 0, VER: 1, KOS: -2 },
           qualityRank: "poor",
@@ -1301,6 +1317,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CEO
         {
           label: "Publiek video-statement bestuurder om 15:00 vandaag",
+          description: "Ga om 15:00 zelf op beeld met wat we weten, wat we niet weten en wanneer de volgende update komt — voor teams én ouders.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 1, VER: 2, KOS: -1 },
           qualityRank: "best",
@@ -1309,6 +1326,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Wachten tot Eye Security volledige technische bevestiging geeft",
+          description: "Houd elk bericht naar binnen en naar buiten vast tot de forensische partij het beeld rond heeft.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 0, FOR: 1, BC: -1, JUR: -1, VER: -2, KOS: 0 },
           qualityRank: "poor",
@@ -1317,6 +1335,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Alleen intern communiceren, extern nog even niet",
+          description: "Informeer vandaag de vijf locaties en de teamleiders; richting ouders en pers gaat er nog niets uit.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: -1, KOS: 0 },
           qualityRank: "good",
@@ -1325,6 +1344,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Betalen autoriseren zodat rapportvergadering doorgaat",
+          description: "Geef de controller opdracht het contact met de daders te openen, met de cijfers terug vóór donderdag als doel.",
           allowedRole: "ceo",
           outcomeVector: { CONT: -1, FOR: -1, BC: 1, JUR: -2, VER: -2, KOS: 1 },
           qualityRank: "wrong",
@@ -1334,6 +1354,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CFO — cross-role: Univé-activatie ontsluit onderhandelaar en polislimit-check
         {
           label: "Univé formeel activeren + onderhandelaar aanvragen",
+          description: "Dien de schademelding bij Univé Zakelijk vandaag in en vraag meteen de onderhandelaar aan die onder de polis valt.",
           allowedRole: "cfo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 2, VER: 1, KOS: -1 },
           qualityRank: "best",
@@ -1343,6 +1364,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Univé pas informeren als betaling ter sprake komt",
+          description: "Houd de melding bij de verzekeraar achter de hand tot het bestuur daadwerkelijk over losgeld besluit.",
           allowedRole: "cfo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -1, KOS: 1 },
           qualityRank: "wrong",
@@ -1351,6 +1373,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Alleen interne kostenraming maken, extern niets",
+          description: "Zet de verwachte kosten van herstel, noodrooster en externe inzet op papier voor het bestuur, zonder externe partij te betrekken.",
           allowedRole: "cfo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: 0, KOS: 0 },
           qualityRank: "good",
@@ -1359,6 +1382,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Cashreserve reserveren voor snelle betaling (backup-plan)",
+          description: "Oormerk liquiditeit zodat een betaling in Monero binnen een dag uitvoerbaar is als het bestuur daartoe besluit.",
           allowedRole: "cfo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: -1, VER: -1, KOS: 0 },
           qualityRank: "poor",
@@ -1368,6 +1392,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // Legal
         {
           label: "AP-melding indienen als voorlopig — completering later",
+          description: "Dien vandaag een melding in met wat nu bekend is en meld daarbij dat de aanvulling later volgt.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 2, VER: 1, KOS: 0 },
           qualityRank: "best",
@@ -1376,6 +1401,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Iddink (Magister) contractueel informeren binnen 48u",
+          description: "Stuur Iddink Group een schriftelijke notificatie op grond van art. 14.3, met alleen de vastgestelde feiten erin.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 2, VER: 0, KOS: 0 },
           qualityRank: "good",
@@ -1384,6 +1410,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Wachten met NCSC-melding — 24u zit er nog ruim in?",
+          description: "Houd de early-warning aan tot de forensiek meer scope heeft; de termijn loopt tot dinsdag 08:42.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: 0, KOS: 1 },
           qualityRank: "wrong",
@@ -1392,6 +1419,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Vertrouwelijkheidsverklaringen alle betrokken partijen",
+          description: "Laat WestNet, Eye Security en de ingehuurde adviseurs een NDA ondertekenen voordat zij verder meelezen.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: -1, KOS: 1 },
           qualityRank: "poor",
@@ -1401,6 +1429,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CISO — coupling: requires retainer to escalate correctly
         {
           label: "Eye Security IR de lead geven — WestNet ondersteunt",
+          description: "Leg schriftelijk vast dat de forensische partij het onderzoek leidt en dat WestNet uitvoert wat zij vragen.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 1, FOR: 2, BC: 0, JUR: 0, VER: 1, KOS: -1 },
           qualityRank: "best",
@@ -1410,6 +1439,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "WestNet de lead laten houden — Eye Security als sparring",
+          description: "Laat Kevin Bosch het onderzoek blijven trekken en gebruik Eye Security alleen om mee te denken.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 0, FOR: -1, BC: 0, JUR: 0, VER: -1, KOS: 0 },
           qualityRank: "good",
@@ -1418,6 +1448,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Zelf de lead nemen — WestNet en Eye Security parallel gebruiken",
+          description: "Houd de coördinatie bij jezelf en geef beide partijen los van elkaar hun eigen opdrachten.",
           allowedRole: "ciso",
           outcomeVector: { CONT: -1, FOR: -1, BC: -1, JUR: 0, VER: 1, KOS: 0 },
           qualityRank: "poor",
@@ -1426,6 +1457,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Alle domain-accounts direct verlopen ipv gerichte reset",
+          description: "Zet alle 350 accounts in één keer op verlopen in plaats van alleen het RDP-account van de oud-medewerker.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 1, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: 0 },
           qualityRank: "wrong",
@@ -1454,6 +1486,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // Head of comms — coupling with CEO's earlier public-statement decision
         {
           label: "Bestuurder belt zelf terug naar RTV Oost — feitelijk statement",
+          description: "Zet vóór 13:30 een telefonisch gesprek van tien minuten met Sanne Bruijns in de agenda van de bestuurder.",
           allowedRole: "head_of_comms",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: 2, KOS: -1 },
           qualityRank: "best",
@@ -1462,6 +1495,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Persbericht + geen mondelinge reactie richting RTV Oost",
+          description: "Stuur vóór 13:30 een schriftelijke verklaring en verwijs voor elke vervolgvraag naar die tekst.",
           allowedRole: "head_of_comms",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: 0, KOS: 0 },
           qualityRank: "good",
@@ -1470,6 +1504,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "'Geen commentaar' — regie via stilte",
+          description: "Laat de frontoffice terugbellen dat de vereniging niets te melden heeft zolang het onderzoek loopt.",
           allowedRole: "head_of_comms",
           outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: -2, KOS: 1 },
           qualityRank: "wrong",
@@ -1478,6 +1513,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Preventief interview met sympathiek regionaal medium",
+          description: "Nodig een regionaal medium waar jullie goed liggen vandaag uit voor een gesprek, vóór RTV Oost uitzendt.",
           allowedRole: "head_of_comms",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: 1, KOS: 1 },
           qualityRank: "poor",
@@ -1487,6 +1523,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // Legal
         {
           label: "AP-completering vandaag afronden + verzenden",
+          description: "Beantwoord de vier aanvullende vragen van de AP vandaag en verstuur de aangevulde melding via het portaal.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 2, VER: 1, KOS: 0 },
           qualityRank: "best",
@@ -1495,6 +1532,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Bewuste keuze: melding aanvullen tot laatste moment (donderdag 08:42)",
+          description: "Plan de verzending op donderdagochtend en vul tot dat moment aan met wat de forensiek oplevert.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 1, BC: 1, JUR: 1, VER: 0, KOS: 0 },
           qualityRank: "good",
@@ -1503,6 +1541,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "NCSC-melding indienen ondanks verstreken 24u",
+          description: "Dien de melding bij het NCSC vandaag in, met een feitelijke regel erbij over waarom hij later komt.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 1, BC: 0, JUR: 1, VER: 1, KOS: 0 },
           qualityRank: "poor",
@@ -1511,6 +1550,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "NCSC-melding overslaan omdat 24u al voorbij is",
+          description: "Laat de NIS2-melding achterwege en houd het bij het AP-spoor en de contractuele meldingen.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -1, KOS: 1 },
           qualityRank: "wrong",
@@ -1520,6 +1560,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // Ops manager
         {
           label: "Noodrooster vasthouden tot vrijdag — geen half-halfmaatregel",
+          description: "Geef de vijf locaties één lijn: papieren roosters en presentie tot en met vrijdag, overal hetzelfde.",
           allowedRole: "ops_manager",
           outcomeVector: { CONT: 0, FOR: 0, BC: 2, JUR: 0, VER: 0, KOS: -1 },
           qualityRank: "best",
@@ -1528,6 +1569,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Woensdag proberen terug naar Magister — nieuwe tenant",
+          description: "Zet morgen de overstap naar de nieuwe tenant in gang en laat de locaties het papier dan afbouwen.",
           allowedRole: "ops_manager",
           outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 0, KOS: 1 },
           qualityRank: "poor",
@@ -1536,6 +1578,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Toetsweek 46 doorschuiven naar week 48",
+          description: "Verzet de toetsweek formeel met twee weken en laat de locatiedirecteuren dat vandaag naar leerlingen en ouders uitzetten.",
           allowedRole: "ops_manager",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: 0 },
           qualityRank: "good",
@@ -1544,6 +1587,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Toetsweek 46 gewoon doorlaten gaan",
+          description: "Houd de toetsweek op maandag staan en laat de cijfers voorlopig op papier bij de docenten bijhouden.",
           allowedRole: "ops_manager",
           outcomeVector: { CONT: 0, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: 2 },
           qualityRank: "wrong",
@@ -1553,6 +1597,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // HR
         {
           label: "Q&A-document + hotline voor docenten",
+          description: "Zet vandaag een vraag-en-antwoord op papier plus één intern nummer waar docenten hun vragen kwijt kunnen.",
           allowedRole: "hr_lead",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 1, KOS: -1 },
           qualityRank: "good",
@@ -1561,6 +1606,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Alleen teamleiders informeren, zij briefen docenten",
+          description: "Brief de vijf teamleiders en laat zij hun eigen teams bijpraten, met één regel die bij de poort gebruikt mag worden.",
           allowedRole: "hr_lead",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: 1 },
           qualityRank: "best",
@@ -1569,6 +1615,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Op-de-vlakte-houden — 'niet verontrusten'",
+          description: "Houd het bij een korte mededeling dat er aan een storing wordt gewerkt en geef docenten verder geen tekst mee.",
           allowedRole: "hr_lead",
           outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: -2, KOS: 2 },
           qualityRank: "poor",
@@ -1577,6 +1624,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Docenten vrijaf geven zolang Magister uit is",
+          description: "Laat de lessen vervallen zolang het leerlingregistratiesysteem niet beschikbaar is en stuur docenten naar huis.",
           allowedRole: "hr_lead",
           outcomeVector: { CONT: 0, FOR: 0, BC: -2, JUR: 0, VER: -1, KOS: 2 },
           qualityRank: "wrong",
@@ -1605,6 +1653,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CEO — the primary decision
         {
           label: "Niet betalen — vertrouwen op restore + reconstructie",
+          description: "Laat de onderhandelaar het gesprek afbreken en zet alles op de tweede backup-set en handmatige reconstructie.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 1, FOR: 1, BC: -1, JUR: 2, VER: 2, KOS: 1 },
           qualityRank: "best",
@@ -1613,6 +1662,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Onderhandelaar 24u laten rekken — parallel restore doorzetten",
+          description: "Geef de onderhandelaar opdracht de termijn op te rekken en gebruik die dag voor de restore-test van 15:30.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: 1, KOS: 0 },
           qualityRank: "good",
@@ -1621,6 +1671,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "€340k betalen via Univé — polisdekking gebruiken",
+          description: "Lever de vier documenten die Univé vraagt en laat de betaling binnen de polis door hen autoriseren.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: -1, VER: -2, KOS: -1 },
           qualityRank: "poor",
@@ -1630,6 +1681,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "€340k betalen buiten Univé om — snelheid boven dekking",
+          description: "Laat de controller het bedrag vandaag zelf overmaken, zonder de vier documenten van Univé af te wachten.",
           allowedRole: "ceo",
           outcomeVector: { CONT: -1, FOR: -1, BC: 1, JUR: -2, VER: -2, KOS: 0 },
           qualityRank: "wrong",
@@ -1639,6 +1691,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CISO — coupling: forensiek voor Univé
         {
           label: "Volledig forensisch scope-document leveren aan Univé",
+          description: "Laat Eye Security de scope, de exfil-methode en de getroffen systemen schriftelijk vastleggen en stuur dat naar de schadebehandelaar.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 1, FOR: 2, BC: 0, JUR: 1, VER: 1, KOS: -1 },
           qualityRank: "best",
@@ -1648,6 +1701,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Beperkte scope-verklaring — snelheid boven volledigheid",
+          description: "Stuur vandaag een korte verklaring met wat nu vaststaat en meld dat het volledige rapport later volgt.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 0, FOR: -1, BC: 0, JUR: -1, VER: 0, KOS: 1 },
           qualityRank: "poor",
@@ -1656,6 +1710,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Volledige eradication forceren vóór welke restore ook",
+          description: "Houd de restore tegen tot de sweep over alle systemen klaar is en de omgeving schoon is verklaard.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 2, FOR: 1, BC: -1, JUR: 0, VER: 0, KOS: -1 },
           qualityRank: "good",
@@ -1664,6 +1719,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Restore starten parallel aan sweep — geen tijd te verliezen",
+          description: "Laat de tweede backup-set terugdraaien terwijl de sweep nog loopt, zodat de test van 15:30 niet opschuift.",
           allowedRole: "ciso",
           outcomeVector: { CONT: -1, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: -1 },
           qualityRank: "wrong",
@@ -1673,6 +1729,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CFO
         {
           label: "Complete polislimit-analyse + kosten-scenario aan CEO",
+          description: "Zet de polislimiet van €500.000, het bod van €340.000 en de kosten van forensiek, onderhandelaar en comms in één overzicht.",
           allowedRole: "cfo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 1, VER: 1, KOS: 1 },
           qualityRank: "best",
@@ -1682,6 +1739,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Cashflow-buffer opzetten voor onvoorziene kosten",
+          description: "Maak liquiditeit vrij voor de tijdelijke Magister-tenant, de overuren en de externe inzet van de komende weken.",
           allowedRole: "cfo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: 2 },
           qualityRank: "good",
@@ -1690,6 +1748,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Snelle betaling voorbereiden — 'voor de zekerheid'",
+          description: "Regel de route om in Monero te kunnen betalen en meld het bestuur dat het bedrag morgen klaar kan staan.",
           allowedRole: "cfo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: 1, KOS: 2 },
           qualityRank: "poor",
@@ -1698,6 +1757,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Univé-onderhandelaar buiten spel zetten — zelf onderhandelen",
+          description: "Neem het contact met de tegenpartij zelf over en voer het gesprek over het bedrag rechtstreeks.",
           allowedRole: "cfo",
           outcomeVector: { CONT: 1, FOR: 0, BC: -1, JUR: -2, VER: -1, KOS: -2 },
           qualityRank: "wrong",
@@ -1707,6 +1767,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // Legal
         {
           label: "Sanctielijstencheck (OFAC/EU) + juridische betalingsgoedkeuring",
+          description: "Toets de Play-affiliate tegen de OFAC- en EU-sanctielijsten en leg de uitkomst schriftelijk vast voor Univé.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 2, VER: 0, KOS: 0 },
           qualityRank: "best",
@@ -1715,6 +1776,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "AP-klachtreactie feitelijk voorbereiden binnen deadline",
+          description: "Schrijf de reactie op de klacht van de ouder met tijdlijn en genomen maatregelen, binnen de tien werkdagen.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: 1, KOS: 0 },
           qualityRank: "good",
@@ -1723,6 +1785,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "AP-klachtreactie uitstellen tot na losgeld-besluit",
+          description: "Leg de klacht van de ouder apart tot het bestuur over het losgeld heeft besloten.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: -1, KOS: 1 },
           qualityRank: "wrong",
@@ -1731,6 +1794,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Juridisch: 'wij betalen niet' zonder proces vastleggen",
+          description: "Schrijf één regel in de besluitenlijst dat de vereniging geen losgeld betaalt en laat de onderhandelaar dat doorgeven.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: -1, VER: 1, KOS: 1 },
           qualityRank: "poor",
@@ -1759,6 +1823,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CEO
         {
           label: "Bestuurder belt LoonBureau CEO — gezamenlijk crisis-plan",
+          description: "Bel vóór 12:00 je collega-bestuurder bij LoonBureau en spreek één woordvoering en wederzijdse forensische inzage af.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 1, FOR: 1, BC: 1, JUR: 2, VER: 1, KOS: -1 },
           qualityRank: "best",
@@ -1768,6 +1833,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "CISO's laten afstemmen — bestuurders op de hoogte houden",
+          description: "Laat de security-mensen van beide kanten het technische beeld uitwisselen en vraag hen jou daarna bij te praten.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 1, VER: 0, KOS: 0 },
           qualityRank: "good",
@@ -1776,6 +1842,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "LoonBureau doorverwijzen naar onze verzekeraar",
+          description: "Geef Peter van Ravenzwaaij het nummer van Univé en laat de afstemming via de schadebehandelaars lopen.",
           allowedRole: "ceo",
           outcomeVector: { CONT: -1, FOR: -1, BC: -1, JUR: -1, VER: -2, KOS: 1 },
           qualityRank: "poor",
@@ -1784,6 +1851,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "LoonBureau ontkennen betrokkenheid — 'apart incident'",
+          description: "Bel terug dat jullie geen koppeling zien en dat zij hun eigen incident los van dit onderzoek behandelen.",
           allowedRole: "ceo",
           outcomeVector: { CONT: -1, FOR: -2, BC: -1, JUR: -2, VER: -2, KOS: 2 },
           qualityRank: "wrong",
@@ -1793,6 +1861,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // HR
         {
           label: "PMR-gesprek 15:00 + eenmalige toelage voorstellen",
+          description: "Ga vandaag om 15:00 met Marc Timmermans zitten en leg een bedrag per docent op tafel voor de herinvoer.",
           allowedRole: "hr_lead",
           outcomeVector: { CONT: 0, FOR: 0, BC: 2, JUR: 0, VER: 1, KOS: -1 },
           qualityRank: "best",
@@ -1802,6 +1871,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "PMR-gesprek verzetten naar volgende week",
+          description: "Zeg de afspraak van vanmiddag af en plan hem na het weekend, als het herstelbeeld duidelijker is.",
           allowedRole: "hr_lead",
           outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: -1, KOS: 2 },
           qualityRank: "poor",
@@ -1810,6 +1880,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Overuren erkennen zonder concrete compensatie",
+          description: "Schrijf de PMR dat de extra uren worden gezien en dat een regeling later in overleg volgt.",
           allowedRole: "hr_lead",
           outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 1, KOS: 1 },
           qualityRank: "good",
@@ -1818,6 +1889,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Overuren afdoen als 'ligt in normale werktijd'",
+          description: "Antwoord dat het herinvoeren binnen de bestaande taakuren valt en registreer er geen overuren voor.",
           allowedRole: "hr_lead",
           outcomeVector: { CONT: 0, FOR: 1, BC: -2, JUR: -1, VER: -2, KOS: 2 },
           qualityRank: "wrong",
@@ -1827,6 +1899,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // Head of comms
         {
           label: "AOb-statement inhoudelijk beantwoorden — feit erkennen waar terecht",
+          description: "Geef vandaag een reactie uit die benoemt wat klopt aan het beeld van de bond en wat feitelijk anders is.",
           allowedRole: "head_of_comms",
           outcomeVector: { CONT: 1, FOR: 0, BC: 0, JUR: 1, VER: 2, KOS: -1 },
           qualityRank: "best",
@@ -1835,6 +1908,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "AOb-statement negeren — reageert op zichzelf uit",
+          description: "Geef geen reactie en houd de berichtgeving over het persbericht alleen in de monitoring.",
           allowedRole: "head_of_comms",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: 0, VER: -1, KOS: 1 },
           qualityRank: "poor",
@@ -1843,6 +1917,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "AOb defensief weerleggen — 'ongefundeerd'",
+          description: "Stuur een verklaring waarin je het beeld van de bond van de hand wijst en om intrekking vraagt.",
           allowedRole: "head_of_comms",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: -2, KOS: 2 },
           qualityRank: "wrong",
@@ -1851,6 +1926,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Voorzitter oudervereniging in stuurgroep verbetering betrekken",
+          description: "Vraag de voorzitter van de oudervereniging om vanaf nu mee te lezen en mee te praten in het verbetertraject.",
           allowedRole: "head_of_comms",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 1, VER: 2, KOS: -1 },
           qualityRank: "good",
@@ -1860,6 +1936,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // Ops manager
         {
           label: "Papieren fallback-processen deze week volhouden",
+          description: "Geef bedrijfsvoering vrijdag als einddatum en laat alle vijf locaties tot dan hetzelfde papieren proces rijden.",
           allowedRole: "ops_manager",
           outcomeVector: { CONT: 0, FOR: 0, BC: 2, JUR: 0, VER: 0, KOS: -1 },
           qualityRank: "best",
@@ -1868,6 +1945,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Half-half deze week — Magister waar mogelijk",
+          description: "Zet de processen die in de nieuwe tenant al werken daar terug en houd de rest tot nader order op papier.",
           allowedRole: "ops_manager",
           outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 0, KOS: 2 },
           qualityRank: "good",
@@ -1876,6 +1954,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Terug naar Magister zodra tenant werkt — donderdag al",
+          description: "Zet de omschakeling in zodra ICT de tenant oplevert en bouw het papieren proces direct daarna af.",
           allowedRole: "ops_manager",
           outcomeVector: { CONT: 0, FOR: 0, BC: -2, JUR: 0, VER: 1, KOS: 1 },
           qualityRank: "wrong",
@@ -1884,6 +1963,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Rapportvergadering donderdag doorschuiven naar week 47",
+          description: "Neem een formeel besluit om de rapportvergadering een week op te schuiven en meld dat aan ouders en docenten.",
           allowedRole: "ops_manager",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 0, VER: 1, KOS: -1 },
           qualityRank: "poor",
@@ -1912,6 +1992,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CEO
         {
           label: "Concreet governance-pakket met eigenaar, deadline en budget voor RvT",
+          description: "Lever woensdag 13 november een pakket aan waarin bij elke maatregel een naam, een datum en een bedrag staat.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 1, FOR: 1, BC: 2, JUR: 2, VER: 2, KOS: -1 },
           qualityRank: "best",
@@ -1921,6 +2002,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Verhaal aan RvT, actielijst 'volgt binnen kwartaal'",
+          description: "Breng woensdag de tijdlijn en de oorzaken, en zeg toe dat de maatregelen in het eerste kwartaal volgen.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 1, VER: 0, KOS: 1 },
           qualityRank: "poor",
@@ -1930,6 +2012,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Externe consultant vragen om governance-plan te schrijven",
+          description: "Geef een extern bureau opdracht het verbeterplan te schrijven en laat de RvT daar in januari over besluiten.",
           allowedRole: "ceo",
           outcomeVector: { CONT: 0, FOR: 0, BC: 1, JUR: 1, VER: 0, KOS: 0 },
           qualityRank: "good",
@@ -1938,6 +2021,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "'We hebben het goed gedaan' — actielijst uitstellen",
+          description: "Sluit het post-mortem af met de conclusie dat de respons stond, en agendeer de evaluatie na de zomer.",
           allowedRole: "ceo",
           outcomeVector: { CONT: -1, FOR: -1, BC: -2, JUR: -2, VER: -1, KOS: 2 },
           qualityRank: "wrong",
@@ -1948,6 +2032,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // CISO
         {
           label: "Hardening-plan: MFA, segmentatie, MDR-scope, account-hygiene — met bedragen",
+          description: "Leg per maatregel het investeringsbedrag en de doorlooptijd vast, tekenbaar voor de RvT van woensdag.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 2, FOR: 1, BC: 1, JUR: 1, VER: 1, KOS: -2 },
           qualityRank: "best",
@@ -1957,6 +2042,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Rapport 'lessen geleerd' zonder investeringsvoorstel",
+          description: "Schrijf de technische analyse van deze week uit, met de ongeteste restore en het onbeheerde RDP-account erin.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 0, FOR: 1, BC: -1, JUR: 0, VER: 0, KOS: 1 },
           qualityRank: "good",
@@ -1965,6 +2051,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Alleen MDR-scope uitbreiden, rest naar volgend jaar",
+          description: "Vraag budget voor detectie en respons bij de MSP, en zet MFA en account-hygiëne op de lijst voor 2025.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 1, FOR: 0, BC: 0, JUR: 0, VER: 0, KOS: -1 },
           qualityRank: "poor",
@@ -1973,6 +2060,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Alles verplaatsen naar cloud — 'we lopen achter'",
+          description: "Stel een migratie van de fileservers en de kernsystemen naar cloudomgevingen voor als hoofdmaatregel.",
           allowedRole: "ciso",
           outcomeVector: { CONT: 0, FOR: -1, BC: -1, JUR: -1, VER: 1, KOS: 0 },
           qualityRank: "wrong",
@@ -1982,6 +2070,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // IT-manager
         {
           label: "WestNet-contract heronderhandelen — ransomware-scope, 24/7, betere severity-triage",
+          description: "Stuur vóór 1 december bericht dat de stilzwijgende verlenging niet doorgaat en zet in november het gesprek met Harold Kamphuis op.",
           allowedRole: "it_manager",
           outcomeVector: { CONT: 1, FOR: 1, BC: 2, JUR: 1, VER: 1, KOS: -1 },
           qualityRank: "best",
@@ -1991,6 +2080,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "MSP wisselen naar een grotere partij (bijv. landelijk)",
+          description: "Zeg de overeenkomst vóór 1 december op en start een uitvraag bij landelijke aanbieders.",
           allowedRole: "it_manager",
           outcomeVector: { CONT: 0, FOR: 0, BC: -1, JUR: 0, VER: 1, KOS: 1 },
           qualityRank: "poor",
@@ -1999,6 +2089,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "IT-team uitbreiden — junior ICT-medewerker in dienst",
+          description: "Vraag formatie aan voor een tweede ICT'er naast Rob en zet de werving in het eerste kwartaal.",
           allowedRole: "it_manager",
           outcomeVector: { CONT: 1, FOR: 0, BC: 1, JUR: 0, VER: 0, KOS: 0 },
           qualityRank: "good",
@@ -2007,6 +2098,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Volledig laten zoals het is — MSP redt het wel",
+          description: "Laat de overeenkomst per 1 december stilzwijgend doorlopen en houd de huidige SLA aan.",
           allowedRole: "it_manager",
           outcomeVector: { CONT: -1, FOR: -1, BC: -2, JUR: -1, VER: -1, KOS: 2 },
           qualityRank: "wrong",
@@ -2016,6 +2108,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         // Legal
         {
           label: "AP-follow-up + NIS2 final report inhoudelijk sluitend maken",
+          description: "Schrijf beide rapportages uit één tijdlijn, zodat de aantallen en de data in de twee stukken gelijk zijn.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 1, BC: 0, JUR: 2, VER: 1, KOS: 0 },
           qualityRank: "best",
@@ -2025,6 +2118,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "AP-follow-up minimalistisch — geen extra info",
+          description: "Beantwoord binnen de 30 werkdagen precies de gestelde vragen en stuur geen aanvullende stukken mee.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -1, VER: -1, KOS: 1 },
           qualityRank: "poor",
@@ -2033,6 +2127,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "Extern advocatenkantoor inschakelen voor AP-traject",
+          description: "Geef een kantoor met AP-praktijk opdracht de follow-up en de art. 32-inspectie te begeleiden.",
           allowedRole: "legal",
           outcomeVector: { CONT: 1, FOR: 0, BC: 0, JUR: 1, VER: 0, KOS: -1 },
           qualityRank: "good",
@@ -2041,6 +2136,7 @@ Bij afwezigheid: bestuurssecretaris meldt bij MSP en informeert bestuurder.
         },
         {
           label: "AP-vervolgtraject onderschatten — 'komt vanzelf wel goed'",
+          description: "Houd de follow-up binnen het eigen team en wacht met voorbereiden tot de AP een bezoek aankondigt.",
           allowedRole: "legal",
           outcomeVector: { CONT: 0, FOR: 0, BC: 0, JUR: -2, VER: -2, KOS: 2 },
           qualityRank: "wrong",
