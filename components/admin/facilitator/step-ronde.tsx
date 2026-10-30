@@ -15,6 +15,7 @@ import { api } from "@/lib/api-client"
 import { FACILITATOR_GUIDE } from "@/lib/config/texts"
 import { tr, type Lang } from "@/lib/i18n"
 import type { RoundPhase, SessionState } from "@/lib/types"
+import { AnswerModelPanel } from "./answer-model-panel"
 import { PhaseRetreatButton, PHASE_ORDER, type FacilitatorActions } from "./facilitator-shell"
 import { RoleCoveragePanel } from "./role-coverage-panel"
 import { roundSubmissionProgress } from "./round-submission-progress"
@@ -220,6 +221,11 @@ export function StepRonde({
 
         <aside className="flex flex-col gap-4">
           {session.graph && session.mode === "event" && <GroupProgress session={session} />}
+
+          {/* Het antwoordmodel van deze ronde, ingeklapt. Tijdens de ronde is
+              dit voorbereiding: je leest het terwijl het team overlegt, zodat je
+              in de review weet waarom het beste antwoord beter was. */}
+          {review && <AnswerModelPanel decisions={review.answerModel} />}
 
           {/* Facilitatorsturing — ingeklapt. Dit is het langste tekstblok van de
               stap en mocht de beslisvraag niet meer wegdrukken. */}

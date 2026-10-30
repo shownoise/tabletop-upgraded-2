@@ -56,7 +56,7 @@ export function StepEindbespreking({
         </Link>
       </section>
 
-      <DebriefOverview rounds={rounds} total={total} />
+      <DebriefOverview rounds={rounds} total={total} showAnswerModel />
 
       {/* Onomkeerbaar, dus onderaan en los van alles. */}
       <section className="rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-4">
