@@ -10,14 +10,20 @@
 
 import { ROLE_META } from "@/lib/types"
 import { DecisionReviewCard } from "@/components/shared/decision-review-card"
+import { AnswerModelPanel } from "./answer-model-panel"
 import { POINTS_PER_ROUND, type RoundReviewData, type ScoreTotal } from "./review-items"
 
 export function RoundReviewSection({
   round,
   showTalkingPoints = true,
+  // Het antwoordmodel is facilitator-only en staat daarom achter een opt-in:
+  // deze component is bewust ook door de deelnemerskant te gebruiken, en een
+  // standaard-aan zou het bedoelde antwoord daar weggeven.
+  showAnswerModel = false,
 }: {
   round: RoundReviewData
   showTalkingPoints?: boolean
+  showAnswerModel?: boolean
 }) {
   return (
     <section className="flex flex-col gap-4">
@@ -55,6 +61,8 @@ export function RoundReviewSection({
           ))}
         </div>
       )}
+
+      {showAnswerModel && <AnswerModelPanel decisions={round.answerModel} />}
 
       {showTalkingPoints && round.talkingPoints.length > 0 && (
         <div className="rounded-lg border border-border bg-muted/20 px-4 py-3">
@@ -98,9 +106,11 @@ function RoundPoints({ round }: { round: RoundReviewData }) {
 export function DebriefOverview({
   rounds,
   total,
+  showAnswerModel = false,
 }: {
   rounds: RoundReviewData[]
   total: ScoreTotal | null
+  showAnswerModel?: boolean
 }) {
   if (rounds.length === 0) {
     return (
@@ -118,7 +128,7 @@ export function DebriefOverview({
           ziet. Deze strook is wat stap 3 niet kan geven: het verloop. */}
       <RondeVerloop rounds={rounds} />
       {rounds.map(round => (
-        <RoundReviewSection key={round.roundIndex} round={round} />
+        <RoundReviewSection key={round.roundIndex} round={round} showAnswerModel={showAnswerModel} />
       ))}
     </div>
   )

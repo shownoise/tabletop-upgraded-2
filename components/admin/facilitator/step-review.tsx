@@ -82,7 +82,7 @@ export function StepReview({ session, lang }: { session: SessionState; lang: Lan
 
       <ScoreTotalLine total={total} rounds={rounds} />
 
-      <RoundReviewSection round={round} />
+      <RoundReviewSection round={round} showAnswerModel />
 
       {/* Facilitator-only verhaallijn bij deze ronde. Rendert zichzelf alleen
           tijdens de reviewfase; buiten die fase blijft dit leeg. */}

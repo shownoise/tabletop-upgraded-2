@@ -23,7 +23,54 @@ import { isNoDecisionSubmission } from "@/lib/scoring/decision-review"
 import { sessionToScoringInput } from "@/lib/scoring/graph-adapter"
 import { vectorOverrideFor } from "@/lib/scoring/vector-overrides"
 import { roleCoverage } from "@/lib/session-roles"
-import type { Role, SessionState } from "@/lib/types"
+import {
+  ROLE_META,
+  type ChoiceQuality,
+  type Role,
+  type SessionState,
+  type SubmittedDecision,
+} from "@/lib/types"
+
+const ROLE_LABEL: Partial<Record<Role, string>> = Object.fromEntries(
+  Object.entries(ROLE_META).map(([role, meta]) => [role, meta.label]),
+) as Partial<Record<Role, string>>
+
+// ── Antwoordmodel ──────────────────────────────────────────────────────
+//
+// Het volledige keuzemenu van een beslispunt, op rang, met de motivatie van de
+// auteur erbij. Alleen voor de facilitator: hiermee kan hij in de nabespreking
+// uitleggen waarom het beste antwoord beter was dan het tweede, in plaats van
+// alleen te melden hoeveel punten eruit kwamen.
+//
+// Facilitator-only is hier een eigenschap van de aanroeper, niet van een vlag:
+// buildRoundReviews draait op `session.graph`, en de deelnemer krijgt via
+// toParticipantState nooit de hele graph.
+
+export interface AnswerModelOption {
+  id: string
+  label: string
+  // Wat je concreet doet. Staat ook bij de deelnemer onder de optie.
+  description?: string
+  quality?: ChoiceQuality
+  commentary?: string
+  // Namen van wie deze optie werkelijk heeft ingezonden. Leeg = niemand koos
+  // hem; dat is de helft van het gesprek.
+  chosenBy: string[]
+}
+
+export interface AnswerModelRole {
+  role: Role | null
+  options: AnswerModelOption[]
+}
+
+export interface AnswerModelDecision {
+  nodeId: string
+  prompt: string
+  context?: string
+  // Waarom de beste optie beter is dan de tweede, zoals de auteur het schreef.
+  facilitatorRationale?: string
+  byRole: AnswerModelRole[]
+}
 
 export interface RoundReviewData {
   // 0-based, zoals `session.currentRound` en `SubmittedDecision.roundIndex`.
@@ -33,6 +80,8 @@ export interface RoundReviewData {
   // De beslisvraag van deze ronde, zoals de auteur hem heeft geschreven.
   question: string
   items: DecisionReviewItem[]
+  // Het keuzemenu op rang met de motivatie erbij — facilitator-only.
+  answerModel: AnswerModelDecision[]
   // Punten die de engine voor deze ronde heeft berekend. Alleen gevuld als er
   // werkelijk is ingezonden; zonder inzending is een score geen nul maar
   // "nog niet gemeten".
@@ -172,6 +221,7 @@ export function buildRoundReviews(
         roundTitle: round?.title ?? `Ronde ${roundIndex + 1}`,
         question: questionFor(nodes, round?.title, roundIndex),
         items,
+        answerModel: nodes.map(node => answerModelFor(node, subs)),
         points: outcome?.hasSubmissions ? outcome.points : null,
         hasSubmissions: !!outcome?.hasSubmissions,
         talkingPoints: talkingPointsFor(session, roundIndex),
@@ -180,6 +230,63 @@ export function buildRoundReviews(
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
+
+// Rangorde van het antwoordmodel. Een optie zonder rang hangt onderaan bij de
+// slechte: niet omdat hij slecht is, maar omdat de auteur er niets over zei en
+// er dan ook niets over te vertellen valt.
+const QUALITY_ORDER: Record<ChoiceQuality, number> = { best: 0, good: 1, poor: 2, wrong: 3 }
+
+function qualityWeight(q?: ChoiceQuality): number {
+  return q ? QUALITY_ORDER[q] : 4
+}
+
+function answerModelFor(
+  node: RoundDecisionNode,
+  subs: SubmittedDecision[],
+): AnswerModelDecision {
+  const chosen = new Map<string, string[]>()
+  for (const sub of subs) {
+    const namen = chosen.get(sub.actionId) ?? []
+    namen.push(sub.participantName || (ROLE_LABEL[sub.role] ?? sub.role))
+    chosen.set(sub.actionId, namen)
+  }
+
+  // Per rol groeperen, want de rangorde geldt per rol: elke gemandateerde rol
+  // heeft zijn eigen beste antwoord. Eén platte lijst zou vier "beste"
+  // antwoorden naast elkaar zetten en precies de vraag oproepen die dit paneel
+  // moet wegnemen.
+  const perRole = new Map<string, AnswerModelRole>()
+  for (const option of node.data.options) {
+    // De impliciete "geen besluit"-optie is geen antwoord dat je kunt kiezen en
+    // hoort dus niet in het model; hij staat al op de reviewkaart zelf.
+    if (option.implicit) continue
+    const key = option.allowedRole ?? "__alle__"
+    const bucket = perRole.get(key) ?? { role: option.allowedRole ?? null, options: [] }
+    bucket.options.push({
+      id: option.id,
+      label: option.label,
+      description: option.description,
+      quality: option.qualityRank,
+      commentary: option.facilitatorCommentary ?? option.lessonLearned,
+      chosenBy: chosen.get(option.id) ?? [],
+    })
+    perRole.set(key, bucket)
+  }
+
+  const byRole = [...perRole.values()]
+  for (const bucket of byRole) {
+    bucket.options.sort((a, b) => qualityWeight(a.quality) - qualityWeight(b.quality))
+  }
+  byRole.sort((a, b) => (ROLE_LABEL[a.role as Role] ?? "").localeCompare(ROLE_LABEL[b.role as Role] ?? ""))
+
+  return {
+    nodeId: node.nodeId,
+    prompt: node.data.prompt,
+    context: node.data.context,
+    facilitatorRationale: node.data.facilitatorRationale,
+    byRole,
+  }
+}
 
 function range(from: number, to: number): number[] {
   const out: number[] = []
