@@ -278,9 +278,12 @@ export function ruleEnoughExplanation(graph: ScenarioGraph): RuleResult {
 // berichten in één klap binnen en daarna was het stil. Zo voelt een incident
 // niet, en het haalt de druk weg die de ronde juist moet opbouwen.
 //
-// De eis is bescheiden: de eerste inject mag direct komen (dat is de
-// setup-inject die de beslisvraag aankondigt), maar bij twee of meer injects
-// moet er minstens één later binnenkomen.
+// Twee eisen, want één bleek te zwak. Eerst: bij twee of meer injects komt er
+// minstens één later binnen. En daarnaast: niet twee berichten op dezelfde
+// seconde, want dan is het alsnog een stapel — alleen een kleinere. De
+// uitzondering is seconde 0: dáár mogen meerdere staan, omdat de gedeelde
+// setup-inject en het rol-bericht van wie meteen aan zet is samen de ronde
+// openen. Alles daarna hoort zijn eigen moment te hebben.
 // ───────────────────────────────────────────────────────────────────────────
 export function ruleInjectsStaggered(graph: ScenarioGraph): RuleResult {
   const problems: string[] = []
@@ -288,9 +291,23 @@ export function ruleInjectsStaggered(graph: ScenarioGraph): RuleResult {
   for (const { roundNumber } of orderedRounds(graph)) {
     const injects = injectsInRound(graph, roundNumber)
     if (injects.length < 2) continue
-    const later = injects.filter(n => (n.data.deliverySeconds ?? 0) > 0).length
-    if (later === 0) {
+    const momenten = injects.map(n => n.data.deliverySeconds ?? 0)
+
+    if (momenten.every(s => s === 0)) {
       problems.push(`ronde ${roundNumber}: ${injects.length} injects, allemaal op seconde 0`)
+      continue
+    }
+    // Botsingen ná de opening. Seconde 0 mag dubbel zijn, de rest niet.
+    const gezien = new Map<number, number>()
+    for (const s of momenten) {
+      if (s === 0) continue
+      gezien.set(s, (gezien.get(s) ?? 0) + 1)
+    }
+    const botsingen = [...gezien.entries()].filter(([, n]) => n > 1)
+    if (botsingen.length > 0) {
+      problems.push(
+        `ronde ${roundNumber}: ${botsingen.map(([s, n]) => `${n} injects op seconde ${s}`).join(', ')}`,
+      )
     }
   }
   if (problems.length === 0) return { ok: true }
@@ -299,9 +316,11 @@ export function ruleInjectsStaggered(graph: ScenarioGraph): RuleResult {
     violation: `Injects komen niet gespreid binnen: ${problems.join('; ')}`,
     hint:
       'Zet `deliverySeconds` op de injects van een ronde zodat ze tijdens de ronde ' +
-      'binnendruppelen. De eerste (de setup-inject met de beslisvraag) mag op 0 staan; ' +
-      'verdeel de rest tot ongeveer tweederde van de rondetijd, zodat er na het laatste ' +
-      'bericht nog tijd is om te overleggen en te kiezen.',
+      'binnendruppelen, elk op zijn eigen moment. Op seconde 0 mogen meerdere staan — de ' +
+      'gedeelde setup-inject met de beslisvraag en het rol-bericht van wie meteen aan zet ' +
+      'is openen samen de ronde. Verdeel de rest over verschillende momenten tot ongeveer ' +
+      'tweederde van de rondetijd, zodat er na het laatste bericht nog tijd is om te ' +
+      'overleggen en te kiezen.',
   }
 }
 

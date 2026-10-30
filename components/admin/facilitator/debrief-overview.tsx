@@ -112,10 +112,72 @@ export function DebriefOverview({
   return (
     <div className="flex flex-col gap-10">
       <ScoreTotalLine total={total} rounds={rounds} />
+      {/* Het beeld over de rondes heen. Stap 3 toont één ronde in detail en
+          stap 4 alle rondes — met één gespeelde ronde was dat hetzelfde
+          scherm, precies op het moment dat je ze voor het eerst naast elkaar
+          ziet. Deze strook is wat stap 3 niet kan geven: het verloop. */}
+      <RondeVerloop rounds={rounds} />
       {rounds.map(round => (
         <RoundReviewSection key={round.roundIndex} round={round} />
       ))}
     </div>
+  )
+}
+
+// Per ronde één regel: nummer, punten, en of er iets is ingezonden. Bij één
+// gespeelde ronde zegt hij dat eerlijk in plaats van een verloop te suggereren
+// dat er niet is.
+export function RondeVerloop({ rounds }: { rounds: RoundReviewData[] }) {
+  const gemeten = rounds.filter(r => r.hasSubmissions)
+  if (rounds.length === 1) {
+    return (
+      <p className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+        Er is één ronde gespeeld, dus dit overzicht is dezelfde bespreking die je bij
+        stap 3 hebt gezien. Vanaf de tweede ronde staat hier het verloop: welke ronde
+        wat opleverde en waar het team won of terrein verloor.
+      </p>
+    )
+  }
+
+  const hoogste = Math.max(...gemeten.map(r => r.points ?? 0), POINTS_PER_ROUND)
+
+  return (
+    <section className="flex flex-col gap-2 rounded-lg border border-border bg-card px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          Verloop over {rounds.length} rondes
+        </span>
+        <span className="font-mono text-[10px] text-muted-foreground">
+          {gemeten.length} met een inzending
+        </span>
+      </div>
+      <ul className="flex flex-col gap-1.5">
+        {rounds.map(round => {
+          const punten = round.points
+          const breedte = punten === null ? 0 : Math.max(2, Math.round((punten / hoogste) * 100))
+          return (
+            <li key={round.roundIndex} className="flex items-center gap-3">
+              <span className="w-6 shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+                R{round.roundNumber}
+              </span>
+              <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                <span
+                  className={`block h-full rounded-full ${punten === null ? "bg-amber-500/40" : "bg-primary"}`}
+                  style={{ width: `${punten === null ? 100 : breedte}%` }}
+                />
+              </span>
+              <span className="w-28 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">
+                {punten === null ? "niets ingezonden" : `${punten} van ${POINTS_PER_ROUND}`}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Een ronde zonder inzending is geen nul maar een lege balk: er is daar niets
+        gemeten. Vraag het team bij welke ronde het kantelde en waarom.
+      </p>
+    </section>
   )
 }
 
