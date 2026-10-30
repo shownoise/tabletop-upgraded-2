@@ -270,6 +270,42 @@ export function ruleEnoughExplanation(graph: ScenarioGraph): RuleResult {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Rule 16 — injects komen gespreid binnen, niet allemaal op het startsignaal
+//
+// `deliverySeconds` bestond al en zette `pushedAt` in de toekomst, maar niets
+// dwong het af: het showcase-scenario gebruikte het op 2 van 25 injects en het
+// Eye Security-scenario op nul. Gevolg: bij het begin van de ronde vielen alle
+// berichten in één klap binnen en daarna was het stil. Zo voelt een incident
+// niet, en het haalt de druk weg die de ronde juist moet opbouwen.
+//
+// De eis is bescheiden: de eerste inject mag direct komen (dat is de
+// setup-inject die de beslisvraag aankondigt), maar bij twee of meer injects
+// moet er minstens één later binnenkomen.
+// ───────────────────────────────────────────────────────────────────────────
+export function ruleInjectsStaggered(graph: ScenarioGraph): RuleResult {
+  const problems: string[] = []
+
+  for (const { roundNumber } of orderedRounds(graph)) {
+    const injects = injectsInRound(graph, roundNumber)
+    if (injects.length < 2) continue
+    const later = injects.filter(n => (n.data.deliverySeconds ?? 0) > 0).length
+    if (later === 0) {
+      problems.push(`ronde ${roundNumber}: ${injects.length} injects, allemaal op seconde 0`)
+    }
+  }
+  if (problems.length === 0) return { ok: true }
+  return {
+    ok: false,
+    violation: `Injects komen niet gespreid binnen: ${problems.join('; ')}`,
+    hint:
+      'Zet `deliverySeconds` op de injects van een ronde zodat ze tijdens de ronde ' +
+      'binnendruppelen. De eerste (de setup-inject met de beslisvraag) mag op 0 staan; ' +
+      'verdeel de rest tot ongeveer tweederde van de rondetijd, zodat er na het laatste ' +
+      'bericht nog tijd is om te overleggen en te kiezen.',
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Rule 3 — no strictly-dominating option per decision
 // ───────────────────────────────────────────────────────────────────────────
 export function ruleNoDominantOption(graph: ScenarioGraph): RuleResult {
@@ -842,6 +878,7 @@ const RULES: readonly FrameworkRule[] = [
   { id: 'rule13_situation_no_spoiler',  description: 'De situatieschets van een ronde verklapt de injects van die ronde niet.',                        fn: (g)     => ruleSituationDoesNotRevealInjects(g) },
   { id: 'rule14_quality_ranking',       description: 'Per rol per beslispunt: precies één beste optie, één tweede-beste, rest slecht.',               fn: (g)     => ruleQualityRanking(g) },
   { id: 'rule15_enough_explanation',    description: 'Beslisvraag, opties en facilitator-motivatie hebben genoeg tekst om een keuze te wegen.',        fn: (g)     => ruleEnoughExplanation(g) },
+  { id: 'rule16_injects_staggered',     description: 'Injects komen gespreid binnen tijdens de ronde, niet allemaal op het startsignaal.',             fn: (g)     => ruleInjectsStaggered(g) },
 ]
 
 export function validateFramework(graph: ScenarioGraph, config: WizardConfig): FrameworkResult {

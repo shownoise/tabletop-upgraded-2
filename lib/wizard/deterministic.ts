@@ -580,6 +580,24 @@ function stanceVoorKwaliteit(kwaliteit: ChoiceQuality, roundIndex: number): Stan
   return STANCES[kandidaten[roundIndex % kandidaten.length]]
 }
 
+// Rondetijd van een concept-ronde. Staat hier als constante omdat het
+// aflevermoment van de injects eraan hangt.
+const TIMER_MINUTEN = 15
+
+// Wanneer een inject binnenkomt, in seconden na het begin van de ronde.
+//
+// Hiervoor stond er niets, en dus kwamen alle injects van een ronde op het
+// startsignaal tegelijk binnen: vier berichten in één klap, en daarna stilte.
+// Dat is niet hoe een incident voelt. De eerste komt direct — dat is de
+// setup-inject die de beslisvraag aankondigt, daar begint het overleg mee — en
+// de rest schuift in tot tweederde van de ronde, zodat er na het laatste
+// bericht nog tijd is om te wegen en te kiezen.
+function aflevermoment(slot: number, aantal: number, minuten: number): number {
+  if (slot === 0 || aantal <= 1) return 0
+  const laatste = Math.round(minuten * 60 * 0.66)
+  return Math.round((laatste * slot) / (aantal - 1))
+}
+
 // Verdeelt `feit` en `aanname` over alle injects zodat het aandeel feiten zo
 // dicht mogelijk bij config.factsNoiseRatio ligt (rule7, marge ±0.15).
 function classificationAt(globalIndex: number, ratio: number): 'feit' | 'aanname' {
@@ -646,6 +664,7 @@ export function buildDraftGraph(config: WizardConfig, options: BuildDraftOptions
         id: `r${roundNumber}-i${slot + 1}`,
         title: repeat > 0 ? `${base.title} (vervolg ${repeat})` : base.title,
         classification,
+        deliverySeconds: aflevermoment(slot, injectsPerRound, TIMER_MINUTEN),
       }
     })
 
@@ -679,7 +698,7 @@ export function buildDraftGraph(config: WizardConfig, options: BuildDraftOptions
     return {
       title: `Ronde ${roundNumber} — ${phase.title}`,
       situation,
-      timerMinutes: 15,
+      timerMinutes: TIMER_MINUTEN,
       injects,
       decisionAuthorId: decisionAuthorIds[index],
       discussionGoal: phase.goal,

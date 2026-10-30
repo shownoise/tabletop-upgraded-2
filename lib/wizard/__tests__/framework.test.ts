@@ -124,7 +124,7 @@ function baseGraph(): ScenarioGraph {
     type: 'social', urgency: 'medium',
     title: 'WhatsApp gerucht',
     content: 'Iemand claimt op WhatsApp dat het door insider komt — bron onbekend.',
-    classification: 'aanname',
+    classification: 'aanname', deliverySeconds: 240,
     setsUpDecisionNodeId: 'D2',
   }
   const inj3: InjectNodeData = {
@@ -141,7 +141,7 @@ function baseGraph(): ScenarioGraph {
     type: 'internal', urgency: 'low',
     title: 'Roddel intern',
     content: 'Onbevestigd gerucht rondt intern.',
-    classification: 'aanname',
+    classification: 'aanname', deliverySeconds: 240,
   }
 
   return {
@@ -178,7 +178,7 @@ function baseGraph(): ScenarioGraph {
 }
 
 describe("wizard framework — passing baseline", () => {
-  it("baseGraph + baseConfig passes all 16 rules", () => {
+  it("baseGraph + baseConfig passes all 17 rules", () => {
     const graph = baseGraph()
     const config = baseConfig()
     const result = validateFramework(graph, config)
@@ -186,7 +186,7 @@ describe("wizard framework — passing baseline", () => {
       throw new Error(`baseline expected to pass but got: ${result.failures.map(f => f.ruleId + ': ' + f.violation).join(' | ')}`)
     }
     expect(result.ok).toBe(true)
-    expect(FRAMEWORK_RULE_IDS.length).toBe(16)
+    expect(FRAMEWORK_RULE_IDS.length).toBe(17)
   })
 })
 

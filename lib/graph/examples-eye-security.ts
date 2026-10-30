@@ -151,6 +151,7 @@ const plan: WizardPlan = {
       injects: [
         {
           id: "eye-r1-i1",
+          deliverySeconds: 0,
           type: "alert",
           urgency: "high",
           title: "Service-account authenticatie buiten patroon",
@@ -173,6 +174,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r1-i2",
+          deliverySeconds: 198,
           type: "internal",
           urgency: "medium",
           title: "Piketengineer: 'ik denk dat het de certificaatrotatie is'",
@@ -190,6 +192,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r1-i3",
+          deliverySeconds: 396,
           type: "internal",
           urgency: "low",
           title: "Twee klanten melden trage agents",
@@ -206,6 +209,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r1-i4",
+          deliverySeconds: 594,
           type: "social",
           urgency: "low",
           title: "Mastodon-post over 'een Nederlandse MDR'",
@@ -265,6 +269,7 @@ const plan: WizardPlan = {
       injects: [
         {
           id: "eye-r2-i1",
+          deliverySeconds: 0,
           type: "alert",
           urgency: "critical",
           title: "Forensiek: agentbeleid aangepast bij elf klant-tenants",
@@ -291,6 +296,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r2-i2",
+          deliverySeconds: 264,
           type: "executive",
           urgency: "high",
           title: "Klant vraagt of zijn omgeving veilig is",
@@ -308,6 +314,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r2-i3",
+          deliverySeconds: 528,
           type: "internal",
           urgency: "medium",
           title: "Accountmanagement: 'niet melden tot we zeker zijn'",
@@ -324,6 +331,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r2-i4",
+          deliverySeconds: 792,
           type: "internal",
           urgency: "low",
           title: "Analist meldt oude verkenning in de logs",
@@ -386,6 +394,7 @@ const plan: WizardPlan = {
       injects: [
         {
           id: "eye-r3-i1",
+          deliverySeconds: 0,
           type: "regulatory",
           urgency: "critical",
           title: "NCSC vraagt om onze eigen melding",
@@ -410,6 +419,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r3-i2",
+          deliverySeconds: 264,
           type: "media",
           urgency: "high",
           title: "Vakjournalist heeft het verhaal",
@@ -426,6 +436,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r3-i3",
+          deliverySeconds: 528,
           type: "internal",
           urgency: "medium",
           title: "Concept-klantbericht gaat rond",
@@ -442,6 +453,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r3-i4",
+          deliverySeconds: 792,
           type: "executive",
           urgency: "medium",
           title: "Klant dreigt met opzegging",
@@ -502,6 +514,7 @@ const plan: WizardPlan = {
       injects: [
         {
           id: "eye-r4-i1",
+          deliverySeconds: 0,
           type: "alert",
           urgency: "critical",
           title: "Laterale beweging bij klant via onze agent",
@@ -525,6 +538,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r4-i2",
+          deliverySeconds: 264,
           type: "internal",
           urgency: "high",
           title: "Verzekeraar vraagt om het dossier",
@@ -540,6 +554,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r4-i3",
+          deliverySeconds: 528,
           type: "internal",
           urgency: "high",
           title: "Twee analisten zijn 30 uur op",
@@ -556,6 +571,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r4-i4",
+          deliverySeconds: 792,
           type: "social",
           urgency: "low",
           title: "Concurrent gebruikt het verhaal",
@@ -616,6 +632,7 @@ const plan: WizardPlan = {
       injects: [
         {
           id: "eye-r5-i1",
+          deliverySeconds: 0,
           type: "internal",
           urgency: "high",
           title: "Drie zwaktes op één A4",
@@ -638,6 +655,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r5-i2",
+          deliverySeconds: 198,
           type: "executive",
           urgency: "medium",
           title: "Geraakte klant wil een verbeterplan zien",
@@ -652,6 +670,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r5-i3",
+          deliverySeconds: 396,
           type: "internal",
           urgency: "low",
           title: "Voorstel: securityweek organiseren",
@@ -666,6 +685,7 @@ const plan: WizardPlan = {
         },
         {
           id: "eye-r5-i4",
+          deliverySeconds: 594,
           type: "internal",
           urgency: "medium",
           title: "Kosten tot nu toe",
