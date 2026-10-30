@@ -12,7 +12,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useRouter } from "next/navigation"
 import { useToast } from "./toast"
+import { EXAMPLES, type Example } from "@/lib/graph/examples"
 import type { ScenarioGraph } from "@/lib/graph/types"
 import type { AdminClient } from "@/lib/admin/clients"
 
@@ -52,6 +54,8 @@ export function ScenariosPanel() {
   const [dupClientId, setDupClientId] = useState("")
   const [dupName, setDupName] = useState("")
   const toast = useToast()
+  const router = useRouter()
+  const [bezigVoorbeeld, setBezigVoorbeeld] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -101,6 +105,25 @@ export function ScenariosPanel() {
       body: JSON.stringify(g),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  }
+
+  // Een voorbeeld in gebruik nemen: opslaan onder een eigen id en daarna
+  // meteen door naar de voorbereiding. Een voorbeeld is code, geen scenario;
+  // pas door dit op te slaan bestaat hij in de bibliotheek en op de
+  // klantpagina.
+  async function gebruikVoorbeeld(ex: Example) {
+    setBezigVoorbeeld(ex.key)
+    try {
+      const graph = ex.build()
+      await saveGraph(graph)
+      await reload()
+      toast.push("success", `${ex.label} staat nu in je bibliotheek.`)
+      router.push(`/admin/prepare?graphId=${encodeURIComponent(graph.id)}`)
+    } catch (e) {
+      toast.push("error", e instanceof Error ? e.message : "Opslaan mislukt")
+    } finally {
+      setBezigVoorbeeld(null)
+    }
   }
 
   async function duplicate() {
@@ -195,6 +218,50 @@ export function ScenariosPanel() {
             </Button>
           </Link>
         </div>
+      </div>
+
+      {/* Kant-en-klare scenario's.
+          Deze stonden alleen in de builder onder "Voorbeelden", dus je moest
+          langs het canvas om een scenario te vinden dat je vaak gebruikt — en
+          dan nog zelf op Save drukken. Hier staan ze waar je ze zoekt, met één
+          knop die hem opslaat en je meteen naar de voorbereiding brengt. */}
+      <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Kant-en-klaar
+          </span>
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {EXAMPLES.length} {EXAMPLES.length === 1 ? "voorbeeld" : "voorbeelden"}
+          </span>
+        </div>
+        <ul className="flex flex-col gap-2">
+          {EXAMPLES.map(ex => (
+            <li key={ex.key} className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border/60 bg-background px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-foreground">{ex.label}</p>
+                <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                  {ex.description}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={bezigVoorbeeld !== null}
+                  onClick={() => void gebruikVoorbeeld(ex)}
+                >
+                  {bezigVoorbeeld === ex.key ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+                  Gebruiken
+                </Button>
+                <Link href={`/admin/builder?example=${encodeURIComponent(ex.key)}`}>
+                  <Button size="sm" variant="outline" className="gap-1.5">
+                    <Pencil className="size-3.5" /> Bekijken
+                  </Button>
+                </Link>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Filters */}

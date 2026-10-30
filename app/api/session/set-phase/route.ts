@@ -10,7 +10,7 @@ const PHASE_ORDER: Record<RoundPhase, number> = { inject: 0, discussion: 1, deci
 export async function POST(req: Request) {
   const gate = await requireFacilitator()
   if (!gate.ok) return gate.response
-  const body = (await req.json()) as { phase?: string; force?: boolean }
+  const body = (await req.json()) as { phase?: string; force?: boolean; reason?: string }
   if (!body.phase || !PHASES.includes(body.phase as RoundPhase)) {
     return NextResponse.json({ ok: false, error: "Invalid phase." }, { status: 400 })
   }
@@ -31,7 +31,13 @@ export async function POST(req: Request) {
     }, { status: 400 })
   }
 
-  const result = await setPhase(next)
+  // `force` doorgeven, niet alleen gebruiken voor de sprong-check hierboven.
+  // Hier ging hij verloren: setPhase() kent zelf een force-optie om de
+  // beslisfase te verlaten terwijl er nog rollen open staan, en die werd nooit
+  // gezet. Een aanroep met force:true kreeg dus alsnog "Nog wachten op 2
+  // beslissingen" terug, met een melding die naar een knop verwijst die iets
+  // anders doet (force-lock).
+  const result = await setPhase(next, { force: body.force, reason: body.reason })
   if (!result.ok) return NextResponse.json(result, { status: 400 })
   return NextResponse.json(result)
 }
