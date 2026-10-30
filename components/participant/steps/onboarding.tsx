@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { ArrowRight, FileText, Gavel, Inbox, Scale, ShieldCheck, Users } from "lucide-react"
+import { useEffect, useState } from "react"
+import { ArrowLeft, ArrowRight, FileText, Gavel, Inbox, Scale, ShieldCheck, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { ONBOARDING_CARDS, ONBOARDING_LEAD, type OnboardingIcon } from "./flow"
 
@@ -26,6 +26,24 @@ export function Onboarding({ onDone }: { onDone: (startTour: boolean) => void })
   const card = ONBOARDING_CARDS[i]
   const Icon = ICONS[card.icon]
   const last = i === ONBOARDING_CARDS.length - 1
+  const first = i === 0
+
+  // Terugklikken was alleen mogelijk via de voortgangsbalkjes, en die zien er
+  // niet uit als een knop — wie een kaart te snel wegklikte kwam er niet meer
+  // bij. Zelfde paar knoppen en dezelfde pijltjestoetsen als de rondleiding.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault()
+        setI(n => (n > 0 ? n - 1 : n))
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault()
+        setI(n => Math.min(n + 1, ONBOARDING_CARDS.length - 1))
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/95 px-4 py-10 backdrop-blur">
@@ -48,6 +66,15 @@ export function Onboarding({ onDone }: { onDone: (startTour: boolean) => void })
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setI(i - 1)}
+            disabled={first}
+            aria-label="Vorige kaart"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden /> Terug
+          </button>
           <ol className="flex flex-1 items-center gap-1.5" aria-label="Onboarding-voortgang">
             {ONBOARDING_CARDS.map((c, idx) => (
               <li key={c.icon} className="flex-1">
