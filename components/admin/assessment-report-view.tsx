@@ -67,6 +67,14 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
   const strongest = sortedByValue[0]
   const weakest = sortedByValue[sortedByValue.length - 1]
 
+  // Hoeveel beslispunten zijn écht ingediend, en hoeveel zijn als "geen besluit
+  // binnen de tijd" gescoord. Een entry zonder `submission` is dat laatste.
+  //
+  // Dit onderscheid ontbrak, en daardoor loog de samenvatting zonder onwaar te
+  // zijn: een oefening waarin niemand iets koos leverde "Het team scoorde 29
+  // van 100 punten", "Alle dimensies liggen dicht bij nul" en "Alle
+  // beslispunten zijn gescoord" — terwijl alle zes dimensies op −1 stonden
+  // omdat er niets was besloten. Dat leest als een gerustwoord.
   const execSentences = (denom.nothingToScore
     ? [
         NOTHING_TO_SCORE_NL,
@@ -81,7 +89,11 @@ export function AssessmentReportView(props: AssessmentReportViewProps) {
           : "",
         strongest.value !== 0
           ? `De sterkste dimensie was ${dimLabel(strongest.dim)} (${strongest.value >= 0 ? "+" : ""}${strongest.value.toFixed(1)}).`
-          : `Alle dimensies liggen dicht bij nul — geen duidelijke uitschieter naar boven.`,
+          : weakest.value < 0
+            // "Dicht bij nul" was hier onjuist: als er niets positief is maar
+            // wel iets negatief, staat de hele oefening in de min.
+            ? `Geen enkele dimensie is vooruitgegaan.`
+            : `Alle dimensies liggen dicht bij nul — geen duidelijke uitschieter naar boven.`,
         weakest.value !== strongest.value
           ? `De zwakste dimensie was ${dimLabel(weakest.dim)} (${weakest.value >= 0 ? "+" : ""}${weakest.value.toFixed(1)}).`
           : "",
